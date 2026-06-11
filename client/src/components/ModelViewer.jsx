@@ -3,19 +3,42 @@ import * as THREE from 'three'
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
 
+const HIGHLIGHT_COLOR = 0x4f6ef7
+
 /**
  * Browser 3D viewer: loads a GLB/glTF model, orbit controls, and raycast click
- * selection. A click on the mesh places a marker and reports the 3D point up via
- * onSelectPoint — that point is the seed of the spatial prompt.
+ * selection. A click highlights the hit sub-mesh and reports the 3D point plus
+ * the region label (mesh name) via onSelect — the seed of the spatial prompt.
+ *
+ * Props:
+ *   modelUrl  — URL (or object URL) of the GLB to display
+ *   onSelect  — called with { point, meshName } when the user picks a point on the mesh
+ *   onLoaded  — called once the model has been added to the scene
+ *   onError   — called with a human-readable message when loading fails
  */
-export default function ModelViewer({ modelUrl, onSelectPoint }) {
+export default function ModelViewer({ modelUrl, onSelect, onLoaded, onError }) {
   const containerRef = useRef(null)
-  // keep the latest callback without re-creating the whole scene on re-render
-  const onSelectPointRef = useRef(onSelectPoint)
-  onSelectPointRef.current = onSelectPoint
+  // keep latest callbacks without re-creating the whole scene on re-render
+  const callbacksRef = useRef({})
+  callbacksRef.current = { onSelect, onLoaded, onError }
 
   useEffect(() => {
     const container = containerRef.current
+    // guards async loader callbacks that may fire after unmount/model swap
+    let disposed = false
+
+    // dispose geometries, materials AND their textures for a whole subtree
+    const disposeObject = (root) => {
+      root.traverse((obj) => {
+        obj.geometry?.dispose()
+        const mats = Array.isArray(obj.material) ? obj.material : [obj.material]
+        mats.forEach((m) => {
+          if (!m) return
+          Object.values(m).forEach((v) => v?.isTexture && v.dispose())
+          m.dispose()
+        })
+      })
+    }
 
     const scene = new THREE.Scene()
     scene.background = new THREE.Color(0x15171c)
@@ -49,11 +72,50 @@ export default function ModelViewer({ modelUrl, onSelectPoint }) {
     marker.visible = false
     scene.add(marker)
 
+    // highlight of the selected sub-mesh: swap in a cloned material with an
+    // emissive tint; the original is restored (and the clone disposed) on
+    // re-selection, model swap, and unmount
+    let highlight = null // { mesh, originalMaterial, cloneMaterial }
+
+    const clearHighlight = () => {
+      if (!highlight) return
+      highlight.mesh.material = highlight.originalMaterial
+      highlight.cloneMaterial.dispose()
+      highlight = null
+    }
+
+    const highlightMesh = (mesh) => {
+      if (highlight?.mesh === mesh) return
+      clearHighlight()
+      // multi-material meshes are rare in generated GLBs — skip highlight there
+      if (Array.isArray(mesh.material) || !mesh.material?.emissive) return
+      const clone = mesh.material.clone()
+      clone.emissive = new THREE.Color(HIGHLIGHT_COLOR)
+      clone.emissiveIntensity = 0.45
+      highlight = { mesh, originalMaterial: mesh.material, cloneMaterial: clone }
+      mesh.material = clone
+    }
+
+    // walk up the hierarchy until a named node is found — generated GLBs often
+    // name groups rather than leaf meshes. Stop at the model root: exporters
+    // name it "Scene", which is useless as a region label.
+    const regionLabel = (object) => {
+      let node = object
+      while (node && node !== model && !node.name) node = node.parent
+      if (!node || node === model) return 'unnamed region'
+      return node.name
+    }
+
     let model = null
     const loader = new GLTFLoader()
     loader.load(
       modelUrl,
       (gltf) => {
+        if (disposed) {
+          // model swap / unmount won the race — drop the late arrival cleanly
+          disposeObject(gltf.scene)
+          return
+        }
         model = gltf.scene
         // center the model at the origin and frame the camera around it
         const box = new THREE.Box3().setFromObject(model)
@@ -67,12 +129,20 @@ export default function ModelViewer({ modelUrl, onSelectPoint }) {
         marker.geometry.dispose()
         marker.geometry = new THREE.SphereGeometry(size * 0.012, 16, 16)
         scene.add(model)
+        callbacksRef.current.onLoaded?.()
       },
       undefined,
-      (err) => console.error(`Failed to load model ${modelUrl}:`, err),
+      (err) => {
+        if (disposed) return
+        console.error(`Failed to load model ${modelUrl}:`, err)
+        callbacksRef.current.onError?.(
+          'Failed to load the model. Check that the file is a valid .glb and, ' +
+            'for URLs, that the server allows cross-origin requests (CORS).',
+        )
+      },
     )
 
-    // raycast click → selected point; drags (orbiting) are ignored
+    // raycast click → selection; drags (orbiting) are ignored
     const raycaster = new THREE.Raycaster()
     const pointer = new THREE.Vector2()
     let downAt = null
@@ -95,10 +165,10 @@ export default function ModelViewer({ modelUrl, onSelectPoint }) {
       if (hit) {
         marker.position.copy(hit.point)
         marker.visible = true
-        onSelectPointRef.current?.({
-          x: hit.point.x,
-          y: hit.point.y,
-          z: hit.point.z,
+        highlightMesh(hit.object)
+        callbacksRef.current.onSelect?.({
+          point: { x: hit.point.x, y: hit.point.y, z: hit.point.z },
+          meshName: regionLabel(hit.object),
         })
       }
     }
@@ -122,17 +192,18 @@ export default function ModelViewer({ modelUrl, onSelectPoint }) {
     animate()
 
     return () => {
+      disposed = true
       cancelAnimationFrame(raf)
       window.removeEventListener('resize', onResize)
       renderer.domElement.removeEventListener('pointerdown', onPointerDown)
       renderer.domElement.removeEventListener('pointerup', onPointerUp)
       controls.dispose()
-      scene.traverse((obj) => {
-        obj.geometry?.dispose()
-        const mats = Array.isArray(obj.material) ? obj.material : [obj.material]
-        mats.forEach((m) => m?.dispose())
-      })
+      clearHighlight() // restore original material before disposal below
+      disposeObject(scene)
       renderer.dispose()
+      // release the WebGL context promptly — browsers cap live contexts, and
+      // every model swap creates a fresh renderer
+      renderer.forceContextLoss()
       container.removeChild(renderer.domElement)
     }
   }, [modelUrl])
