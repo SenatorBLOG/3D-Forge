@@ -185,6 +185,11 @@ body {
   cursor: not-allowed;
 }
 
+.url-error {
+  color: #ff8080;
+  font-size: 12px;
+}
+
 .link-button {
   background: none;
   border: none;

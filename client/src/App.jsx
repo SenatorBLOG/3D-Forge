@@ -10,6 +10,7 @@ export default function App() {
   const [selection, setSelection] = useState(null) // { point, meshName }
   const [instruction, setInstruction] = useState('')
   const [urlInput, setUrlInput] = useState('')
+  const [urlError, setUrlError] = useState(null)
   // bumped on every swap so re-loading the SAME url (e.g. retry after an
   // error) still remounts the viewer instead of silently doing nothing
   const [loadKey, setLoadKey] = useState(0)
@@ -17,8 +18,12 @@ export default function App() {
   const objectUrlRef = useRef(null)
 
   const swapModel = (url, { isObjectUrl = false } = {}) => {
-    if (objectUrlRef.current && objectUrlRef.current !== url) {
-      URL.revokeObjectURL(objectUrlRef.current)
+    const stale = objectUrlRef.current
+    if (stale && stale !== url) {
+      // defer revocation: the old viewer must unmount first (its `disposed`
+      // flag then neutralizes loader callbacks), otherwise an in-flight load
+      // of the revoked URL could error into the NEW viewer's status
+      setTimeout(() => URL.revokeObjectURL(stale), 0)
       objectUrlRef.current = null
     }
     if (isObjectUrl) objectUrlRef.current = url
@@ -39,6 +44,11 @@ export default function App() {
   const loadFromUrl = () => {
     const url = urlInput.trim()
     if (!url) return
+    if (!/^https?:\/\//i.test(url)) {
+      setUrlError('Enter an http(s) link to a .glb file')
+      return
+    }
+    setUrlError(null)
     swapModel(url)
   }
 
@@ -82,7 +92,10 @@ export default function App() {
               <input
                 type="text"
                 value={urlInput}
-                onChange={(e) => setUrlInput(e.target.value)}
+                onChange={(e) => {
+                  setUrlInput(e.target.value)
+                  setUrlError(null)
+                }}
                 onKeyDown={(e) => e.key === 'Enter' && loadFromUrl()}
                 placeholder="https://example.com/model.glb"
               />
@@ -90,6 +103,7 @@ export default function App() {
                 Load
               </button>
             </div>
+            {urlError && <span className="url-error">{urlError}</span>}
             {modelUrl !== DEFAULT_MODEL_URL && (
               <button
                 className="link-button"

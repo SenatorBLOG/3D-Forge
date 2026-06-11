@@ -12,9 +12,9 @@ const HIGHLIGHT_COLOR = 0x4f6ef7
  *
  * Props:
  *   modelUrl  — URL (or object URL) of the GLB to display
- *   onSelect  — ({ point: {x,y,z}, meshName: string }) => void
- *   onLoaded  — () => void, fires when the model is in the scene
- *   onError   — (message: string) => void, fires when loading fails
+ *   onSelect  — called with { point, meshName } when the user picks a point on the mesh
+ *   onLoaded  — called once the model has been added to the scene
+ *   onError   — called with a human-readable message when loading fails
  */
 export default function ModelViewer({ modelUrl, onSelect, onLoaded, onError }) {
   const containerRef = useRef(null)
