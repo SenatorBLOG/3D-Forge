@@ -1,0 +1,18 @@
+{
+  "name": "3d-forge",
+  "private": true,
+  "version": "0.1.0",
+  "description": "AI-assisted 3D model generation and spatially-grounded editing in the browser",
+  "scripts": {
+    "install:all": "npm install && npm --prefix client install && npm --prefix server install",
+    "dev": "concurrently -n client,server -c cyan,magenta \"npm --prefix client run dev\" \"npm --prefix server run dev\"",
+    "dev:client": "npm --prefix client run dev",
+    "dev:server": "npm --prefix server run dev"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.0"
+  },
+  "overrides": {
+    "shell-quote": "^1.8.4"
+  }
+}
