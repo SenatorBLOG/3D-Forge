@@ -5,6 +5,7 @@ import { connectDb } from './db.js'
 import modelsRouter from './routes/models.js'
 import generateRouter from './routes/generate.js'
 import editRouter from './routes/edit.js'
+import historyRouter from './routes/history.js'
 
 const app = express()
 app.use(cors())
@@ -17,6 +18,7 @@ app.get('/api/health', (req, res) => {
 app.use('/api/models', modelsRouter)
 app.use('/api/generate', generateRouter)
 app.use('/api/edit', editRouter)
+app.use('/api/history', historyRouter)
 
 const port = process.env.PORT || 3001
 await connectDb()

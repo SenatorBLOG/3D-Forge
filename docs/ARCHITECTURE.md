@@ -76,4 +76,7 @@ truth for scope; this file is the working reference for implementation.
   prompt (instruction + click + region + base model), optionally refines it via
   the Claude API (template fallback), runs it through the generation pipeline,
   and stores a SpatialPromptRecord dataset row when Mongo is connected.
-- ⬜ Versions/history (M4), evaluation + dataset export (M5) — see `docs/plans/`.
+- ✅ Version history (M4): `GET /api/history` lists generations and edits as a
+  unified version list (Mongo-backed when connected, in-memory per session
+  otherwise); the History panel reloads any succeeded version into the viewer.
+- ⬜ Evaluation + dataset export (M5) — see `docs/plans/`.

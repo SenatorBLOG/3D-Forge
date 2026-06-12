@@ -2,6 +2,8 @@ import { Router } from 'express'
 import { createPreviewTask, getTask, isMockMode } from '../services/meshy.js'
 import { dbReady } from '../db.js'
 import GeneratedModel from '../models/GeneratedModel.js'
+import SpatialPromptRecord from '../models/SpatialPromptRecord.js'
+import { recordTask, updateTask } from '../services/history.js'
 
 const router = Router()
 
@@ -26,6 +28,8 @@ router.post('/', async (req, res) => {
     console.error('generate failed:', err)
     return res.status(502).json({ error: 'Model generation service failed' })
   }
+
+  recordTask({ kind: 'generate', taskId, prompt, mock: isMockMode() })
 
   // the upstream task exists at this point — a DB hiccup must not turn a
   // successful (credit-spending) creation into an error response
@@ -53,16 +57,20 @@ router.get('/:taskId', async (req, res) => {
       modelUrl: task.model_urls?.glb ?? null,
     }
 
-    // best-effort, like the POST handler: a DB hiccup must not hide an
-    // already-fetched result from the client
-    if (dbReady() && TERMINAL_STATUSES.includes(task.status)) {
-      try {
-        await GeneratedModel.findOneAndUpdate(
-          { meshyTaskId: payload.taskId },
-          { status: task.status, modelUrl: payload.modelUrl },
-        )
-      } catch (err) {
-        console.error('failed to update generation record:', err)
+    if (TERMINAL_STATUSES.includes(task.status)) {
+      updateTask(payload.taskId, task.status, payload.modelUrl)
+      // best-effort, like the POST handler: a DB hiccup must not hide an
+      // already-fetched result from the client
+      if (dbReady()) {
+        try {
+          const change = { status: task.status, modelUrl: payload.modelUrl }
+          await Promise.all([
+            GeneratedModel.findOneAndUpdate({ meshyTaskId: payload.taskId }, change),
+            SpatialPromptRecord.findOneAndUpdate({ meshyTaskId: payload.taskId }, change),
+          ])
+        } catch (err) {
+          console.error('failed to update generation record:', err)
+        }
       }
     }
 

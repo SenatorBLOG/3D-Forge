@@ -1,6 +1,7 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import ModelViewer from './components/ModelViewer.jsx'
 import GeneratePanel from './components/GeneratePanel.jsx'
+import HistoryPanel from './components/HistoryPanel.jsx'
 import useGenerationTask from './hooks/useGenerationTask.js'
 
 const DEFAULT_MODEL_URL = '/models/robotic_hand.glb'
@@ -25,6 +26,7 @@ export default function App() {
   const [lastEditPrompt, setLastEditPrompt] = useState(null) // { text, refinedBy }
   // generate and edit must not run concurrently — they'd race on the viewer
   const [genBusy, setGenBusy] = useState(false)
+  const [historyKey, setHistoryKey] = useState(0)
 
   const swapModel = (url, { isObjectUrl = false } = {}) => {
     const stale = objectUrlRef.current
@@ -48,6 +50,12 @@ export default function App() {
     setBaseModelPrompt(pendingEditPromptRef.current)
     setInstruction('')
   })
+
+  const busy = genBusy || editTask.generating
+  // refresh the history list whenever a task starts or finishes
+  useEffect(() => {
+    setHistoryKey((k) => k + 1)
+  }, [busy])
 
   const sendEdit = async () => {
     if (!selection || !instruction.trim()) return
@@ -205,6 +213,15 @@ export default function App() {
               </div>
             )}
           </section>
+          <HistoryPanel
+            refreshKey={historyKey}
+            busy={busy}
+            onLoad={(entry) => {
+              setBaseModelPrompt(entry.prompt ?? null)
+              setLastEditPrompt(null)
+              swapModel(entry.modelUrl)
+            }}
+          />
         </aside>
       </main>
     </div>

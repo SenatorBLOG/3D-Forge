@@ -4,6 +4,7 @@ import { refinePrompt, isClaudeEnabled } from '../services/claude.js'
 import { createPreviewTask, isMockMode } from '../services/meshy.js'
 import { dbReady } from '../db.js'
 import SpatialPromptRecord from '../models/SpatialPromptRecord.js'
+import { recordTask } from '../services/history.js'
 
 const router = Router()
 
@@ -62,6 +63,15 @@ router.post('/', async (req, res) => {
     console.error('edit generation failed:', err)
     return res.status(502).json({ error: 'Model generation service failed' })
   }
+
+  recordTask({
+    kind: 'edit',
+    taskId,
+    prompt,
+    instruction,
+    regionLabel: spatialPrompt.regionLabel,
+    mock: isMockMode(),
+  })
 
   if (dbReady()) {
     try {
