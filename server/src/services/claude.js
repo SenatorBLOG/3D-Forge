@@ -28,7 +28,12 @@ let client = null
  * Throws on API failure — the route decides to fall back to the template.
  */
 export async function refinePrompt(spatialPrompt) {
-  client ??= new Anthropic()
+  if (!client) {
+    // construction succeeds even with a garbage key (failures surface on the
+    // first request) — log it so a misconfigured key is visible in the logs
+    console.log(`Claude refinement: creating client (model ${MODEL})`)
+    client = new Anthropic()
+  }
   const response = await client.messages.create({
     model: MODEL,
     max_tokens: 300,
