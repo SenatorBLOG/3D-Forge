@@ -72,5 +72,8 @@ truth for scope; this file is the working reference for implementation.
   `GET /api/generate/:taskId` polling → generated GLB loads in the viewer.
   Built-in mock mode (no `MESHY_API_KEY`) simulates the lifecycle for free;
   generations persist to Mongo when a DB is connected (`GET /api/models`).
-- ⬜ Spatial Prompt Engine (M3), versions/history (M4), evaluation + dataset
-  export (M5) — see `docs/plans/`.
+- ✅ Spatial Prompt Engine (M3): `POST /api/edit` builds a structured spatial
+  prompt (instruction + click + region + base model), optionally refines it via
+  the Claude API (template fallback), runs it through the generation pipeline,
+  and stores a SpatialPromptRecord dataset row when Mongo is connected.
+- ⬜ Versions/history (M4), evaluation + dataset export (M5) — see `docs/plans/`.
