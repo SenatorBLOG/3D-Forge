@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react'
 import ModelViewer from './components/ModelViewer.jsx'
 import GeneratePanel from './components/GeneratePanel.jsx'
+import useGenerationTask from './hooks/useGenerationTask.js'
 
 const DEFAULT_MODEL_URL = '/models/robotic_hand.glb'
 
@@ -8,6 +9,8 @@ export default function App() {
   const [modelUrl, setModelUrl] = useState(DEFAULT_MODEL_URL)
   const [modelStatus, setModelStatus] = useState('loading') // loading | ready | error
   const [modelError, setModelError] = useState(null)
+  // text description that produced the current model — context for edits
+  const [baseModelPrompt, setBaseModelPrompt] = useState(null)
   const [selection, setSelection] = useState(null) // { point, meshName }
   const [instruction, setInstruction] = useState('')
   const [urlInput, setUrlInput] = useState('')
@@ -17,6 +20,9 @@ export default function App() {
   const [loadKey, setLoadKey] = useState(0)
   // object URL of the last uploaded file — revoked when replaced
   const objectUrlRef = useRef(null)
+  // prompt of the latest edit, applied as base-model context on success
+  const pendingEditPromptRef = useRef(null)
+  const [lastEditPrompt, setLastEditPrompt] = useState(null) // { text, refinedBy }
 
   const swapModel = (url, { isObjectUrl = false } = {}) => {
     const stale = objectUrlRef.current
@@ -35,10 +41,31 @@ export default function App() {
     setLoadKey((k) => k + 1)
   }
 
+  const editTask = useGenerationTask((url) => {
+    swapModel(url)
+    setBaseModelPrompt(pendingEditPromptRef.current)
+    setInstruction('')
+  })
+
+  const sendEdit = async () => {
+    if (!selection || !instruction.trim()) return
+    const data = await editTask.start('/api/edit', {
+      instruction: instruction.trim(),
+      point: selection.point,
+      regionLabel: selection.meshName,
+      baseModel: { prompt: baseModelPrompt, modelUrl },
+    })
+    if (data) {
+      pendingEditPromptRef.current = data.prompt
+      setLastEditPrompt({ text: data.prompt, refinedBy: data.refinedBy })
+    }
+  }
+
   const onFileChosen = (e) => {
     const file = e.target.files?.[0]
     e.target.value = '' // allow re-choosing the same file
     if (!file) return
+    setBaseModelPrompt(null)
     swapModel(URL.createObjectURL(file), { isObjectUrl: true })
   }
 
@@ -50,6 +77,7 @@ export default function App() {
       return
     }
     setUrlError(null)
+    setBaseModelPrompt(null)
     swapModel(url)
   }
 
@@ -83,7 +111,12 @@ export default function App() {
           />
         </div>
         <aside className="sidebar">
-          <GeneratePanel onModelReady={(url) => swapModel(url)} />
+          <GeneratePanel
+            onModelReady={(url, prompt) => {
+              setBaseModelPrompt(prompt)
+              swapModel(url)
+            }}
+          />
           <section className="panel">
             <h2>Model</h2>
             <label className="file-button">
@@ -109,7 +142,10 @@ export default function App() {
             {modelUrl !== DEFAULT_MODEL_URL && (
               <button
                 className="link-button"
-                onClick={() => swapModel(DEFAULT_MODEL_URL)}
+                onClick={() => {
+                  setBaseModelPrompt(null)
+                  swapModel(DEFAULT_MODEL_URL)
+                }}
               >
                 ← Back to default model
               </button>
@@ -141,11 +177,25 @@ export default function App() {
             </div>
             <button
               className="submit"
-              disabled={!selection || !instruction.trim()}
-              title="Wired up in milestone M3 (Spatial Prompt Engine)"
+              onClick={sendEdit}
+              disabled={!selection || !instruction.trim() || editTask.generating}
             >
-              Send edit — coming in M3
+              {editTask.generating
+                ? `Applying edit… ${editTask.task.progress}%`
+                : 'Send edit'}
             </button>
+            {editTask.generating && editTask.task.mock && (
+              <span className="hint">
+                mock mode — set MESHY_API_KEY on the server for real generation
+              </span>
+            )}
+            {editTask.error && <span className="url-error">{editTask.error}</span>}
+            {lastEditPrompt && (
+              <div className="field">
+                <label>Prompt sent ({lastEditPrompt.refinedBy})</label>
+                <code className="prompt-preview">{lastEditPrompt.text}</code>
+              </div>
+            )}
           </section>
         </aside>
       </main>
