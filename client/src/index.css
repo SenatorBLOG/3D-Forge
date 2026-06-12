@@ -190,6 +190,11 @@ body {
   font-size: 12px;
 }
 
+.hint {
+  color: #8b93a5;
+  font-size: 12px;
+}
+
 .link-button {
   background: none;
   border: none;
