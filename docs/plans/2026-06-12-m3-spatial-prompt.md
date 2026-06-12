@@ -1,6 +1,6 @@
 # M3 — Spatial Prompt Engine
 
-**Owner:** Mikhail (Javid inactive) · **Status:** in progress · **Branch:** `feat/m3-spatial-prompt`
+**Owner:** Mikhail (Javid inactive) · **Status:** done (PR #4) · **Branch:** `feat/m3-spatial-prompt`
 
 ## Goal
 
@@ -29,7 +29,9 @@ text actually sent to the generator and `refinedBy` is `"claude"` or `"template"
 The client polls the existing `GET /api/generate/:taskId`.
 
 - 400: missing/empty `instruction`; `point` missing or x/y/z not finite numbers;
-  oversized instruction (> 600 chars)
+  oversized instruction (> 300 chars — instruction + region + template must
+  always fit Meshy's 600-char limit, so the instruction can never be truncated
+  out of the rendered prompt; the base description is what gets trimmed)
 - 502: upstream generation service failed (Claude refinement failure is NOT a 502 —
   it falls back to the template renderer)
 

@@ -1,5 +1,5 @@
 import { Router } from 'express'
-import { buildSpatialPrompt, renderPromptText, MESHY_PROMPT_LIMIT } from '../services/spatialPrompt.js'
+import { buildSpatialPrompt, renderPromptText, MESHY_PROMPT_LIMIT, INSTRUCTION_LIMIT } from '../services/spatialPrompt.js'
 import { refinePrompt, isClaudeEnabled } from '../services/claude.js'
 import { createPreviewTask, isMockMode } from '../services/meshy.js'
 import { dbReady } from '../db.js'
@@ -19,20 +19,27 @@ router.post('/', async (req, res) => {
   if (!instruction) {
     return res.status(400).json({ error: 'instruction (non-empty string) is required' })
   }
-  if (instruction.length > MESHY_PROMPT_LIMIT) {
-    return res.status(400).json({ error: `instruction must be ${MESHY_PROMPT_LIMIT} characters or fewer` })
+  if (instruction.length > INSTRUCTION_LIMIT) {
+    return res.status(400).json({ error: `instruction must be ${INSTRUCTION_LIMIT} characters or fewer` })
   }
   if (!point || !isFiniteNumber(point.x) || !isFiniteNumber(point.y) || !isFiniteNumber(point.z)) {
     return res.status(400).json({ error: 'point with finite numeric x, y, z is required' })
   }
+
+  // blob: object URLs are client-local and meaningless in dataset records
+  const rawModelUrl = typeof baseModel?.modelUrl === 'string' ? baseModel.modelUrl.slice(0, 2048) : null
+  const modelUrl = rawModelUrl && /^(https?:\/\/|\/)/.test(rawModelUrl) ? rawModelUrl : null
 
   const spatialPrompt = buildSpatialPrompt({
     instruction,
     point,
     regionLabel: typeof regionLabel === 'string' ? regionLabel : null,
     baseModel: {
-      prompt: typeof baseModel?.prompt === 'string' ? baseModel.prompt : null,
-      modelUrl: typeof baseModel?.modelUrl === 'string' ? baseModel.modelUrl : null,
+      prompt:
+        typeof baseModel?.prompt === 'string'
+          ? baseModel.prompt.slice(0, MESHY_PROMPT_LIMIT)
+          : null,
+      modelUrl,
     },
   })
 

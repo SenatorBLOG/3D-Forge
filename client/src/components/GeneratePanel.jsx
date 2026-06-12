@@ -1,17 +1,23 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import useGenerationTask from '../hooks/useGenerationTask.js'
 
 /**
  * Text-to-3D generation panel. On success hands up (modelUrl, promptText) so
  * the app can track what description produced the current model.
  */
-export default function GeneratePanel({ onModelReady }) {
+export default function GeneratePanel({ onModelReady, disabled, onGeneratingChange }) {
   const [prompt, setPrompt] = useState('')
   // prompt that produced the in-flight task — reported alongside the result
   const submittedRef = useRef(null)
   const { task, error, generating, start } = useGenerationTask((url) =>
     onModelReady(url, submittedRef.current),
   )
+
+  const onGeneratingChangeRef = useRef(onGeneratingChange)
+  onGeneratingChangeRef.current = onGeneratingChange
+  useEffect(() => {
+    onGeneratingChangeRef.current?.(generating)
+  }, [generating])
 
   const startGeneration = () => {
     const trimmed = prompt.trim()
@@ -31,13 +37,13 @@ export default function GeneratePanel({ onModelReady }) {
           value={prompt}
           onChange={(e) => setPrompt(e.target.value)}
           placeholder='e.g. "a small dragon with big wings"'
-          disabled={generating}
+          disabled={generating || disabled}
         />
       </div>
       <button
         className="submit"
         onClick={startGeneration}
-        disabled={generating || !prompt.trim()}
+        disabled={generating || disabled || !prompt.trim()}
       >
         {generating ? `Generating… ${task.progress}%` : 'Generate 3D model'}
       </button>

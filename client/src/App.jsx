@@ -23,6 +23,8 @@ export default function App() {
   // prompt of the latest edit, applied as base-model context on success
   const pendingEditPromptRef = useRef(null)
   const [lastEditPrompt, setLastEditPrompt] = useState(null) // { text, refinedBy }
+  // generate and edit must not run concurrently — they'd race on the viewer
+  const [genBusy, setGenBusy] = useState(false)
 
   const swapModel = (url, { isObjectUrl = false } = {}) => {
     const stale = objectUrlRef.current
@@ -66,6 +68,7 @@ export default function App() {
     e.target.value = '' // allow re-choosing the same file
     if (!file) return
     setBaseModelPrompt(null)
+    setLastEditPrompt(null)
     swapModel(URL.createObjectURL(file), { isObjectUrl: true })
   }
 
@@ -78,6 +81,7 @@ export default function App() {
     }
     setUrlError(null)
     setBaseModelPrompt(null)
+    setLastEditPrompt(null)
     swapModel(url)
   }
 
@@ -112,8 +116,11 @@ export default function App() {
         </div>
         <aside className="sidebar">
           <GeneratePanel
+            disabled={editTask.generating}
+            onGeneratingChange={setGenBusy}
             onModelReady={(url, prompt) => {
               setBaseModelPrompt(prompt)
+              setLastEditPrompt(null)
               swapModel(url)
             }}
           />
@@ -144,6 +151,7 @@ export default function App() {
                 className="link-button"
                 onClick={() => {
                   setBaseModelPrompt(null)
+                  setLastEditPrompt(null)
                   swapModel(DEFAULT_MODEL_URL)
                 }}
               >
@@ -178,7 +186,7 @@ export default function App() {
             <button
               className="submit"
               onClick={sendEdit}
-              disabled={!selection || !instruction.trim() || editTask.generating}
+              disabled={!selection || !instruction.trim() || editTask.generating || genBusy}
             >
               {editTask.generating
                 ? `Applying edit… ${editTask.task.progress}%`
