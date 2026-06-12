@@ -28,10 +28,14 @@ the proposal). The "Send edit" button in the sidebar finally works.
 text actually sent to the generator and `refinedBy` is `"claude"` or `"template"`.
 The client polls the existing `GET /api/generate/:taskId`.
 
-- 400: missing/empty `instruction`; `point` missing or x/y/z not finite numbers;
-  oversized instruction (> 300 chars — instruction + region + template must
-  always fit Meshy's 600-char limit, so the instruction can never be truncated
-  out of the rendered prompt; the base description is what gets trimmed)
+- 400: missing/empty `instruction`; `point` missing, x/y/z not finite numbers,
+  or any |coordinate| > 1e6; oversized instruction (> 300 chars — instruction +
+  region + coordinates + template must always fit Meshy's 600-char limit, so the
+  instruction can never be truncated out of the rendered prompt; the base
+  description is what gets trimmed)
+- `regionLabel` is capped at 120 chars by silent truncation, not rejection — it
+  comes from mesh names the user doesn't control, so an oversized label must
+  not fail the edit
 - 502: upstream generation service failed (Claude refinement failure is NOT a 502 —
   it falls back to the template renderer)
 

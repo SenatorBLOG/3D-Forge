@@ -18,12 +18,17 @@ const SYSTEM_PROMPT =
 
 export const isClaudeEnabled = () => !!process.env.ANTHROPIC_API_KEY
 
+// lazy singleton: constructing Anthropic() without an API key throws, and this
+// module is imported even in keyless (mock) mode — so never construct at module
+// scope; reuse one client across calls once the first refinement happens
+let client = null
+
 /**
  * Refine a spatial prompt via Claude; resolves to the prompt text.
  * Throws on API failure — the route decides to fall back to the template.
  */
 export async function refinePrompt(spatialPrompt) {
-  const client = new Anthropic()
+  client ??= new Anthropic()
   const response = await client.messages.create({
     model: MODEL,
     max_tokens: 300,

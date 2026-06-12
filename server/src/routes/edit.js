@@ -7,7 +7,12 @@ import SpatialPromptRecord from '../models/SpatialPromptRecord.js'
 
 const router = Router()
 
-const isFiniteNumber = (v) => typeof v === 'number' && Number.isFinite(v)
+// |coordinate| cap keeps toFixed(3) strings short, so the rendered prompt's
+// instruction-bearing core provably fits the 600-char Meshy limit; real
+// raycast points are model-space values nowhere near this bound
+const COORD_LIMIT = 1e6
+const isValidCoord = (v) =>
+  typeof v === 'number' && Number.isFinite(v) && Math.abs(v) <= COORD_LIMIT
 
 // POST /api/edit — spatially-grounded edit: instruction + click point + region
 // → spatial prompt → (optional Claude refinement) → text-to-3D task
@@ -22,8 +27,10 @@ router.post('/', async (req, res) => {
   if (instruction.length > INSTRUCTION_LIMIT) {
     return res.status(400).json({ error: `instruction must be ${INSTRUCTION_LIMIT} characters or fewer` })
   }
-  if (!point || !isFiniteNumber(point.x) || !isFiniteNumber(point.y) || !isFiniteNumber(point.z)) {
-    return res.status(400).json({ error: 'point with finite numeric x, y, z is required' })
+  if (!point || !isValidCoord(point.x) || !isValidCoord(point.y) || !isValidCoord(point.z)) {
+    return res.status(400).json({
+      error: `point with finite numeric x, y, z (each |value| <= ${COORD_LIMIT}) is required`,
+    })
   }
 
   // blob: object URLs are client-local and meaningless in dataset records
