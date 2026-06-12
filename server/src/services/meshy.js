@@ -12,9 +12,16 @@ export const isMockMode = () => !apiKey() || apiKey() === 'mock'
 // --- mock implementation -------------------------------------------------
 
 const MOCK_DURATION_MS = 8000
+const MOCK_RETENTION_MS = 10 * 60 * 1000
 const mockTasks = new Map()
 
 function createMockTask(prompt) {
+  // sweep stale entries so a long-lived dev server doesn't grow forever,
+  // while finished tasks stay pollable for a while
+  const cutoff = Date.now() - MOCK_RETENTION_MS
+  for (const [key, value] of mockTasks) {
+    if (value.startedAt < cutoff) mockTasks.delete(key)
+  }
   const id = `mock-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
   mockTasks.set(id, { prompt, startedAt: Date.now() })
   return id
@@ -47,7 +54,9 @@ async function meshyFetch(path, options = {}) {
   })
   if (!res.ok) {
     const body = await res.text().catch(() => '')
-    throw new Error(`Meshy API ${res.status}: ${body.slice(0, 300)}`)
+    const err = new Error(`Meshy API ${res.status}: ${body.slice(0, 300)}`)
+    err.status = res.status
+    throw err
   }
   return res.json()
 }
@@ -64,10 +73,15 @@ export async function createPreviewTask(prompt) {
 
 /**
  * Fetch a task. Resolves to the Meshy task object ({ id, status, progress,
- * model_urls, ... }) or null when the id is unknown (mock mode only — the
- * real API answers 404 itself, surfaced as a thrown error).
+ * model_urls, ... }) or null when the id is unknown — in both mock and real
+ * mode, so the route can answer a uniform 404.
  */
 export async function getTask(id) {
   if (isMockMode()) return getMockTask(id)
-  return meshyFetch(`/${encodeURIComponent(id)}`)
+  try {
+    return await meshyFetch(`/${encodeURIComponent(id)}`)
+  } catch (err) {
+    if (err.status === 404) return null
+    throw err
+  }
 }

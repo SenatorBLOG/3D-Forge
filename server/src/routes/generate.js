@@ -5,31 +5,39 @@ import GeneratedModel from '../models/GeneratedModel.js'
 
 const router = Router()
 
+const TERMINAL_STATUSES = ['SUCCEEDED', 'FAILED', 'CANCELED']
+
 // POST /api/generate — start a text-to-3D preview task (Meshy AI, or the
 // built-in mock when no MESHY_API_KEY is configured)
 router.post('/', async (req, res) => {
-  const { prompt } = req.body ?? {}
-  if (!prompt || typeof prompt !== 'string' || !prompt.trim()) {
+  const raw = req.body?.prompt
+  const prompt = typeof raw === 'string' ? raw.trim() : ''
+  if (!prompt) {
     return res.status(400).json({ error: 'prompt (non-empty string) is required' })
   }
   if (prompt.length > 600) {
     return res.status(400).json({ error: 'prompt must be 600 characters or fewer' })
   }
 
+  let taskId
   try {
-    const taskId = await createPreviewTask(prompt.trim())
-    if (dbReady()) {
-      await GeneratedModel.create({
-        prompt: prompt.trim(),
-        meshyTaskId: taskId,
-        mock: isMockMode(),
-      })
-    }
-    res.status(202).json({ taskId, mock: isMockMode() })
+    taskId = await createPreviewTask(prompt)
   } catch (err) {
     console.error('generate failed:', err)
-    res.status(502).json({ error: 'Model generation service failed' })
+    return res.status(502).json({ error: 'Model generation service failed' })
   }
+
+  // the upstream task exists at this point — a DB hiccup must not turn a
+  // successful (credit-spending) creation into an error response
+  if (dbReady()) {
+    try {
+      await GeneratedModel.create({ prompt, meshyTaskId: taskId, mock: isMockMode() })
+    } catch (err) {
+      console.error('failed to persist generation record:', err)
+    }
+  }
+
+  res.status(202).json({ taskId, mock: isMockMode() })
 })
 
 // GET /api/generate/:taskId — poll task status/progress/result
@@ -45,7 +53,7 @@ router.get('/:taskId', async (req, res) => {
       modelUrl: task.model_urls?.glb ?? null,
     }
 
-    if (dbReady() && (task.status === 'SUCCEEDED' || task.status === 'FAILED')) {
+    if (dbReady() && TERMINAL_STATUSES.includes(task.status)) {
       await GeneratedModel.findOneAndUpdate(
         { meshyTaskId: payload.taskId },
         { status: task.status, modelUrl: payload.modelUrl },

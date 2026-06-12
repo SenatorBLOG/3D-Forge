@@ -16,6 +16,9 @@ export default function GeneratePanel({ onModelReady }) {
   onModelReadyRef.current = onModelReady
   // last task id already handed to the viewer — guards double notification
   const notifiedRef = useRef(null)
+  // consecutive poll failures — one network blip must not orphan a live
+  // (credit-spending) generation, so we only give up after a few in a row
+  const pollFailsRef = useRef(0)
 
   const generating = !!task && !TERMINAL.includes(task.status)
 
@@ -31,6 +34,7 @@ export default function GeneratePanel({ onModelReady }) {
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`)
+      pollFailsRef.current = 0
       setTask({ id: data.taskId, status: 'PENDING', progress: 0, mock: data.mock })
     } catch (err) {
       setTask(null)
@@ -55,8 +59,12 @@ export default function GeneratePanel({ onModelReady }) {
             : t,
         )
 
-        if (data.status === 'SUCCEEDED' && data.modelUrl) {
-          if (notifiedRef.current !== data.taskId) {
+        pollFailsRef.current = 0
+
+        if (data.status === 'SUCCEEDED') {
+          if (!data.modelUrl) {
+            setError('Generation finished but the service returned no model file.')
+          } else if (notifiedRef.current !== data.taskId) {
             notifiedRef.current = data.taskId
             onModelReadyRef.current?.(data.modelUrl)
           }
@@ -65,8 +73,12 @@ export default function GeneratePanel({ onModelReady }) {
         }
       } catch (err) {
         if (cancelled) return
-        setError(err.message)
-        setTask(null)
+        pollFailsRef.current += 1
+        if (pollFailsRef.current >= 3) {
+          setError(`Lost track of the generation task: ${err.message}`)
+          setTask(null)
+        }
+        // otherwise keep polling — transient blips are expected
       }
     }, POLL_INTERVAL_MS)
 
