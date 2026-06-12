@@ -53,11 +53,17 @@ router.get('/:taskId', async (req, res) => {
       modelUrl: task.model_urls?.glb ?? null,
     }
 
+    // best-effort, like the POST handler: a DB hiccup must not hide an
+    // already-fetched result from the client
     if (dbReady() && TERMINAL_STATUSES.includes(task.status)) {
-      await GeneratedModel.findOneAndUpdate(
-        { meshyTaskId: payload.taskId },
-        { status: task.status, modelUrl: payload.modelUrl },
-      )
+      try {
+        await GeneratedModel.findOneAndUpdate(
+          { meshyTaskId: payload.taskId },
+          { status: task.status, modelUrl: payload.modelUrl },
+        )
+      } catch (err) {
+        console.error('failed to update generation record:', err)
+      }
     }
 
     res.json(payload)
