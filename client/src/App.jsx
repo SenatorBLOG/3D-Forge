@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react'
 import ModelViewer from './components/ModelViewer.jsx'
+import GeneratePanel from './components/GeneratePanel.jsx'
 
 const DEFAULT_MODEL_URL = '/models/robotic_hand.glb'
 
@@ -82,6 +83,7 @@ export default function App() {
           />
         </div>
         <aside className="sidebar">
+          <GeneratePanel onModelReady={(url) => swapModel(url)} />
           <section className="panel">
             <h2>Model</h2>
             <label className="file-button">

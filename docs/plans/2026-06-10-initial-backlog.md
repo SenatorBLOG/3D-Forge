@@ -7,8 +7,8 @@ it into a detailed plan file in this folder.
 | # | Milestone | Owner | Status |
 |---|-----------|-------|--------|
 | M0 | Team setup: repo structure, CLAUDE.md, subagents, @claude bot, client/server skeleton | Mikhail | ✅ done (PR #1) |
-| M1 | Viewer: load a model from a URL / file upload, improve selection UX (highlight region, multiple markers) | Mikhail | 🔄 in progress ([plan](2026-06-11-m1-viewer.md)) |
-| M2 | Meshy AI integration: `POST /api/generate` → text-to-3D job → poll → save metadata in Mongo → show GLB in viewer | TBD | ⬜ |
+| M1 | Viewer: load a model from a URL / file upload, improve selection UX (highlight region, multiple markers) | Mikhail | ✅ done (PR #2) |
+| M2 | Meshy AI integration: `POST /api/generate` → text-to-3D job → poll → save metadata in Mongo → show GLB in viewer | Mikhail (Javid inactive) | 🔄 in progress ([plan](2026-06-11-m2-meshy.md)) |
 | M3 | Spatial Prompt Engine: combine instruction + click coords + region into a structured prompt; optional Claude API refinement; store spatial prompt records | TBD | ⬜ |
 | M4 | Edit pipeline + version history: send spatial prompt for a localized edit, save model versions, version switcher UI | TBD | ⬜ |
 | M5 | Evaluation + dataset: compare spatial vs plain prompts, export dataset records | TBD | ⬜ |

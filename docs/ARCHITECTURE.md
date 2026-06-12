@@ -66,7 +66,11 @@ truth for scope; this file is the working reference for implementation.
 
 - ✅ Viewer skeleton: loads `client/public/models/robotic_hand.glb`, orbit controls,
   raycast click selection with a visual marker, coordinates shown in the sidebar.
-- ✅ Server skeleton: `/api/health` live; `/api/generate` and `/api/models` are stubs;
-  Mongo connection optional (server runs without a DB for local dev).
-- ⬜ Meshy AI integration (M2), Spatial Prompt Engine (M3), versions/history (M4),
-  evaluation + dataset export (M5) — see `docs/plans/`.
+- ✅ Server skeleton: `/api/health` live; Mongo connection optional (server runs
+  without a DB for local dev).
+- ✅ Text-to-3D pipeline (M2): `POST /api/generate` → Meshy preview task →
+  `GET /api/generate/:taskId` polling → generated GLB loads in the viewer.
+  Built-in mock mode (no `MESHY_API_KEY`) simulates the lifecycle for free;
+  generations persist to Mongo when a DB is connected (`GET /api/models`).
+- ⬜ Spatial Prompt Engine (M3), versions/history (M4), evaluation + dataset
+  export (M5) — see `docs/plans/`.
