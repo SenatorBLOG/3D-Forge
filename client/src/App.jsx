@@ -52,8 +52,14 @@ export default function App() {
   })
 
   const busy = genBusy || editTask.generating
-  // refresh the history list whenever a task starts or finishes
+  // refresh the history list whenever a task starts or finishes (skip the
+  // mount run — the panel already fetches once on its own mount)
+  const busySeenRef = useRef(false)
   useEffect(() => {
+    if (!busySeenRef.current) {
+      busySeenRef.current = true
+      return
+    }
     setHistoryKey((k) => k + 1)
   }, [busy])
 

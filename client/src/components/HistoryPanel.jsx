@@ -43,7 +43,7 @@ export default function HistoryPanel({ refreshKey, busy, onLoad }) {
             </span>
             <div className="history-meta">
               <span>
-                {new Date(entry.createdAt).toLocaleTimeString()} ·{' '}
+                {new Date(entry.createdAt).toLocaleString()} ·{' '}
                 {entry.status.toLowerCase()}
               </span>
               {entry.status === 'SUCCEEDED' && entry.modelUrl && (
