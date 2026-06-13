@@ -14,6 +14,9 @@ export default function App() {
   const [baseModelPrompt, setBaseModelPrompt] = useState(null)
   const [selection, setSelection] = useState(null) // { point, meshName }
   const [instruction, setInstruction] = useState('')
+  // spatial = M3 engine (click + region + base); plain = bare instruction (M5
+  // comparison control)
+  const [spatialGrounding, setSpatialGrounding] = useState(true)
   const [urlInput, setUrlInput] = useState('')
   const [urlError, setUrlError] = useState(null)
   // bumped on every swap so re-loading the SAME url (e.g. retry after an
@@ -70,6 +73,7 @@ export default function App() {
       point: selection.point,
       regionLabel: selection.meshName,
       baseModel: { prompt: baseModelPrompt, modelUrl },
+      mode: spatialGrounding ? 'spatial' : 'plain',
     })
     if (data) {
       pendingEditPromptRef.current = data.prompt
@@ -197,6 +201,17 @@ export default function App() {
                 rows={4}
               />
             </div>
+            <label className="toggle">
+              <input
+                type="checkbox"
+                checked={spatialGrounding}
+                onChange={(e) => setSpatialGrounding(e.target.checked)}
+              />
+              Spatial grounding{' '}
+              <span className="hint">
+                ({spatialGrounding ? 'click + region' : 'plain instruction'})
+              </span>
+            </label>
             <button
               className="submit"
               onClick={sendEdit}

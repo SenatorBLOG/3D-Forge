@@ -10,6 +10,7 @@ const memory = []
 
 export function recordTask(entry) {
   memory.unshift({
+    evaluation: null,
     ...entry,
     status: 'PENDING',
     modelUrl: null,
@@ -24,6 +25,14 @@ export function updateTask(taskId, status, modelUrl) {
     entry.status = status
     entry.modelUrl = modelUrl
   }
+}
+
+/** Set the evaluation rating on a memory entry; returns true if it existed. */
+export function updateEvaluation(taskId, evaluation) {
+  const entry = memory.find((e) => e.taskId === taskId)
+  if (!entry) return false
+  entry.evaluation = evaluation
+  return true
 }
 
 export function listMemory() {
@@ -56,6 +65,8 @@ export async function listDb(limit) {
       prompt: e.generatedPrompt,
       instruction: e.instruction,
       regionLabel: e.regionLabel,
+      promptMode: e.promptMode ?? 'spatial',
+      evaluation: e.evaluation ?? null,
       status: e.status ?? 'PENDING',
       modelUrl: e.modelUrl ?? null,
       mock: e.mock ?? false,

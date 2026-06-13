@@ -6,6 +6,7 @@ import modelsRouter from './routes/models.js'
 import generateRouter from './routes/generate.js'
 import editRouter from './routes/edit.js'
 import historyRouter from './routes/history.js'
+import datasetRouter from './routes/dataset.js'
 
 const app = express()
 app.use(cors())
@@ -19,6 +20,7 @@ app.use('/api/models', modelsRouter)
 app.use('/api/generate', generateRouter)
 app.use('/api/edit', editRouter)
 app.use('/api/history', historyRouter)
+app.use('/api/dataset', datasetRouter)
 
 const port = process.env.PORT || 3001
 await connectDb()

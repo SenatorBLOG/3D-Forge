@@ -254,6 +254,65 @@ body {
   cursor: not-allowed;
 }
 
+.toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: #aeb6c6;
+  cursor: pointer;
+}
+
+.toggle input {
+  cursor: pointer;
+}
+
+.export-link {
+  flex: 1;
+  text-align: center;
+  padding: 8px 14px;
+  border-radius: 6px;
+  background: #2a2f3b;
+  color: #e6e8ee;
+  font-size: 13px;
+  text-decoration: none;
+}
+
+.export-link:hover {
+  background: #4f6ef7;
+}
+
+.rating {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  font-size: 12px;
+  color: #8b93a5;
+}
+
+.rating .star {
+  background: none;
+  border: none;
+  color: #3a4150;
+  font-size: 16px;
+  cursor: pointer;
+  padding: 0 1px;
+  line-height: 1;
+}
+
+.rating .star.on {
+  color: #f7c14f;
+}
+
+.rating .star-clear {
+  background: none;
+  border: none;
+  color: #8b93a5;
+  font-size: 11px;
+  cursor: pointer;
+  margin-left: 4px;
+}
+
 .link-button {
   background: none;
   border: none;
