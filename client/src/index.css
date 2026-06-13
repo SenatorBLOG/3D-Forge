@@ -21,6 +21,7 @@
   --steel-soft: rgba(92, 200, 255, 0.14);
 
   --danger: #ff6b6b;
+  --good: #5fd38a;
   --star: #ffc34d;
 
   --font-display: 'Chakra Petch', system-ui, sans-serif;
@@ -497,36 +498,106 @@ body {
   overflow-y: auto;
 }
 
-.history-item {
+.hcard {
   display: flex;
-  flex-direction: column;
-  gap: 6px;
-  padding: 9px 11px;
+  gap: 10px;
+  padding: 10px;
   background: var(--panel-2);
   border: 1px solid var(--line-soft);
-  border-left: 2px solid var(--line);
-  border-radius: 6px;
+  border-radius: 7px;
   transition: border-color 0.15s;
 }
 
-.history-item:hover {
-  border-left-color: var(--forge);
+.hcard:hover {
+  border-color: var(--line);
 }
 
-.history-title {
+.hcard-icon {
+  flex: none;
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border-radius: 6px;
+}
+
+.hcard--generate .hcard-icon {
+  color: var(--steel);
+  background: var(--steel-soft);
+}
+
+.hcard--edit .hcard-icon {
+  color: var(--forge);
+  background: rgba(255, 122, 31, 0.12);
+}
+
+.hcard-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.hcard-title {
   font-size: 13px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.history-meta {
+.hcard-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.badge {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: var(--panel);
+  color: var(--text-dim);
+  border: 1px solid var(--line);
+}
+
+.badge-spatial {
+  color: var(--forge);
+  border-color: rgba(255, 122, 31, 0.4);
+}
+
+.badge-plain {
+  color: var(--text-faint);
+}
+
+.status-succeeded {
+  color: var(--good);
+  border-color: rgba(95, 211, 138, 0.4);
+}
+
+.status-pending,
+.status-in_progress {
+  color: var(--forge-2);
+}
+
+.status-failed,
+.status-canceled {
+  color: var(--danger);
+}
+
+.hcard-foot {
   display: flex;
   justify-content: space-between;
   align-items: center;
   gap: 8px;
+}
+
+.hcard-time {
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: 10.5px;
   color: var(--text-faint);
 }
 
@@ -556,14 +627,15 @@ body {
 .rating {
   display: flex;
   align-items: center;
-  gap: 3px;
+  gap: 4px;
+  margin-top: 2px;
 }
 
 .rating .star {
   background: none;
   border: none;
   color: var(--line);
-  font-size: 16px;
+  font-size: 20px;
   line-height: 1;
   cursor: pointer;
   padding: 0 1px;
