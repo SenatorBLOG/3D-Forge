@@ -12,9 +12,10 @@ export default function App() {
   const [modelError, setModelError] = useState(null)
   // text description that produced the current model — context for edits
   const [baseModelPrompt, setBaseModelPrompt] = useState(null)
-  const [selection, setSelection] = useState(null) // { point, meshName }
+  // selected points on the mesh: [{ point: {x,y,z}, meshName }]
+  const [points, setPoints] = useState([])
   const [instruction, setInstruction] = useState('')
-  // spatial = M3 engine (click + region + base); plain = bare instruction (M5
+  // spatial = M3 engine (clicks + region + base); plain = bare instruction (M5
   // comparison control)
   const [spatialGrounding, setSpatialGrounding] = useState(true)
   const [urlInput, setUrlInput] = useState('')
@@ -41,7 +42,8 @@ export default function App() {
       objectUrlRef.current = null
     }
     if (isObjectUrl) objectUrlRef.current = url
-    setSelection(null)
+    // model-space points are meaningless against a different model
+    setPoints([])
     setModelError(null)
     setModelStatus('loading')
     setModelUrl(url)
@@ -66,12 +68,29 @@ export default function App() {
     setHistoryKey((k) => k + 1)
   }, [busy])
 
+  const addPoint = (p) => setPoints((prev) => [...prev, p])
+  const removePoint = (i) => setPoints((prev) => prev.filter((_, idx) => idx !== i))
+
   const sendEdit = async () => {
-    if (!selection || !instruction.trim()) return
+    if (points.length === 0 || !instruction.trim()) return
+    // collapse the selected points to a representative centroid for the M3
+    // engine, and join the distinct region names they landed on
+    const n = points.length
+    const centroid = points.reduce(
+      (acc, p) => ({
+        x: acc.x + p.point.x / n,
+        y: acc.y + p.point.y / n,
+        z: acc.z + p.point.z / n,
+      }),
+      { x: 0, y: 0, z: 0 },
+    )
+    const regionLabel = [...new Set(points.map((p) => p.meshName))].join(', ')
+
     const data = await editTask.start('/api/edit', {
       instruction: instruction.trim(),
-      point: selection.point,
-      regionLabel: selection.meshName,
+      point: centroid,
+      points: points.map((p) => p.point),
+      regionLabel,
       baseModel: { prompt: baseModelPrompt, modelUrl },
       mode: spatialGrounding ? 'spatial' : 'plain',
     })
@@ -125,7 +144,7 @@ export default function App() {
               3D<span className="brand-name-accent">FORGE</span>
             </span>
             <span className="tagline">
-              Click a region · describe the change · forge a new version
+              Click regions · describe the change · forge a new version
             </span>
           </div>
         </div>
@@ -143,7 +162,8 @@ export default function App() {
           <ModelViewer
             key={`${modelUrl}#${loadKey}`}
             modelUrl={modelUrl}
-            onSelect={setSelection}
+            points={points}
+            onAddPoint={addPoint}
             onLoaded={() => setModelStatus('ready')}
             onError={(message) => {
               setModelError(message)
@@ -199,16 +219,37 @@ export default function App() {
           <section className="panel">
             <h2>Spatial prompt</h2>
             <div className="field">
-              <label>Region</label>
-              <code>{selection ? selection.meshName : 'nothing selected yet'}</code>
-            </div>
-            <div className="field">
-              <label>Selected point</label>
-              <code>
-                {selection
-                  ? `x: ${selection.point.x.toFixed(3)}  y: ${selection.point.y.toFixed(3)}  z: ${selection.point.z.toFixed(3)}`
-                  : '—'}
-              </code>
+              <label>Selected points ({points.length})</label>
+              {points.length === 0 ? (
+                <code>click the model to add one or more points</code>
+              ) : (
+                <div className="point-list">
+                  {points.map((p, i) => (
+                    <div className="point-row" key={i}>
+                      <span className="point-region" title={p.meshName}>
+                        {p.meshName}
+                      </span>
+                      <code>
+                        {p.point.x.toFixed(2)}, {p.point.y.toFixed(2)},{' '}
+                        {p.point.z.toFixed(2)}
+                      </code>
+                      <button
+                        className="point-remove"
+                        onClick={() => removePoint(i)}
+                        aria-label="Remove point"
+                        title="Remove point"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {points.length > 0 && (
+                <button className="link-button" onClick={() => setPoints([])}>
+                  Clear all points
+                </button>
+              )}
             </div>
             <div className="field">
               <label htmlFor="instruction">Instruction</label>
@@ -228,13 +269,18 @@ export default function App() {
               />
               Spatial grounding{' '}
               <span className="hint">
-                ({spatialGrounding ? 'click + region' : 'plain instruction'})
+                ({spatialGrounding ? 'clicks + region' : 'plain instruction'})
               </span>
             </label>
             <button
               className="submit"
               onClick={sendEdit}
-              disabled={!selection || !instruction.trim() || editTask.generating || genBusy}
+              disabled={
+                points.length === 0 ||
+                !instruction.trim() ||
+                editTask.generating ||
+                genBusy
+              }
             >
               {editTask.generating
                 ? `Applying edit… ${editTask.task.progress}%`

@@ -1,33 +1,39 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import * as THREE from 'three'
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
 
-const HIGHLIGHT_COLOR = 0x4f6ef7
+const MARKER_COLOR = 0xff7a1f // molten amber — matches the brand action accent
 
 /**
  * Browser 3D viewer: loads a GLB/glTF model, orbit controls, and raycast click
- * selection. A click highlights the hit sub-mesh and reports the 3D point plus
- * the region label (mesh name) via onSelect — the seed of the spatial prompt.
+ * selection. Each click adds a point (reported via onAddPoint); the parent owns
+ * the list of points and passes it back as `points`, which the viewer draws as
+ * amber markers — so points can be removed from the sidebar.
  *
  * Props:
- *   modelUrl  — URL (or object URL) of the GLB to display
- *   onSelect  — called with { point, meshName } when the user picks a point on the mesh
- *   onLoaded  — called once the model has been added to the scene
- *   onError   — called with a human-readable message when loading fails
+ *   modelUrl    — URL (or object URL) of the GLB to display
+ *   points      — [{ point: {x,y,z}, meshName }] markers to draw (source of truth)
+ *   onAddPoint  — called with { point, meshName } when the user clicks the mesh
+ *   onLoaded    — called once the model has been added to the scene
+ *   onError     — called with a human-readable message when loading fails
  */
-export default function ModelViewer({ modelUrl, onSelect, onLoaded, onError }) {
+export default function ModelViewer({ modelUrl, points, onAddPoint, onLoaded, onError }) {
   const containerRef = useRef(null)
-  // keep latest callbacks without re-creating the whole scene on re-render
+  // keep latest callbacks/points without re-creating the whole scene on re-render
   const callbacksRef = useRef({})
-  callbacksRef.current = { onSelect, onLoaded, onError }
+  callbacksRef.current = { onAddPoint, onLoaded, onError }
+  const pointsRef = useRef(points)
+  pointsRef.current = points
+  // imperative handles the toolbar + points effect reach into the live scene
+  const apiRef = useRef({})
+  const [autoRotate, setAutoRotate] = useState(false)
 
   useEffect(() => {
     const container = containerRef.current
     // guards async loader callbacks that may fire after unmount/model swap
     let disposed = false
 
-    // dispose geometries, materials AND their textures for a whole subtree
     const disposeObject = (root) => {
       root.traverse((obj) => {
         obj.geometry?.dispose()
@@ -41,7 +47,7 @@ export default function ModelViewer({ modelUrl, onSelect, onLoaded, onError }) {
     }
 
     const scene = new THREE.Scene()
-    scene.background = new THREE.Color(0x15171c)
+    // transparent: the model floats on the page's forge-grid backdrop (CSS)
 
     const camera = new THREE.PerspectiveCamera(
       50,
@@ -51,49 +57,41 @@ export default function ModelViewer({ modelUrl, onSelect, onLoaded, onError }) {
     )
     camera.position.set(0.6, 0.4, 0.8)
 
-    const renderer = new THREE.WebGLRenderer({ antialias: true })
+    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true })
     renderer.setPixelRatio(window.devicePixelRatio)
     renderer.setSize(container.clientWidth, container.clientHeight)
+    renderer.toneMapping = THREE.ACESFilmicToneMapping
+    renderer.toneMappingExposure = 1.1
     container.appendChild(renderer.domElement)
 
     const controls = new OrbitControls(camera, renderer.domElement)
     controls.enableDamping = true
+    controls.autoRotateSpeed = 1.6
+    controls.autoRotate = autoRotate
 
-    scene.add(new THREE.AmbientLight(0xffffff, 0.7))
-    const dirLight = new THREE.DirectionalLight(0xffffff, 1.4)
-    dirLight.position.set(2, 4, 3)
-    scene.add(dirLight)
+    // three-point lighting: cool sky/ground ambient + warm key + steel rim
+    scene.add(new THREE.HemisphereLight(0x8fb4d6, 0x1a1208, 0.7))
+    const keyLight = new THREE.DirectionalLight(0xfff1e0, 2.2)
+    keyLight.position.set(3, 5, 2)
+    scene.add(keyLight)
+    const rimLight = new THREE.DirectionalLight(0x5cc8ff, 0.9)
+    rimLight.position.set(-3, 2, -4)
+    scene.add(rimLight)
 
-    // marker shown at the selected point
-    const marker = new THREE.Mesh(
-      new THREE.SphereGeometry(0.01, 16, 16),
-      new THREE.MeshBasicMaterial({ color: 0xff4d4d }),
-    )
-    marker.visible = false
-    scene.add(marker)
+    // markers are drawn from the `points` prop; small spheres sharing one
+    // geometry + material, recreated whenever the point list changes
+    const markersGroup = new THREE.Group()
+    scene.add(markersGroup)
+    const markerMat = new THREE.MeshBasicMaterial({ color: MARKER_COLOR })
+    let markerGeom = new THREE.SphereGeometry(0.01, 16, 16)
 
-    // highlight of the selected sub-mesh: swap in a cloned material with an
-    // emissive tint; the original is restored (and the clone disposed) on
-    // re-selection, model swap, and unmount
-    let highlight = null // { mesh, originalMaterial, cloneMaterial }
-
-    const clearHighlight = () => {
-      if (!highlight) return
-      highlight.mesh.material = highlight.originalMaterial
-      highlight.cloneMaterial.dispose()
-      highlight = null
-    }
-
-    const highlightMesh = (mesh) => {
-      if (highlight?.mesh === mesh) return
-      clearHighlight()
-      // multi-material meshes are rare in generated GLBs — skip highlight there
-      if (Array.isArray(mesh.material) || !mesh.material?.emissive) return
-      const clone = mesh.material.clone()
-      clone.emissive = new THREE.Color(HIGHLIGHT_COLOR)
-      clone.emissiveIntensity = 0.45
-      highlight = { mesh, originalMaterial: mesh.material, cloneMaterial: clone }
-      mesh.material = clone
+    const syncMarkers = (pts) => {
+      markersGroup.clear() // children share geom+mat, disposed once at teardown
+      pts.forEach((p) => {
+        const dot = new THREE.Mesh(markerGeom, markerMat)
+        dot.position.set(p.point.x, p.point.y, p.point.z)
+        markersGroup.add(dot)
+      })
     }
 
     // walk up the hierarchy until a named node is found — generated GLBs often
@@ -106,18 +104,28 @@ export default function ModelViewer({ modelUrl, onSelect, onLoaded, onError }) {
       return node.name
     }
 
+    let homePosition = null
+    apiRef.current = {
+      controls,
+      syncMarkers,
+      resetView: () => {
+        if (!homePosition) return
+        camera.position.copy(homePosition)
+        controls.target.set(0, 0, 0)
+        controls.update()
+      },
+    }
+
     let model = null
     const loader = new GLTFLoader()
     loader.load(
       modelUrl,
       (gltf) => {
         if (disposed) {
-          // model swap / unmount won the race — drop the late arrival cleanly
           disposeObject(gltf.scene)
           return
         }
         model = gltf.scene
-        // center the model at the origin and frame the camera around it
         const box = new THREE.Box3().setFromObject(model)
         const center = box.getCenter(new THREE.Vector3())
         const size = box.getSize(new THREE.Vector3()).length()
@@ -126,9 +134,20 @@ export default function ModelViewer({ modelUrl, onSelect, onLoaded, onError }) {
         camera.near = size / 100
         camera.far = size * 10
         camera.updateProjectionMatrix()
-        marker.geometry.dispose()
-        marker.geometry = new THREE.SphereGeometry(size * 0.012, 16, 16)
+        homePosition = camera.position.clone()
+
+        // marker radius scaled to the model — small, not a giant blob
+        markerGeom.dispose()
+        markerGeom = new THREE.SphereGeometry(size * 0.006, 16, 16)
+
+        const grid = new THREE.GridHelper(size * 1.6, 22, 0x5cc8ff, 0x2a3242)
+        grid.position.y = box.min.y - center.y
+        grid.material.transparent = true
+        grid.material.opacity = 0.3
+        scene.add(grid)
+
         scene.add(model)
+        syncMarkers(pointsRef.current)
         callbacksRef.current.onLoaded?.()
       },
       undefined,
@@ -142,7 +161,7 @@ export default function ModelViewer({ modelUrl, onSelect, onLoaded, onError }) {
       },
     )
 
-    // raycast click → selection; drags (orbiting) are ignored
+    // raycast click → add a point; drags (orbiting) are ignored
     const raycaster = new THREE.Raycaster()
     const pointer = new THREE.Vector2()
     let downAt = null
@@ -163,10 +182,7 @@ export default function ModelViewer({ modelUrl, onSelect, onLoaded, onError }) {
       raycaster.setFromCamera(pointer, camera)
       const hit = raycaster.intersectObject(model, true)[0]
       if (hit) {
-        marker.position.copy(hit.point)
-        marker.visible = true
-        highlightMesh(hit.object)
-        callbacksRef.current.onSelect?.({
+        callbacksRef.current.onAddPoint?.({
           point: { x: hit.point.x, y: hit.point.y, z: hit.point.z },
           meshName: regionLabel(hit.object),
         })
@@ -193,20 +209,72 @@ export default function ModelViewer({ modelUrl, onSelect, onLoaded, onError }) {
 
     return () => {
       disposed = true
+      apiRef.current = {}
       cancelAnimationFrame(raf)
       window.removeEventListener('resize', onResize)
       renderer.domElement.removeEventListener('pointerdown', onPointerDown)
       renderer.domElement.removeEventListener('pointerup', onPointerUp)
       controls.dispose()
-      clearHighlight() // restore original material before disposal below
+      markersGroup.clear()
+      markerGeom.dispose()
+      markerMat.dispose()
       disposeObject(scene)
       renderer.dispose()
-      // release the WebGL context promptly — browsers cap live contexts, and
-      // every model swap creates a fresh renderer
+      // release the WebGL context promptly — browsers cap live contexts
       renderer.forceContextLoss()
       container.removeChild(renderer.domElement)
     }
   }, [modelUrl])
 
-  return <div className="viewer" ref={containerRef} />
+  // redraw markers whenever the point list changes
+  useEffect(() => {
+    apiRef.current.syncMarkers?.(points)
+  }, [points])
+
+  // reflect auto-rotate into the live controls
+  useEffect(() => {
+    if (apiRef.current.controls) apiRef.current.controls.autoRotate = autoRotate
+  }, [autoRotate])
+
+  return (
+    <div className="viewer" ref={containerRef}>
+      <div className="viewer-toolbar">
+        <button
+          type="button"
+          title="Reset camera"
+          aria-label="Reset camera"
+          onClick={() => apiRef.current.resetView?.()}
+        >
+          <svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true">
+            <path
+              d="M4 12a8 8 0 1 1 2.3 5.6M4 12V7m0 5h5"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
+        </button>
+        <button
+          type="button"
+          className={autoRotate ? 'on' : ''}
+          title="Auto-rotate"
+          aria-pressed={autoRotate}
+          onClick={() => setAutoRotate((v) => !v)}
+        >
+          <svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true">
+            <path
+              d="M3.5 9a9 9 0 0 1 16-2m1 1.5V3.5m0 4h-4M20.5 15a9 9 0 0 1-16 2m-1-1.5V20.5m0-4h4"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
+        </button>
+      </div>
+    </div>
+  )
 }
