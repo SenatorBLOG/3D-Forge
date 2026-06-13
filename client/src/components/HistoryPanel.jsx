@@ -55,7 +55,11 @@ export default function HistoryPanel({ refreshKey, busy, onLoad }) {
       const a = document.createElement('a')
       a.href = url
       a.download = '3dforge-dataset.json'
+      // Firefox only triggers a programmatic download when the anchor is in
+      // the document
+      document.body.appendChild(a)
       a.click()
+      document.body.removeChild(a)
       URL.revokeObjectURL(url)
     } catch (err) {
       setError(err.message)
