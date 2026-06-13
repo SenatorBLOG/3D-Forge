@@ -16,7 +16,7 @@ router.get('/', async (req, res) => {
   }
 })
 
-// GET /api/dataset.csv — same rows as a downloadable CSV
+// GET /api/dataset/csv — same rows as a downloadable CSV
 router.get('/csv', async (req, res) => {
   try {
     const { records } = await listDataset()

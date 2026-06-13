@@ -71,16 +71,19 @@ export async function listDataset() {
 
 const csvCell = (value) => {
   if (value === null || value === undefined) return ''
-  const s = String(value)
+  let s = String(value)
+  // neutralize spreadsheet formula injection (=, +, -, @ lead cells can execute
+  // in Excel/Sheets) on free-text fields only — numbers (coords) stay intact
+  if (typeof value === 'string' && /^[=+\-@]/.test(s)) s = `'${s}`
   // RFC 4180: quote when the value contains a comma, quote, or newline
   return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s
 }
 
-/** Serialize dataset rows to CSV with a header line. */
+/** Serialize dataset rows to CSV with a header line (RFC 4180 CRLF endings). */
 export function toCsv(records) {
   const header = COLUMNS.join(',')
   const lines = records.map((row) => COLUMNS.map((c) => csvCell(row[c])).join(','))
-  return [header, ...lines].join('\n')
+  return [header, ...lines].join('\r\n')
 }
 
 export { COLUMNS }

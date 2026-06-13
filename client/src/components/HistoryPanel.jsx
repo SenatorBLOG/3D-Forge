@@ -44,17 +44,22 @@ export default function HistoryPanel({ refreshKey, busy, onLoad }) {
   }
 
   const exportJson = async () => {
-    const res = await fetch('/api/dataset')
-    const data = await res.json()
-    const blob = new Blob([JSON.stringify(data.records, null, 2)], {
-      type: 'application/json',
-    })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = '3dforge-dataset.json'
-    a.click()
-    URL.revokeObjectURL(url)
+    try {
+      const res = await fetch('/api/dataset')
+      if (!res.ok) throw new Error((await res.json()).error || `HTTP ${res.status}`)
+      const data = await res.json()
+      const blob = new Blob([JSON.stringify(data.records, null, 2)], {
+        type: 'application/json',
+      })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = '3dforge-dataset.json'
+      a.click()
+      URL.revokeObjectURL(url)
+    } catch (err) {
+      setError(err.message)
+    }
   }
 
   return (
