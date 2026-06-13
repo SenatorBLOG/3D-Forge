@@ -1,6 +1,6 @@
 # M5 — Evaluation & dataset export
 
-**Owner:** Mikhail (Javid inactive) · **Status:** in progress · **Branch:** `feat/m5-evaluation`
+**Owner:** Mikhail (Javid inactive) · **Status:** done (PR #7) · **Branch:** `feat/m5-evaluation`
 
 ## Goal
 
