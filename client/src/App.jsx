@@ -106,10 +106,29 @@ export default function App() {
   return (
     <div className="app">
       <header className="app-header">
-        <h1>3D Forge</h1>
-        <span className="tagline">
-          Click the model to select a region, then describe your edit
-        </span>
+        <div className="brand">
+          <svg className="brand-mark" viewBox="0 0 32 32" aria-hidden="true">
+            <defs>
+              <linearGradient id="forgeTop" x1="0" y1="0" x2="1" y2="1">
+                <stop offset="0" stopColor="#ffce9e" />
+                <stop offset="0.5" stopColor="#ff7a1f" />
+                <stop offset="1" stopColor="#d65a0a" />
+              </linearGradient>
+            </defs>
+            {/* isometric cube — molten top face being forged */}
+            <polygon points="16,3 29,10.5 16,18 3,10.5" fill="url(#forgeTop)" />
+            <polygon points="3,10.5 16,18 16,30 3,22.5" fill="#12151d" stroke="#5cc8ff" strokeWidth="1" strokeLinejoin="round" />
+            <polygon points="29,10.5 16,18 16,30 29,22.5" fill="#171b25" stroke="#3a4a5e" strokeWidth="1" strokeLinejoin="round" />
+          </svg>
+          <div className="brand-text">
+            <span className="brand-name">
+              3D<span className="brand-name-accent">FORGE</span>
+            </span>
+            <span className="tagline">
+              Click a region · describe the change · forge a new version
+            </span>
+          </div>
+        </div>
       </header>
       <main className="app-main">
         <div className="viewer-wrap">
