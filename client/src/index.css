@@ -130,10 +130,46 @@ body {
 .viewer {
   flex: 1;
   min-width: 0;
+  position: relative;
 }
 
 .viewer canvas {
   display: block;
+}
+
+.viewer-toolbar {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  z-index: 2;
+}
+
+.viewer-toolbar button {
+  width: 38px;
+  height: 38px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(18, 21, 29, 0.72);
+  backdrop-filter: blur(6px);
+  color: var(--text-dim);
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s, background 0.15s;
+}
+
+.viewer-toolbar button:hover {
+  color: var(--steel);
+  border-color: var(--steel);
+}
+
+.viewer-toolbar button.on {
+  color: var(--forge);
+  border-color: var(--forge);
+  background: rgba(255, 122, 31, 0.14);
 }
 
 .viewer-overlay {
