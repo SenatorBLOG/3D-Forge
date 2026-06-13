@@ -79,4 +79,7 @@ truth for scope; this file is the working reference for implementation.
 - ✅ Version history (M4): `GET /api/history` lists generations and edits as a
   unified version list (Mongo-backed when connected, in-memory per session
   otherwise); the History panel reloads any succeeded version into the viewer.
-- ⬜ Evaluation + dataset export (M5) — see `docs/plans/`.
+- ✅ Evaluation + dataset (M5): `/api/edit` runs in `spatial` (M3 engine) or
+  `plain` (bare instruction) mode for the spatial-vs-plain comparison; edits
+  carry a 1-5 `evaluation` rating (`PATCH /api/dataset/:taskId`); the full
+  collection exports via `GET /api/dataset` (JSON) and `/api/dataset/csv`.

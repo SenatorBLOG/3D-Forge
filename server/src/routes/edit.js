@@ -15,12 +15,14 @@ const COORD_LIMIT = 1e6
 const isValidCoord = (v) =>
   typeof v === 'number' && Number.isFinite(v) && Math.abs(v) <= COORD_LIMIT
 
-// POST /api/edit — spatially-grounded edit: instruction + click point + region
-// → spatial prompt → (optional Claude refinement) → text-to-3D task
+// POST /api/edit — edit the model from an instruction. mode "spatial" (default)
+// grounds the prompt in the click point + region + base model (the M3 engine);
+// mode "plain" sends the bare instruction (the comparison control for M5).
 router.post('/', async (req, res) => {
   const body = req.body ?? {}
   const instruction = typeof body.instruction === 'string' ? body.instruction.trim() : ''
   const { point, regionLabel, baseModel } = body
+  const promptMode = body.mode === 'plain' ? 'plain' : 'spatial'
 
   if (!instruction) {
     return res.status(400).json({ error: 'instruction (non-empty string) is required' })
@@ -51,15 +53,24 @@ router.post('/', async (req, res) => {
     },
   })
 
-  // refinement is best-effort: a Claude failure must not block the edit
-  let prompt = renderPromptText(spatialPrompt)
-  let refinedBy = 'template'
-  if (isClaudeEnabled()) {
-    try {
-      prompt = await refinePrompt(spatialPrompt)
-      refinedBy = 'claude'
-    } catch (err) {
-      console.error('Claude refinement failed, using template:', err)
+  // plain mode is the control baseline: the raw instruction, no spatial context.
+  // spatial mode renders the structured prompt and (best-effort) refines it —
+  // a Claude failure must never block the edit.
+  let prompt
+  let refinedBy
+  if (promptMode === 'plain') {
+    prompt = instruction
+    refinedBy = 'none'
+  } else {
+    prompt = renderPromptText(spatialPrompt)
+    refinedBy = 'template'
+    if (isClaudeEnabled()) {
+      try {
+        prompt = await refinePrompt(spatialPrompt)
+        refinedBy = 'claude'
+      } catch (err) {
+        console.error('Claude refinement failed, using template:', err)
+      }
     }
   }
 
@@ -77,6 +88,9 @@ router.post('/', async (req, res) => {
     prompt,
     instruction,
     regionLabel: spatialPrompt.regionLabel,
+    click: spatialPrompt.click,
+    promptMode,
+    refinedBy,
     mock: isMockMode(),
   })
 
@@ -89,6 +103,7 @@ router.post('/', async (req, res) => {
         baseModel: spatialPrompt.baseModel,
         generatedPrompt: prompt,
         refinedBy,
+        promptMode,
         meshyTaskId: taskId,
         mock: isMockMode(),
       })
@@ -97,7 +112,7 @@ router.post('/', async (req, res) => {
     }
   }
 
-  res.status(202).json({ taskId, mock: isMockMode(), prompt, refinedBy, spatialPrompt })
+  res.status(202).json({ taskId, mock: isMockMode(), prompt, refinedBy, promptMode, spatialPrompt })
 })
 
 export default router

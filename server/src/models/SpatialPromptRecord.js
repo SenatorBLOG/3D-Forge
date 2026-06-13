@@ -15,7 +15,9 @@ const spatialPromptRecordSchema = new mongoose.Schema(
       modelUrl: { type: String, default: null },
     },
     generatedPrompt: { type: String, required: true },
-    refinedBy: { type: String, enum: ['claude', 'template'], required: true },
+    refinedBy: { type: String, enum: ['claude', 'template', 'none'], required: true },
+    promptMode: { type: String, enum: ['spatial', 'plain'], default: 'spatial' },
+    evaluation: { type: Number, min: 1, max: 5, default: null },
     meshyTaskId: { type: String, required: true, index: true },
     status: {
       type: String,
