@@ -35,7 +35,7 @@ simulates the Meshy lifecycle so the full pipeline is demoable for free.
 git clone https://github.com/SenatorBLOG/3D-Forge.git
 cd 3D-Forge
 npm run install:all
-npm run dev
+npm run dev   # no .env needed — mock mode works key-free out of the box
 ```
 
 - Client: http://localhost:5173
@@ -93,7 +93,8 @@ npm --prefix client run build    # production build
 | `GET` | `/api/generate/:taskId` | poll status/progress/modelUrl |
 | `POST` | `/api/edit` | spatial/plain edit → text-to-3D task |
 | `GET` | `/api/history` | unified version list (DB or in-memory) |
-| `GET` | `/api/dataset` · `/api/dataset/csv` | export edit dataset (JSON / CSV) |
+| `GET` | `/api/dataset` | export edit dataset as JSON |
+| `GET` | `/api/dataset/csv` | export edit dataset as CSV download |
 | `PATCH` | `/api/dataset/:taskId` | set a 1–5 evaluation rating |
 
 ## Development workflow
