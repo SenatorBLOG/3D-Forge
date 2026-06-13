@@ -10,7 +10,7 @@ it into a detailed plan file in this folder.
 | M1 | Viewer: load a model from a URL / file upload, improve selection UX (highlight region, multiple markers) | Mikhail | ✅ done (PR #2) |
 | M2 | Meshy AI integration: `POST /api/generate` → text-to-3D job → poll → save metadata in Mongo → show GLB in viewer | Mikhail (Javid inactive) | ✅ done (PR #3, [plan](2026-06-11-m2-meshy.md)) |
 | M3 | Spatial Prompt Engine: combine instruction + click coords + region into a structured prompt; optional Claude API refinement; store spatial prompt records | Mikhail (Javid inactive) | ✅ done (PR #4, [plan](2026-06-12-m3-spatial-prompt.md)) |
-| M4 | Edit pipeline + version history: send spatial prompt for a localized edit, save model versions, version switcher UI | TBD | ⬜ |
+| M4 | Edit pipeline + version history: send spatial prompt for a localized edit, save model versions, version switcher UI | Mikhail (Javid inactive) | ✅ done (PR #5, [plan](2026-06-12-m4-history.md)) |
 | M5 | Evaluation + dataset: compare spatial vs plain prompts, export dataset records | TBD | ⬜ |
 
 Suggested split (adjust as you like):

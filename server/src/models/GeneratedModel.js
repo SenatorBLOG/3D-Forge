@@ -6,7 +6,11 @@ const generatedModelSchema = new mongoose.Schema(
   {
     prompt: { type: String, required: true },
     meshyTaskId: { type: String, required: true, index: true },
-    status: { type: String, default: 'PENDING' },
+    status: {
+      type: String,
+      enum: ['PENDING', 'IN_PROGRESS', 'SUCCEEDED', 'FAILED', 'CANCELED'],
+      default: 'PENDING',
+    },
     modelUrl: { type: String, default: null },
     mock: { type: Boolean, default: false },
   },

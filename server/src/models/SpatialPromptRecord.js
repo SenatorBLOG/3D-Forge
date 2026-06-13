@@ -17,6 +17,12 @@ const spatialPromptRecordSchema = new mongoose.Schema(
     generatedPrompt: { type: String, required: true },
     refinedBy: { type: String, enum: ['claude', 'template'], required: true },
     meshyTaskId: { type: String, required: true, index: true },
+    status: {
+      type: String,
+      enum: ['PENDING', 'IN_PROGRESS', 'SUCCEEDED', 'FAILED', 'CANCELED'],
+      default: 'PENDING',
+    },
+    modelUrl: { type: String, default: null },
     mock: { type: Boolean, default: false },
   },
   { timestamps: true },
