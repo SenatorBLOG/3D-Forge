@@ -195,6 +195,64 @@ body {
   color: var(--danger);
 }
 
+/* first-run hint: prompt to click the model once it is ready and unselected */
+.viewer-hint {
+  position: absolute;
+  bottom: 18px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 15px;
+  background: rgba(18, 21, 29, 0.82);
+  backdrop-filter: blur(6px);
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  font-size: 12px;
+  color: var(--text-dim);
+  z-index: 2;
+  pointer-events: none;
+}
+
+.viewer-hint::before {
+  content: '';
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--forge);
+  box-shadow: 0 0 8px var(--forge-glow);
+  animation: hint-pulse 1.6s ease-in-out infinite;
+}
+
+@keyframes hint-pulse {
+  0%,
+  100% {
+    opacity: 0.4;
+    transform: scale(0.8);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.2);
+  }
+}
+
+/* task progress bar under the generate / edit buttons */
+.progress {
+  height: 5px;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--forge-deep), var(--forge-2));
+  box-shadow: 0 0 10px var(--forge-glow);
+  transition: width 0.3s ease;
+}
+
 /* ---- sidebar + panels ---- */
 
 .sidebar {
