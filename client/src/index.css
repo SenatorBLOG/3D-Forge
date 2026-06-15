@@ -113,6 +113,31 @@ body {
   color: var(--text-dim);
 }
 
+.panel-toggle {
+  margin-left: auto;
+  width: 38px;
+  height: 38px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel-2);
+  color: var(--text-dim);
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s, background 0.15s;
+}
+
+.panel-toggle:hover {
+  color: var(--steel);
+  border-color: var(--steel);
+}
+
+.panel-toggle[aria-expanded='false'] {
+  color: var(--forge);
+  border-color: var(--forge);
+  background: rgba(255, 122, 31, 0.14);
+}
+
 .app-main {
   display: flex;
   flex: 1;
@@ -257,6 +282,7 @@ body {
 
 .sidebar {
   width: 340px;
+  flex: none;
   padding: 18px;
   border-left: 1px solid var(--line);
   background: linear-gradient(180deg, var(--panel), rgba(18, 21, 29, 0.6));
@@ -264,6 +290,16 @@ body {
   flex-direction: column;
   gap: 18px;
   overflow-y: auto;
+  transition: width 0.25s ease, padding 0.25s ease, opacity 0.2s ease;
+}
+
+.sidebar--collapsed {
+  width: 0;
+  padding-left: 0;
+  padding-right: 0;
+  border-left-width: 0;
+  opacity: 0;
+  overflow: hidden;
 }
 
 .panel {
@@ -741,4 +777,36 @@ body {
 .history-list::-webkit-scrollbar-thumb:hover,
 .prompt-preview::-webkit-scrollbar-thumb:hover {
   background: var(--text-faint);
+}
+
+/* ---- responsive ---- */
+
+@media (max-width: 1024px) {
+  .sidebar {
+    width: 300px;
+  }
+}
+
+@media (max-width: 760px) {
+  /* keep the viewer usable on small screens: the sidebar overlays it, and the
+     header toggle hides it entirely */
+  .sidebar {
+    position: absolute;
+    top: 0;
+    right: 0;
+    height: 100%;
+    width: 300px;
+    z-index: 5;
+    box-shadow: -8px 0 24px rgba(0, 0, 0, 0.4);
+  }
+
+  .app-main {
+    position: relative;
+  }
+
+  /* the sidebar overlays from the right here — keep the viewer toolbar reachable */
+  .viewer-toolbar {
+    right: auto;
+    left: 14px;
+  }
 }

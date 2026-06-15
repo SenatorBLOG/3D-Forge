@@ -31,6 +31,8 @@ export default function App() {
   // generate and edit must not run concurrently — they'd race on the viewer
   const [genBusy, setGenBusy] = useState(false)
   const [historyKey, setHistoryKey] = useState(0)
+  // collapse the sidebar to give the viewer the full width (demo / small screens)
+  const [sidebarOpen, setSidebarOpen] = useState(true)
 
   const swapModel = (url, { isObjectUrl = false } = {}) => {
     const stale = objectUrlRef.current
@@ -148,6 +150,34 @@ export default function App() {
             </span>
           </div>
         </div>
+        <button
+          className="panel-toggle"
+          onClick={() => setSidebarOpen((v) => !v)}
+          aria-expanded={sidebarOpen}
+          title={sidebarOpen ? 'Hide panel' : 'Show panel'}
+          aria-label={sidebarOpen ? 'Hide panel' : 'Show panel'}
+        >
+          <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+            <rect
+              x="3"
+              y="4"
+              width="18"
+              height="16"
+              rx="2"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.8"
+            />
+            <line
+              x1="15"
+              y1="4"
+              x2="15"
+              y2="20"
+              stroke="currentColor"
+              strokeWidth="1.8"
+            />
+          </svg>
+        </button>
       </header>
       <main className="app-main">
         <div className="viewer-wrap">
@@ -174,7 +204,7 @@ export default function App() {
             <div className="viewer-hint">Click the model to add points</div>
           )}
         </div>
-        <aside className="sidebar">
+        <aside className={`sidebar ${sidebarOpen ? '' : 'sidebar--collapsed'}`}>
           <GeneratePanel
             disabled={editTask.generating}
             onGeneratingChange={setGenBusy}
