@@ -193,11 +193,15 @@ export default function ModelViewer({ modelUrl, points, onAddPoint, onLoaded, on
     renderer.domElement.addEventListener('pointerup', onPointerUp)
 
     const onResize = () => {
+      if (!container.clientWidth || !container.clientHeight) return
       camera.aspect = container.clientWidth / container.clientHeight
       camera.updateProjectionMatrix()
       renderer.setSize(container.clientWidth, container.clientHeight)
     }
-    window.addEventListener('resize', onResize)
+    // observe the container, not just the window — so the canvas also resizes
+    // when the sidebar collapses/expands (no window resize event fires then)
+    const resizeObserver = new ResizeObserver(onResize)
+    resizeObserver.observe(container)
 
     let raf
     const animate = () => {
@@ -211,7 +215,7 @@ export default function ModelViewer({ modelUrl, points, onAddPoint, onLoaded, on
       disposed = true
       apiRef.current = {}
       cancelAnimationFrame(raf)
-      window.removeEventListener('resize', onResize)
+      resizeObserver.disconnect()
       renderer.domElement.removeEventListener('pointerdown', onPointerDown)
       renderer.domElement.removeEventListener('pointerup', onPointerUp)
       controls.dispose()
