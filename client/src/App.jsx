@@ -170,6 +170,9 @@ export default function App() {
               setModelStatus('error')
             }}
           />
+          {modelStatus === 'ready' && points.length === 0 && (
+            <div className="viewer-hint">Click the model to add points</div>
+          )}
         </div>
         <aside className="sidebar">
           <GeneratePanel
@@ -286,6 +289,14 @@ export default function App() {
                 ? `Applying edit… ${editTask.task.progress}%`
                 : 'Send edit'}
             </button>
+            {editTask.generating && (
+              <div className="progress" aria-hidden="true">
+                <div
+                  className="progress-fill"
+                  style={{ width: `${editTask.task.progress}%` }}
+                />
+              </div>
+            )}
             {editTask.generating && editTask.task.mock && (
               <span className="hint">
                 mock mode — set MESHY_API_KEY on the server for real generation

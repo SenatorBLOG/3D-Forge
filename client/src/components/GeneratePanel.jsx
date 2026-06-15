@@ -47,6 +47,11 @@ export default function GeneratePanel({ onModelReady, disabled, onGeneratingChan
       >
         {generating ? `Generating… ${task.progress}%` : 'Generate 3D model'}
       </button>
+      {generating && (
+        <div className="progress" aria-hidden="true">
+          <div className="progress-fill" style={{ width: `${task.progress}%` }} />
+        </div>
+      )}
       {generating && task.mock && (
         <span className="hint">
           mock mode — set MESHY_API_KEY on the server for real generation
