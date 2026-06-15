@@ -599,11 +599,12 @@ body {
   background: var(--panel-2);
   border: 1px solid var(--line-soft);
   border-radius: 7px;
-  transition: border-color 0.15s;
+  transition: border-color 0.15s, transform 0.15s;
 }
 
 .hcard:hover {
   border-color: var(--line);
+  transform: translateY(-1px);
 }
 
 .hcard-icon {
@@ -823,10 +824,24 @@ body {
   }
 }
 
+@keyframes fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
 .app-header,
-.viewer-wrap,
 .sidebar .panel {
   animation: rise 0.45s ease both;
+}
+
+/* opacity-only so the WebGL canvas isn't permanently promoted to its own layer
+   by a lingering transform (which can cause a paint flash) */
+.viewer-wrap {
+  animation: fade 0.45s ease both;
 }
 
 .sidebar .panel:nth-of-type(1) {
@@ -842,19 +857,15 @@ body {
   animation-delay: 0.26s;
 }
 
-.hcard {
-  transition: border-color 0.15s, transform 0.15s;
-}
-
-.hcard:hover {
-  transform: translateY(-1px);
-}
-
 @media (prefers-reduced-motion: reduce) {
   .app-header,
   .viewer-wrap,
   .sidebar .panel {
     animation: none;
+  }
+
+  .hcard:hover {
+    transform: none;
   }
 }
 
