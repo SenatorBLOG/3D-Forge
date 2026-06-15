@@ -132,7 +132,7 @@ body {
   border-color: var(--steel);
 }
 
-.panel-toggle[aria-pressed='true'] {
+.panel-toggle[aria-expanded='false'] {
   color: var(--forge);
   border-color: var(--forge);
   background: rgba(255, 122, 31, 0.14);
@@ -802,5 +802,11 @@ body {
 
   .app-main {
     position: relative;
+  }
+
+  /* the sidebar overlays from the right here — keep the viewer toolbar reachable */
+  .viewer-toolbar {
+    right: auto;
+    left: 14px;
   }
 }

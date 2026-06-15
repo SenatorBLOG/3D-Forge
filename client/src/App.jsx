@@ -153,7 +153,7 @@ export default function App() {
         <button
           className="panel-toggle"
           onClick={() => setSidebarOpen((v) => !v)}
-          aria-pressed={!sidebarOpen}
+          aria-expanded={sidebarOpen}
           title={sidebarOpen ? 'Hide panel' : 'Show panel'}
           aria-label={sidebarOpen ? 'Hide panel' : 'Show panel'}
         >
