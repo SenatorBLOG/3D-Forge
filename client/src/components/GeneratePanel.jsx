@@ -1,6 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
 import useGenerationTask from '../hooks/useGenerationTask.js'
 
+// one-click starter prompts — fast onboarding and quick demos
+const QUICK_PROMPTS = ['a small dragon', 'a medieval sword', 'a sci-fi helmet', 'a wooden chair']
+
 /**
  * Text-to-3D generation panel. On success hands up (modelUrl, promptText) so
  * the app can track what description produced the current model.
@@ -40,6 +43,21 @@ export default function GeneratePanel({ onModelReady, disabled, onGeneratingChan
           disabled={generating || disabled}
         />
       </div>
+      {!generating && (
+        <div className="chips">
+          {QUICK_PROMPTS.map((p) => (
+            <button
+              key={p}
+              type="button"
+              className="chip"
+              onClick={() => setPrompt(p)}
+              disabled={disabled}
+            >
+              {p}
+            </button>
+          ))}
+        </div>
+      )}
       <button
         className="submit"
         onClick={startGeneration}

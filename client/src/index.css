@@ -779,6 +779,85 @@ body {
   background: var(--text-faint);
 }
 
+/* ---- quick-prompt chips ---- */
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.chip {
+  padding: 4px 10px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--panel-2);
+  color: var(--text-dim);
+  font-family: var(--font-ui);
+  font-size: 12px;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s, background 0.15s;
+}
+
+.chip:hover:not(:disabled) {
+  color: var(--forge);
+  border-color: var(--forge);
+  background: rgba(255, 122, 31, 0.1);
+}
+
+.chip:disabled {
+  color: var(--text-faint);
+  cursor: not-allowed;
+}
+
+/* ---- entrance + interaction polish ---- */
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.app-header,
+.viewer-wrap,
+.sidebar .panel {
+  animation: rise 0.45s ease both;
+}
+
+.sidebar .panel:nth-of-type(1) {
+  animation-delay: 0.05s;
+}
+.sidebar .panel:nth-of-type(2) {
+  animation-delay: 0.12s;
+}
+.sidebar .panel:nth-of-type(3) {
+  animation-delay: 0.19s;
+}
+.sidebar .panel:nth-of-type(4) {
+  animation-delay: 0.26s;
+}
+
+.hcard {
+  transition: border-color 0.15s, transform 0.15s;
+}
+
+.hcard:hover {
+  transform: translateY(-1px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-header,
+  .viewer-wrap,
+  .sidebar .panel {
+    animation: none;
+  }
+}
+
 /* ---- responsive ---- */
 
 @media (max-width: 1024px) {
