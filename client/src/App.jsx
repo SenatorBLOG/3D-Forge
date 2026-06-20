@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import ModelViewer from './components/ModelViewer.jsx'
 import GeneratePanel from './components/GeneratePanel.jsx'
 import HistoryPanel from './components/HistoryPanel.jsx'
+import CompareView from './components/CompareView.jsx'
 import useGenerationTask from './hooks/useGenerationTask.js'
 
 const DEFAULT_MODEL_URL = '/models/robotic_hand.glb'
@@ -33,6 +34,8 @@ export default function App() {
   const [historyKey, setHistoryKey] = useState(0)
   // collapse the sidebar to give the viewer the full width (demo / small screens)
   const [sidebarOpen, setSidebarOpen] = useState(true)
+  // snapshot of edit params when comparing spatial vs plain side by side
+  const [compare, setCompare] = useState(null)
 
   const swapModel = (url, { isObjectUrl = false } = {}) => {
     const stale = objectUrlRef.current
@@ -73,10 +76,9 @@ export default function App() {
   const addPoint = (p) => setPoints((prev) => [...prev, p])
   const removePoint = (i) => setPoints((prev) => prev.filter((_, idx) => idx !== i))
 
-  const sendEdit = async () => {
-    if (points.length === 0 || !instruction.trim()) return
-    // collapse the selected points to a representative centroid for the M3
-    // engine, and join the distinct region names they landed on
+  // the mode-independent edit payload: a representative centroid of the selected
+  // points (for the M3 engine), the raw points, and the joined region names
+  const buildEditBase = () => {
     const n = points.length
     const centroid = points.reduce(
       (acc, p) => ({
@@ -86,20 +88,30 @@ export default function App() {
       }),
       { x: 0, y: 0, z: 0 },
     )
-    const regionLabel = [...new Set(points.map((p) => p.meshName))].join(', ')
-
-    const data = await editTask.start('/api/edit', {
+    return {
       instruction: instruction.trim(),
       point: centroid,
       points: points.map((p) => p.point),
-      regionLabel,
+      regionLabel: [...new Set(points.map((p) => p.meshName))].join(', '),
       baseModel: { prompt: baseModelPrompt, modelUrl },
+    }
+  }
+
+  const sendEdit = async () => {
+    if (points.length === 0 || !instruction.trim()) return
+    const data = await editTask.start('/api/edit', {
+      ...buildEditBase(),
       mode: spatialGrounding ? 'spatial' : 'plain',
     })
     if (data) {
       pendingEditPromptRef.current = data.prompt
       setLastEditPrompt({ text: data.prompt, refinedBy: data.refinedBy })
     }
+  }
+
+  const startCompare = () => {
+    if (points.length === 0 || !instruction.trim()) return
+    setCompare(buildEditBase())
   }
 
   const onFileChosen = (e) => {
@@ -181,27 +193,33 @@ export default function App() {
       </header>
       <main className="app-main">
         <div className="viewer-wrap">
-          {modelStatus === 'loading' && (
-            <div className="viewer-overlay">Loading model…</div>
-          )}
-          {modelStatus === 'error' && (
-            <div className="viewer-overlay viewer-overlay-error">
-              {modelError}
-            </div>
-          )}
-          <ModelViewer
-            key={`${modelUrl}#${loadKey}`}
-            modelUrl={modelUrl}
-            points={points}
-            onAddPoint={addPoint}
-            onLoaded={() => setModelStatus('ready')}
-            onError={(message) => {
-              setModelError(message)
-              setModelStatus('error')
-            }}
-          />
-          {modelStatus === 'ready' && points.length === 0 && (
-            <div className="viewer-hint">Click the model to add points</div>
+          {compare ? (
+            <CompareView params={compare} onClose={() => setCompare(null)} />
+          ) : (
+            <>
+              {modelStatus === 'loading' && (
+                <div className="viewer-overlay">Loading model…</div>
+              )}
+              {modelStatus === 'error' && (
+                <div className="viewer-overlay viewer-overlay-error">
+                  {modelError}
+                </div>
+              )}
+              <ModelViewer
+                key={`${modelUrl}#${loadKey}`}
+                modelUrl={modelUrl}
+                points={points}
+                onAddPoint={addPoint}
+                onLoaded={() => setModelStatus('ready')}
+                onError={(message) => {
+                  setModelError(message)
+                  setModelStatus('error')
+                }}
+              />
+              {modelStatus === 'ready' && points.length === 0 && (
+                <div className="viewer-hint">Click the model to add points</div>
+              )}
+            </>
           )}
         </div>
         <aside className={`sidebar ${sidebarOpen ? '' : 'sidebar--collapsed'}`}>
@@ -318,6 +336,14 @@ export default function App() {
               {editTask.generating
                 ? `Applying edit… ${editTask.task.progress}%`
                 : 'Send edit'}
+            </button>
+            <button
+              className="ghost-button"
+              onClick={startCompare}
+              disabled={points.length === 0 || !instruction.trim() || busy}
+              title="Run this edit both ways and compare the results"
+            >
+              Compare spatial vs plain
             </button>
             {editTask.generating && (
               <div className="progress" aria-hidden="true">
