@@ -10,6 +10,7 @@ import useGenerationTask from '../hooks/useGenerationTask.js'
 function ComparePane({ params, mode, label, sub }) {
   const [meta, setMeta] = useState(null) // { taskId, prompt, refinedBy }
   const [evaluation, setEvaluation] = useState(null)
+  const [rateError, setRateError] = useState(null)
   const [modelUrl, setModelUrl] = useState(null)
   const { task, error, generating, start } = useGenerationTask((url) =>
     setModelUrl(url),
@@ -29,6 +30,8 @@ function ComparePane({ params, mode, label, sub }) {
     return () => {
       cancelled = true
     }
+    // run exactly once per pane; params/mode are fixed for a pane's lifetime
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   const rate = async (n) => {
@@ -39,9 +42,11 @@ function ComparePane({ params, mode, label, sub }) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ evaluation: n }),
       })
-      if (res.ok) setEvaluation(n)
+      if (!res.ok) throw new Error((await res.json()).error || `HTTP ${res.status}`)
+      setEvaluation(n)
+      setRateError(null)
     } catch {
-      // rating is best-effort; ignore network errors here
+      setRateError('Could not save rating')
     }
   }
 
@@ -93,6 +98,7 @@ function ComparePane({ params, mode, label, sub }) {
               ))}
             </div>
           )}
+          {rateError && <span className="url-error">{rateError}</span>}
         </div>
       )}
     </div>
