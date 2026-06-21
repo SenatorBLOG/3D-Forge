@@ -20,6 +20,7 @@ export default function TopNav() {
           Home
         </NavLink>
         <NavLink to="/forge">Forge</NavLink>
+        <NavLink to="/explore">Explore</NavLink>
       </nav>
 
       <div className="topnav-auth">

@@ -9,9 +9,9 @@ posts, profiles, and a polished multi-screen app. Ten directions:
 
 - [x] **1. Accounts & auth** — register / login / JWT (bcrypt), in-memory + Mongo, `/api/auth/*`
 - [x] **2. App shell & screens** — routing (Home / Forge / Login / Register), global top nav, landing page with an auto-rotating model showcase
-- [ ] **3. Save my models** — persist a user's generations & edits to their account; a "My forge" gallery
-- [ ] **4. Publish to community** — post a model to a public gallery (title, model, author)
-- [ ] **5. Explore feed** — browse everyone's published models (newest / popular)
+- [x] **4. Publish to community** — publish the current model to a public gallery (title, model, author); login-gated `PublishPanel` on the Forge
+- [x] **5. Explore feed** — `/explore` grid of everyone's published models, newest first; cards deep-link "Open in Forge"
+- [ ] **3. My forge gallery** — a per-user page of your published models (folds into Profiles, #9)
 - [ ] **6. Likes & reactions** on posts
 - [ ] **7. Comments** on posts
 - [ ] **8. Model showcase page** — a dedicated page per model with a big cinematic rotating viewer + share link
