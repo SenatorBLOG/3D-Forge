@@ -1,15 +1,23 @@
 import { useEffect, useRef, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import ModelViewer from '../components/ModelViewer.jsx'
 import GeneratePanel from '../components/GeneratePanel.jsx'
 import HistoryPanel from '../components/HistoryPanel.jsx'
 import CompareView from '../components/CompareView.jsx'
+import PublishPanel from '../components/PublishPanel.jsx'
 import useGenerationTask from '../hooks/useGenerationTask.js'
 
 const DEFAULT_MODEL_URL = '/models/robotic_hand.glb'
+const isLoadableUrl = (u) => typeof u === 'string' && /^(https?:\/\/|\/)/.test(u)
 
 /** The forging tool: generate, click-select regions, edit, history, compare. */
 export default function ForgePage() {
-  const [modelUrl, setModelUrl] = useState(DEFAULT_MODEL_URL)
+  const [searchParams] = useSearchParams()
+  // deep-link from Explore: /forge?model=<url> opens that model
+  const [modelUrl, setModelUrl] = useState(() => {
+    const m = searchParams.get('model')
+    return isLoadableUrl(m) ? m : DEFAULT_MODEL_URL
+  })
   const [modelStatus, setModelStatus] = useState('loading') // loading | ready | error
   const [modelError, setModelError] = useState(null)
   // text description that produced the current model — context for edits
@@ -214,6 +222,7 @@ export default function ForgePage() {
             </button>
           )}
         </section>
+        <PublishPanel modelUrl={modelUrl} description={baseModelPrompt} />
         <section className="panel">
           <h2>Spatial prompt</h2>
           <div className="field">

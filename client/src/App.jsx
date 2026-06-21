@@ -2,6 +2,7 @@ import { Routes, Route } from 'react-router-dom'
 import TopNav from './components/TopNav.jsx'
 import HomePage from './pages/HomePage.jsx'
 import ForgePage from './pages/ForgePage.jsx'
+import ExplorePage from './pages/ExplorePage.jsx'
 import LoginPage from './pages/LoginPage.jsx'
 import RegisterPage from './pages/RegisterPage.jsx'
 
@@ -13,6 +14,7 @@ export default function App() {
         <Routes>
           <Route path="/" element={<HomePage />} />
           <Route path="/forge" element={<ForgePage />} />
+          <Route path="/explore" element={<ExplorePage />} />
           <Route path="/login" element={<LoginPage />} />
           <Route path="/register" element={<RegisterPage />} />
           <Route path="*" element={<HomePage />} />
