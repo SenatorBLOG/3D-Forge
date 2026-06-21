@@ -9,6 +9,10 @@ import User from '../models/User.js'
 const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret-change-me'
 const TOKEN_TTL = '7d'
 
+if (!process.env.JWT_SECRET) {
+  console.warn('JWT_SECRET not set — signing tokens with an insecure dev default. Set JWT_SECRET in production.')
+}
+
 const memUsers = new Map() // username -> { id, username, passwordHash, createdAt }
 let memSeq = 1
 
