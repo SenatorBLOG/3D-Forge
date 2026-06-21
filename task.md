@@ -1,42 +1,36 @@
 # 3D Forge — Tasks
 
-Living task list: what's built and what's next. Updated as work lands.
+Living task list. **v1 shipped — now building v2: a community platform.**
 
-## Done
+## v2 — Community platform (in progress)
 
-### Product — proposal milestones (M0–M5)
-- [x] **M0** — Team setup: repo, `CLAUDE.md`, role subagents, `@claude` PR-review bot, protected `main` (PR #1)
-- [x] **M1** — 3D viewer: load GLB (generate / file / URL), multi-point region selection, remove & clear points (PR #2)
-- [x] **M2** — Meshy text-to-3D pipeline + built-in **mock mode** (works with no keys / no credits) (PR #3)
-- [x] **M3** — Spatial Prompt Engine: instruction + click coords + region → structured prompt, optional Claude refine (PR #4, fix #6)
-- [x] **M4** — Version history: every generation/edit is a version, reload any into the viewer (PR #5)
-- [x] **M5** — Evaluation + dataset: `spatial` vs `plain` modes, 1–5 rating, JSON/CSV export (PR #7)
+The pivot: from a solo tool into a social 3D platform — accounts, a gallery,
+posts, profiles, and a polished multi-screen app. Ten directions:
 
-### Frontend polish (UI roadmap)
-- [x] **UI #1** — "Precision forge" visual identity: logo, typography, color system (PR #9)
-- [x] **UI #2** — Viewer environment: 3-point lighting, ground grid, on-canvas toolbar; multi-point markers (PR #10)
-- [x] **UI #3** — History as cards with badges + prominent ratings (PR #11)
-- [x] **UI #4** — Task progress bars + first-run viewer hint (PR #13)
-- [x] **UI #5** — Collapsible + responsive sidebar; `ResizeObserver` canvas sizing (PR #14)
-- [x] **UI #6** — Quick-prompt chips + entrance / interaction polish (PR #15)
-- [x] **UI #7** — Compare spatial vs plain side by side (PR #16)
+- [x] **1. Accounts & auth** — register / login / JWT (bcrypt), in-memory + Mongo, `/api/auth/*`
+- [x] **2. App shell & screens** — routing (Home / Forge / Login / Register), global top nav, landing page with an auto-rotating model showcase
+- [ ] **3. Save my models** — persist a user's generations & edits to their account; a "My forge" gallery
+- [ ] **4. Publish to community** — post a model to a public gallery (title, model, author)
+- [ ] **5. Explore feed** — browse everyone's published models (newest / popular)
+- [ ] **6. Likes & reactions** on posts
+- [ ] **7. Comments** on posts
+- [ ] **8. Model showcase page** — a dedicated page per model with a big cinematic rotating viewer + share link
+- [ ] **9. Profiles & avatars** — profile page with bio and the user's posts
+- [ ] **10. Animations & presentation mode** — animated screen transitions, turntable/cinematic showcase, shareable links
 
-### Docs
-- [x] README: features, demo runbook, go-live, API reference (PR #8)
-- [x] 2-page presentation PDF — `docs/presentation/`
-
-## Next — frontend (backend untouched for now)
-- [ ] Toast notifications for success / errors (replace inline error spans)
-- [ ] Model stats panel: polygon count, mesh count, bounding size (read from the loaded GLB)
-- [ ] Keyboard shortcuts (Ctrl/Cmd+Enter = generate / edit, Esc = clear points) + remember UI state in `localStorage`
-- [ ] GLB version thumbnails in history (worthwhile once on real Meshy, not mock)
-
-## Operational (when ready to go live)
-- [ ] Set `MESHY_API_KEY` + `MONGODB_URI` in `server/.env` (switches mock → real)
-- [ ] First real Meshy generation — manual visual check
+## Operational (when going live)
+- [ ] Set `MESHY_API_KEY` + `MONGODB_URI` + `JWT_SECRET` in `server/.env`
+- [ ] First real Meshy generation — manual check
 - [ ] Course deliverables: final report + demo
 
+## Done — v1 (proposal M0–M5 + frontend polish)
+- [x] M0 team setup · M1 viewer + region select · M2 Meshy pipeline + mock mode
+- [x] M3 Spatial Prompt Engine · M4 version history · M5 evaluation + dataset
+- [x] UI #1 identity · #2 viewer env · #3 history cards · #4 progress/onboarding
+- [x] UI #5 responsive sidebar · #6 chips/animations · #7 compare spatial vs plain
+- [x] README, 2-page presentation PDF, `task.md`
+
 ## Notes
-- Built solo by **Mikhail Senatorov** (`SenatorBLOG`). Partner inactive ~3 weeks — no commits; every commit/PR is solo.
-- Runs key-free in mock mode: `npm run install:all && npm run dev`.
+- Built **solo** by Mikhail Senatorov (`SenatorBLOG`) — every commit/PR is solo.
+- Runs key-free in mock mode (incl. auth via in-memory store): `npm run install:all && npm run dev`.
 - Checks: `npm --prefix client run build`, `npm --prefix server test`.

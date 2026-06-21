@@ -18,7 +18,14 @@ const MARKER_COLOR = 0xff7a1f // molten amber — matches the brand action accen
  *   onLoaded    — called once the model has been added to the scene
  *   onError     — called with a human-readable message when loading fails
  */
-export default function ModelViewer({ modelUrl, points, onAddPoint, onLoaded, onError }) {
+export default function ModelViewer({
+  modelUrl,
+  points,
+  onAddPoint,
+  onLoaded,
+  onError,
+  showcase = false, // landing hero: auto-rotate, no toolbar
+}) {
   const containerRef = useRef(null)
   // keep latest callbacks/points without re-creating the whole scene on re-render
   const callbacksRef = useRef({})
@@ -27,7 +34,7 @@ export default function ModelViewer({ modelUrl, points, onAddPoint, onLoaded, on
   pointsRef.current = points
   // imperative handles the toolbar + points effect reach into the live scene
   const apiRef = useRef({})
-  const [autoRotate, setAutoRotate] = useState(false)
+  const [autoRotate, setAutoRotate] = useState(showcase)
 
   useEffect(() => {
     const container = containerRef.current
@@ -242,6 +249,7 @@ export default function ModelViewer({ modelUrl, points, onAddPoint, onLoaded, on
 
   return (
     <div className="viewer" ref={containerRef}>
+      {!showcase && (
       <div className="viewer-toolbar">
         <button
           type="button"
@@ -279,6 +287,7 @@ export default function ModelViewer({ modelUrl, points, onAddPoint, onLoaded, on
           </svg>
         </button>
       </div>
+      )}
     </div>
   )
 }
