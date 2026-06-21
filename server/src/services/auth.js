@@ -1,0 +1,87 @@
+import bcrypt from 'bcryptjs'
+import jwt from 'jsonwebtoken'
+import { dbReady } from '../db.js'
+import User from '../models/User.js'
+
+// Accounts persist to Mongo when connected; otherwise an in-memory store keeps
+// auth working in the keyless/mock dev setup (same pattern as history/meshy).
+
+const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret-change-me'
+const TOKEN_TTL = '7d'
+
+if (!process.env.JWT_SECRET) {
+  console.warn('JWT_SECRET not set — signing tokens with an insecure dev default. Set JWT_SECRET in production.')
+}
+
+const memUsers = new Map() // username -> { id, username, passwordHash, createdAt }
+let memSeq = 1
+
+const publicUser = (u) => ({ id: u.id, username: u.username, createdAt: u.createdAt })
+
+const signToken = (u) =>
+  jwt.sign({ sub: u.id, username: u.username }, JWT_SECRET, { expiresIn: TOKEN_TTL })
+
+const taken = () => Object.assign(new Error('Username already taken'), { code: 'TAKEN' })
+const badCreds = () =>
+  Object.assign(new Error('Invalid username or password'), { code: 'BAD_CREDS' })
+
+export async function register(username, password) {
+  const passwordHash = await bcrypt.hash(password, 10)
+  if (dbReady()) {
+    if (await User.findOne({ username }).lean()) throw taken()
+    const doc = await User.create({ username, passwordHash })
+    const u = { id: String(doc._id), username: doc.username, createdAt: doc.createdAt }
+    return { token: signToken(u), user: publicUser(u) }
+  }
+  if (memUsers.has(username)) throw taken()
+  const u = {
+    id: String(memSeq++),
+    username,
+    passwordHash,
+    createdAt: new Date().toISOString(),
+  }
+  memUsers.set(username, u)
+  return { token: signToken(u), user: publicUser(u) }
+}
+
+export async function login(username, password) {
+  let u
+  if (dbReady()) {
+    const doc = await User.findOne({ username }).lean()
+    if (doc) {
+      u = {
+        id: String(doc._id),
+        username: doc.username,
+        passwordHash: doc.passwordHash,
+        createdAt: doc.createdAt,
+      }
+    }
+  } else {
+    u = memUsers.get(username)
+  }
+  if (!u || !(await bcrypt.compare(password, u.passwordHash))) throw badCreds()
+  return { token: signToken(u), user: publicUser(u) }
+}
+
+/** Verify a JWT; returns { id, username } or null. */
+export function verifyToken(token) {
+  try {
+    const payload = jwt.verify(token, JWT_SECRET)
+    return { id: payload.sub, username: payload.username }
+  } catch {
+    return null
+  }
+}
+
+export async function getUserById(id) {
+  if (dbReady()) {
+    const doc = await User.findById(id)
+      .lean()
+      .catch(() => null)
+    return doc
+      ? publicUser({ id: String(doc._id), username: doc.username, createdAt: doc.createdAt })
+      : null
+  }
+  for (const u of memUsers.values()) if (u.id === id) return publicUser(u)
+  return null
+}
