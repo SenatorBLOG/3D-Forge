@@ -25,7 +25,9 @@ export default function PostCard({ post }) {
         {post.description && <p className="post-card-desc">{post.description}</p>}
         <div className="post-card-meta">
           <span className="post-author">@{post.authorUsername}</span>
-          <span>{new Date(post.createdAt).toLocaleDateString()}</span>
+          <span>
+            {post.createdAt ? new Date(post.createdAt).toLocaleDateString() : ''}
+          </span>
         </div>
         <Link className="ghost-button" to={forgeLink(post)}>
           Open in Forge
