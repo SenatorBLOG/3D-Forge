@@ -9,6 +9,7 @@ const postSchema = new mongoose.Schema(
     title: { type: String, required: true },
     modelUrl: { type: String, required: true },
     description: { type: String, default: '' },
+    tags: { type: [String], default: [], index: true },
   },
   { timestamps: true },
 )

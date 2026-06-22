@@ -1,19 +1,48 @@
 import { useEffect, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import PostCard from '../components/PostCard.jsx'
 
-/** The community gallery: models published by everyone, newest first. */
+/** The community gallery: models published by everyone, with free-text search
+ *  and tag filters. The active tag/query live in the URL so views are shareable. */
 export default function ExplorePage() {
-  const [posts, setPosts] = useState(null)
-  const [error, setError] = useState(null)
+  const [params, setParams] = useSearchParams()
+  const tag = params.get('tag') || ''
+  const q = params.get('q') || ''
 
+  const [posts, setPosts] = useState(null)
+  const [tags, setTags] = useState([])
+  const [error, setError] = useState(null)
+  const [draft, setDraft] = useState(q) // controlled search box
+
+  // merge changes into the URL; empty values drop the param
+  const update = (next) => {
+    const p = new URLSearchParams(params)
+    for (const [k, v] of Object.entries(next)) {
+      if (v) p.set(k, v)
+      else p.delete(k)
+    }
+    setParams(p, { replace: true })
+  }
+
+  // keep the box in sync when the query changes from elsewhere (chip, clear)
+  useEffect(() => {
+    setDraft(q)
+  }, [q])
+
+  // reload the feed whenever the tag or query changes
   useEffect(() => {
     let cancelled = false
-    fetch('/api/posts')
+    const qs = new URLSearchParams()
+    if (tag) qs.set('tag', tag)
+    if (q) qs.set('q', q)
+    setPosts(null)
+    fetch(`/api/posts?${qs}`)
       .then(async (r) => {
         const d = await r.json()
         if (cancelled) return
         if (!r.ok) throw new Error(d.error || `HTTP ${r.status}`)
         setPosts(d.posts)
+        setError(null)
       })
       .catch((e) => {
         if (!cancelled) setError(e.message)
@@ -21,7 +50,28 @@ export default function ExplorePage() {
     return () => {
       cancelled = true
     }
+  }, [tag, q])
+
+  // popular tags for the filter row (once)
+  useEffect(() => {
+    let cancelled = false
+    fetch('/api/posts/tags')
+      .then((r) => r.json())
+      .then((d) => {
+        if (!cancelled) setTags(d.tags || [])
+      })
+      .catch(() => {})
+    return () => {
+      cancelled = true
+    }
   }, [])
+
+  const filtered = tag || q
+  const empty =
+    tag && q ? `No models tagged #${tag} match “${q}”.`
+    : tag ? `No models tagged #${tag} yet.`
+    : q ? `No models match “${q}”.`
+    : 'No posts yet — publish one from the Forge.'
 
   return (
     <div className="explore">
@@ -29,10 +79,64 @@ export default function ExplorePage() {
         <h1>Explore</h1>
         <p className="hint">Models forged by the community.</p>
       </div>
-      {error && <span className="url-error">{error}</span>}
-      {posts && posts.length === 0 && (
-        <p className="explore-empty">No posts yet — publish one from the Forge.</p>
+
+      <form
+        className="explore-search"
+        onSubmit={(e) => {
+          e.preventDefault()
+          update({ q: draft.trim() })
+        }}
+      >
+        <input
+          type="search"
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          placeholder="Search models by title or tag…"
+          aria-label="Search models"
+        />
+        <button className="submit" type="submit">
+          Search
+        </button>
+      </form>
+
+      {tags.length > 0 && (
+        <div className="explore-tags">
+          {tags.map((t) => (
+            <button
+              key={t.tag}
+              className={`tag ${tag === t.tag ? 'active' : ''}`}
+              onClick={() => update({ tag: tag === t.tag ? '' : t.tag })}
+            >
+              #{t.tag} <span className="tag-count">{t.count}</span>
+            </button>
+          ))}
+        </div>
       )}
+
+      {filtered && (
+        <div className="explore-active">
+          <span className="hint">
+            {tag && (
+              <>
+                tag <strong>#{tag}</strong>
+              </>
+            )}
+            {tag && q && ' · '}
+            {q && (
+              <>
+                search <strong>“{q}”</strong>
+              </>
+            )}
+            {posts && ` · ${posts.length} result${posts.length === 1 ? '' : 's'}`}
+          </span>
+          <button className="link-button" onClick={() => setParams({})}>
+            Clear
+          </button>
+        </div>
+      )}
+
+      {error && <span className="url-error">{error}</span>}
+      {posts && posts.length === 0 && <p className="explore-empty">{empty}</p>}
       {posts && posts.length > 0 && (
         <div className="explore-grid">
           {posts.map((p) => (

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import ModelViewer from '../components/ModelViewer.jsx'
+import TagList from '../components/TagList.jsx'
 import { useAuth } from '../auth/AuthContext.jsx'
 
 const Heart = ({ filled }) => (
@@ -103,6 +104,7 @@ export default function PostPage() {
           </Link>
           {post.createdAt && <span>· {new Date(post.createdAt).toLocaleDateString()}</span>}
         </div>
+        <TagList tags={post.tags} />
         {post.description && <p className="post-page-desc">{post.description}</p>}
         <div className="post-actions">
           <button

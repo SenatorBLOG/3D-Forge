@@ -1,6 +1,6 @@
 import { Router } from 'express'
 import { requireAuth, optionalAuth } from '../middleware/auth.js'
-import { createPost, listPosts, getPost } from '../services/posts.js'
+import { createPost, listPosts, getPost, listTags } from '../services/posts.js'
 import {
   toggleLike,
   likeInfo,
@@ -20,17 +20,32 @@ const withSocial = async (post, userId) => {
   return { ...post, likes, likedByMe, comments }
 }
 
-// GET /api/posts — public community feed (optional ?author=<id>)
+const str = (v) => (typeof v === 'string' ? v : undefined)
+
+// GET /api/posts — public community feed (optional ?author / ?username / ?tag / ?q)
 router.get('/', optionalAuth, async (req, res) => {
   try {
-    const authorId = typeof req.query.author === 'string' ? req.query.author : undefined
-    const authorUsername =
-      typeof req.query.username === 'string' ? req.query.username : undefined
-    const posts = await listPosts({ authorId, authorUsername })
+    const posts = await listPosts({
+      authorId: str(req.query.author),
+      authorUsername: str(req.query.username),
+      tag: str(req.query.tag),
+      q: str(req.query.q),
+    })
     res.json({ posts: await Promise.all(posts.map((p) => withSocial(p, req.user?.id))) })
   } catch (err) {
     console.error('list posts failed:', err)
     res.status(500).json({ error: 'Failed to list posts' })
+  }
+})
+
+// GET /api/posts/tags — most-used tags for Explore's filter chips
+// (declared before /:id so "tags" isn't captured as an id)
+router.get('/tags', async (_req, res) => {
+  try {
+    res.json({ tags: await listTags() })
+  } catch (err) {
+    console.error('list tags failed:', err)
+    res.status(500).json({ error: 'Failed to load tags' })
   }
 })
 
@@ -58,8 +73,11 @@ router.post('/', requireAuth, async (req, res) => {
   if (!/^(https?:\/\/|\/)/.test(modelUrl) || modelUrl.length > 2048) {
     return res.status(400).json({ error: 'a valid modelUrl is required' })
   }
+  const tags = Array.isArray(req.body?.tags) || typeof req.body?.tags === 'string'
+    ? req.body.tags
+    : []
   try {
-    const post = await createPost(req.user, { title, modelUrl, description })
+    const post = await createPost(req.user, { title, modelUrl, description, tags })
     res.status(201).json({ post: { ...post, likes: 0, likedByMe: false, comments: 0 } })
   } catch (err) {
     console.error('create post failed:', err)

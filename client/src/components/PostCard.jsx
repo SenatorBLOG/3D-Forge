@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom'
 import Logo from './Logo.jsx'
+import TagList from './TagList.jsx'
 
 /** A community feed card. Static placeholder thumbnail (no live WebGL per card —
  *  that would exhaust the browser's context limit on a large feed). */
@@ -13,6 +14,7 @@ export default function PostCard({ post }) {
         <h3 className="post-card-title" title={post.title}>
           {post.title}
         </h3>
+        <TagList tags={post.tags} linkify={false} />
         <div className="post-card-meta">
           <span className="post-author">@{post.authorUsername}</span>
           <span className="post-stats">
