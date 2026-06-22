@@ -11,12 +11,13 @@ posts, profiles, and a polished multi-screen app. Ten directions:
 - [x] **2. App shell & screens** — routing (Home / Forge / Login / Register), global top nav, landing page with an auto-rotating model showcase
 - [x] **4. Publish to community** — publish the current model to a public gallery (title, model, author); login-gated `PublishPanel` on the Forge
 - [x] **5. Explore feed** — `/explore` grid of everyone's published models, newest first; cards deep-link "Open in Forge"
-- [ ] **3. My forge gallery** — a per-user page of your published models (folds into Profiles, #9)
-- [ ] **6. Likes & reactions** on posts
-- [ ] **7. Comments** on posts
-- [ ] **8. Model showcase page** — a dedicated page per model with a big cinematic rotating viewer + share link
-- [ ] **9. Profiles & avatars** — profile page with bio and the user's posts
-- [ ] **10. Animations & presentation mode** — animated screen transitions, turntable/cinematic showcase, shareable links
+- [x] **6. Likes** on posts — toggle, counts in feed + on the post page
+- [x] **7. Comments** on posts — list + add (login-gated)
+- [x] **8. Model showcase page** — `/post/:id` with a big auto-rotating viewer, like, comments, share link, Present (fullscreen)
+- [x] **9. Profiles & avatars** — `/u/:username` page with an initial-avatar and the user's published models (this is the "my forge" gallery, #3)
+- [x] **10. Animations & presentation mode** — fade transition between screens, cinematic auto-rotating showcase, Present fullscreen, shareable `/post/:id` links
+
+**v2 roadmap complete — all 10 directions shipped.**
 
 ## Operational (when going live)
 - [ ] Set `MESHY_API_KEY` + `MONGODB_URI` + `JWT_SECRET` in `server/.env`

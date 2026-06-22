@@ -36,15 +36,22 @@ export async function createPost(user, { title, modelUrl, description }) {
   return publicPost(p)
 }
 
-export async function listPosts({ authorId, limit = 50 } = {}) {
+export async function listPosts({ authorId, authorUsername, limit = 50 } = {}) {
+  const filter = {}
+  if (authorId) filter.authorId = authorId
+  if (authorUsername) filter.authorUsername = authorUsername
   if (dbReady()) {
-    const docs = await Post.find(authorId ? { authorId } : {})
+    const docs = await Post.find(filter)
       .sort({ createdAt: -1 })
       .limit(limit)
       .lean()
     return docs.map((d) => publicPost({ ...d, id: String(d._id) }))
   }
-  const list = authorId ? memPosts.filter((p) => p.authorId === authorId) : memPosts
+  const list = memPosts.filter(
+    (p) =>
+      (!authorId || p.authorId === authorId) &&
+      (!authorUsername || p.authorUsername === authorUsername),
+  )
   return list.slice(0, limit).map(publicPost)
 }
 
