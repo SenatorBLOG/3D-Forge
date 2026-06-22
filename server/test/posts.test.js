@@ -1,6 +1,12 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { createPost, listPosts, getPost } from '../src/services/posts.js'
+import {
+  createPost,
+  listPosts,
+  getPost,
+  listTags,
+  normalizeTags,
+} from '../src/services/posts.js'
 
 // no MONGODB_URI in tests → the in-memory store is exercised
 
@@ -33,4 +39,30 @@ test('listPosts returns newest first and filters by author', async () => {
 
 test('getPost returns null for unknown id', async () => {
   assert.equal(await getPost('does-not-exist'), null)
+})
+
+test('normalizeTags cleans, hyphenates, dedupes and caps', () => {
+  assert.deepEqual(normalizeTags('#Robot, sci fi, robot'), ['robot', 'sci-fi'])
+  assert.deepEqual(normalizeTags(['A', 'b!', 'c']), ['a', 'c']) // 'b!' is invalid
+  assert.equal(normalizeTags('a,b,c,d,e,f,g,h').length, 6) // capped at MAX_TAGS
+  assert.deepEqual(normalizeTags(123), [])
+})
+
+test('listPosts filters by tag and free-text query', async () => {
+  const carl = { id: 'u-carl', username: 'carl' }
+  await createPost(carl, { title: 'Neon Dragon', modelUrl: '/m.glb', tags: ['fantasy', 'dragon'] })
+  await createPost(carl, { title: 'Steel Mech', modelUrl: '/m.glb', tags: ['robot', 'sci-fi'] })
+
+  const dragons = await listPosts({ tag: 'dragon' })
+  assert.ok(dragons.length >= 1)
+  assert.ok(dragons.every((p) => p.tags.includes('dragon')))
+
+  const mechs = await listPosts({ q: 'mech' }) // matches title
+  assert.ok(mechs.some((p) => p.title === 'Steel Mech'))
+
+  const sci = await listPosts({ q: 'sci-fi' }) // matches a tag
+  assert.ok(sci.some((p) => p.tags.includes('sci-fi')))
+
+  const tags = await listTags()
+  assert.ok(tags.some((t) => t.tag === 'dragon' && t.count >= 1))
 })

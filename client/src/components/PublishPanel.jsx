@@ -6,6 +6,7 @@ import { useAuth } from '../auth/AuthContext.jsx'
 export default function PublishPanel({ modelUrl, description }) {
   const { user, token } = useAuth()
   const [title, setTitle] = useState('')
+  const [tags, setTags] = useState('')
   const [busy, setBusy] = useState(false)
   const [done, setDone] = useState(false)
   const [error, setError] = useState(null)
@@ -31,11 +32,17 @@ export default function PublishPanel({ modelUrl, description }) {
       const res = await fetch('/api/posts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ title: title.trim(), modelUrl, description: description || '' }),
+        body: JSON.stringify({
+          title: title.trim(),
+          modelUrl,
+          description: description || '',
+          tags,
+        }),
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`)
       setTitle('')
+      setTags('')
       setDone(true)
     } catch (err) {
       setError(err.message)
@@ -60,6 +67,20 @@ export default function PublishPanel({ modelUrl, description }) {
           placeholder="My robotic hand"
           maxLength={120}
         />
+      </div>
+      <div className="field">
+        <label htmlFor="post-tags">Tags</label>
+        <input
+          id="post-tags"
+          type="text"
+          value={tags}
+          onChange={(e) => {
+            setTags(e.target.value)
+            setDone(false)
+          }}
+          placeholder="robot, sci-fi, hand"
+        />
+        <span className="hint">Comma-separated · up to 6 · helps people find it on Explore.</span>
       </div>
       <button className="submit" onClick={publish} disabled={!title.trim() || busy}>
         {busy ? 'Publishing…' : 'Publish to gallery'}
