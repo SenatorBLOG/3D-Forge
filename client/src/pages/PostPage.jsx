@@ -26,7 +26,7 @@ export default function PostPage() {
   const [copied, setCopied] = useState(false)
   const stageRef = useRef(null)
 
-  const present = () => stageRef.current?.requestFullscreen?.()
+  const present = () => stageRef.current?.requestFullscreen?.().catch(() => {})
 
   useEffect(() => {
     let cancelled = false
