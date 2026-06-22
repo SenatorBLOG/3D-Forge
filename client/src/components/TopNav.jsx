@@ -1,5 +1,6 @@
 import { Link, NavLink } from 'react-router-dom'
 import Logo from './Logo.jsx'
+import Avatar from './Avatar.jsx'
 import { useAuth } from '../auth/AuthContext.jsx'
 
 /** Global navigation: brand, primary links, and the auth area. */
@@ -26,7 +27,9 @@ export default function TopNav() {
       <div className="topnav-auth">
         {user ? (
           <>
-            <span className="topnav-user">@{user.username}</span>
+            <Link to={`/u/${user.username}`} className="topnav-user">
+              <Avatar username={user.username} size={26} />@{user.username}
+            </Link>
             <button className="ghost-button" onClick={logout}>
               Log out
             </button>

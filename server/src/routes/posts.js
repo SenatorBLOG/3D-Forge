@@ -1,26 +1,45 @@
 import { Router } from 'express'
-import { requireAuth } from '../middleware/auth.js'
+import { requireAuth, optionalAuth } from '../middleware/auth.js'
 import { createPost, listPosts, getPost } from '../services/posts.js'
+import {
+  toggleLike,
+  likeInfo,
+  addComment,
+  listComments,
+  commentCount,
+} from '../services/social.js'
 
 const router = Router()
 
+// attach like counts / liked-by-me / comment counts to a post
+const withSocial = async (post, userId) => {
+  const [{ likes, likedByMe }, comments] = await Promise.all([
+    likeInfo(post.id, userId),
+    commentCount(post.id),
+  ])
+  return { ...post, likes, likedByMe, comments }
+}
+
 // GET /api/posts — public community feed (optional ?author=<id>)
-router.get('/', async (req, res) => {
+router.get('/', optionalAuth, async (req, res) => {
   try {
     const authorId = typeof req.query.author === 'string' ? req.query.author : undefined
-    res.json({ posts: await listPosts({ authorId }) })
+    const authorUsername =
+      typeof req.query.username === 'string' ? req.query.username : undefined
+    const posts = await listPosts({ authorId, authorUsername })
+    res.json({ posts: await Promise.all(posts.map((p) => withSocial(p, req.user?.id))) })
   } catch (err) {
     console.error('list posts failed:', err)
     res.status(500).json({ error: 'Failed to list posts' })
   }
 })
 
-// GET /api/posts/:id — a single post
-router.get('/:id', async (req, res) => {
+// GET /api/posts/:id — a single post with social info
+router.get('/:id', optionalAuth, async (req, res) => {
   try {
     const post = await getPost(req.params.id)
     if (!post) return res.status(404).json({ error: 'Post not found' })
-    res.json({ post })
+    res.json({ post: await withSocial(post, req.user?.id) })
   } catch (err) {
     console.error('get post failed:', err)
     res.status(500).json({ error: 'Failed to load post' })
@@ -41,10 +60,50 @@ router.post('/', requireAuth, async (req, res) => {
   }
   try {
     const post = await createPost(req.user, { title, modelUrl, description })
-    res.status(201).json({ post })
+    res.status(201).json({ post: { ...post, likes: 0, likedByMe: false, comments: 0 } })
   } catch (err) {
     console.error('create post failed:', err)
     res.status(500).json({ error: 'Failed to publish' })
+  }
+})
+
+// POST /api/posts/:id/like — toggle the current user's like
+router.post('/:id/like', requireAuth, async (req, res) => {
+  try {
+    if (!(await getPost(req.params.id))) {
+      return res.status(404).json({ error: 'Post not found' })
+    }
+    res.json(await toggleLike(req.user.id, req.params.id))
+  } catch (err) {
+    console.error('toggle like failed:', err)
+    res.status(500).json({ error: 'Failed to update like' })
+  }
+})
+
+// GET /api/posts/:id/comments — comments oldest-first
+router.get('/:id/comments', async (req, res) => {
+  try {
+    res.json({ comments: await listComments(req.params.id) })
+  } catch (err) {
+    console.error('list comments failed:', err)
+    res.status(500).json({ error: 'Failed to load comments' })
+  }
+})
+
+// POST /api/posts/:id/comments — add a comment (auth required)
+router.post('/:id/comments', requireAuth, async (req, res) => {
+  const body = typeof req.body?.body === 'string' ? req.body.body.trim() : ''
+  if (body.length < 1 || body.length > 1000) {
+    return res.status(400).json({ error: 'comment must be 1-1000 characters' })
+  }
+  try {
+    if (!(await getPost(req.params.id))) {
+      return res.status(404).json({ error: 'Post not found' })
+    }
+    res.status(201).json({ comment: await addComment(req.user, req.params.id, body) })
+  } catch (err) {
+    console.error('add comment failed:', err)
+    res.status(500).json({ error: 'Failed to add comment' })
   }
 })
 

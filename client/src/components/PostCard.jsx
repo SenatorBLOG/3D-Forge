@@ -1,38 +1,26 @@
 import { Link } from 'react-router-dom'
 import Logo from './Logo.jsx'
 
-const forgeLink = (post) => `/forge?model=${encodeURIComponent(post.modelUrl)}`
-
-/**
- * A community post in the Explore grid. Uses a static placeholder (not a live
- * WebGL viewer) so a large feed doesn't exhaust the browser's context limit —
- * the model opens for real in the Forge.
- */
+/** A community feed card. Static placeholder thumbnail (no live WebGL per card —
+ *  that would exhaust the browser's context limit on a large feed). */
 export default function PostCard({ post }) {
   return (
-    <div className="post-card">
-      <Link
-        className="post-thumb"
-        to={forgeLink(post)}
-        aria-label={`Open ${post.title} in the Forge`}
-      >
+    <Link className="post-card" to={`/post/${post.id}`}>
+      <div className="post-thumb">
         <Logo size={56} />
-      </Link>
+      </div>
       <div className="post-card-body">
         <h3 className="post-card-title" title={post.title}>
           {post.title}
         </h3>
-        {post.description && <p className="post-card-desc">{post.description}</p>}
         <div className="post-card-meta">
           <span className="post-author">@{post.authorUsername}</span>
-          <span>
-            {post.createdAt ? new Date(post.createdAt).toLocaleDateString() : ''}
+          <span className="post-stats">
+            <span className="heart">♥</span> {post.likes ?? 0} · {post.comments ?? 0}{' '}
+            comments
           </span>
         </div>
-        <Link className="ghost-button" to={forgeLink(post)}>
-          Open in Forge
-        </Link>
       </div>
-    </div>
+    </Link>
   )
 }
