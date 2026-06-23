@@ -1227,6 +1227,42 @@ a.ghost-button {
   color: var(--text-dim);
 }
 
+.home-community {
+  max-width: 1200px;
+  margin: 0 auto;
+  width: 100%;
+  padding: 0 48px 64px;
+}
+
+.home-community-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+.home-community-head h2 {
+  font-family: var(--font-display);
+  font-size: 22px;
+}
+
+.home-community-head .hint {
+  margin-top: 4px;
+}
+
+.home-community-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 14px;
+  padding: 32px;
+  background: var(--panel);
+  border: 1px dashed var(--line);
+  border-radius: var(--radius);
+  color: var(--text-dim);
+}
+
 /* ---- auth pages ---- */
 
 .auth-page {
@@ -1306,6 +1342,13 @@ a.ghost-button {
   .home-features {
     grid-template-columns: 1fr;
     padding: 0 24px 40px;
+  }
+  .home-community {
+    padding: 0 24px 48px;
+  }
+  .home-community-head {
+    flex-direction: column;
+    align-items: flex-start;
   }
   .home-title {
     font-size: 32px;
