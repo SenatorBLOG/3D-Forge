@@ -8,6 +8,7 @@ import {
   listComments,
   commentCount,
 } from '../services/social.js'
+import { notify } from '../services/notifications.js'
 
 const router = Router()
 
@@ -88,10 +89,24 @@ router.post('/', requireAuth, async (req, res) => {
 // POST /api/posts/:id/like — toggle the current user's like
 router.post('/:id/like', requireAuth, async (req, res) => {
   try {
-    if (!(await getPost(req.params.id))) {
-      return res.status(404).json({ error: 'Post not found' })
+    const post = await getPost(req.params.id)
+    if (!post) return res.status(404).json({ error: 'Post not found' })
+    const result = await toggleLike(req.user.id, req.params.id)
+    if (result.liked) {
+      // a like notifies the author; an unlike doesn't. Never fail the like itself.
+      try {
+        await notify({
+          recipientId: post.authorId,
+          type: 'like',
+          actor: req.user,
+          postId: post.id,
+          postTitle: post.title,
+        })
+      } catch (e) {
+        console.error('notify (like) failed:', e)
+      }
     }
-    res.json(await toggleLike(req.user.id, req.params.id))
+    res.json(result)
   } catch (err) {
     console.error('toggle like failed:', err)
     res.status(500).json({ error: 'Failed to update like' })
@@ -115,10 +130,21 @@ router.post('/:id/comments', requireAuth, async (req, res) => {
     return res.status(400).json({ error: 'comment must be 1-1000 characters' })
   }
   try {
-    if (!(await getPost(req.params.id))) {
-      return res.status(404).json({ error: 'Post not found' })
+    const post = await getPost(req.params.id)
+    if (!post) return res.status(404).json({ error: 'Post not found' })
+    const comment = await addComment(req.user, req.params.id, body)
+    try {
+      await notify({
+        recipientId: post.authorId,
+        type: 'comment',
+        actor: req.user,
+        postId: post.id,
+        postTitle: post.title,
+      })
+    } catch (e) {
+      console.error('notify (comment) failed:', e)
     }
-    res.status(201).json({ comment: await addComment(req.user, req.params.id, body) })
+    res.status(201).json({ comment })
   } catch (err) {
     console.error('add comment failed:', err)
     res.status(500).json({ error: 'Failed to add comment' })

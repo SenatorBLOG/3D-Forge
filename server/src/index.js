@@ -9,6 +9,7 @@ import historyRouter from './routes/history.js'
 import datasetRouter from './routes/dataset.js'
 import authRouter from './routes/auth.js'
 import postsRouter from './routes/posts.js'
+import notificationsRouter from './routes/notifications.js'
 
 const app = express()
 app.use(cors())
@@ -25,6 +26,7 @@ app.use('/api/history', historyRouter)
 app.use('/api/dataset', datasetRouter)
 app.use('/api/auth', authRouter)
 app.use('/api/posts', postsRouter)
+app.use('/api/notifications', notificationsRouter)
 
 const port = process.env.PORT || 3001
 await connectDb()

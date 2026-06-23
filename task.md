@@ -19,8 +19,9 @@ posts, profiles, and a polished multi-screen app. Ten directions:
 
 **v2 roadmap complete — all 10 directions shipped.**
 
-## v2+ — Beyond the roadmap (discoverability)
+## v2+ — Beyond the roadmap
 - [x] **11. Tags & search** — tags on publish (normalized: lowercase, hyphenated, deduped, ≤6), `GET /api/posts/tags` popular-tag counts, `?tag=` / `?q=` feed filters, Explore search box + tag filter chips synced to the URL (shareable views), clickable tag chips on cards + post pages
+- [x] **12. Notifications** — likes/comments on your post notify you (self-actions skipped); `Notification` model + service (in-memory + Mongo), `GET /api/notifications`(+`/count`), `POST /api/notifications/read`; TopNav bell with unread badge, polling, and a dropdown that marks all read on open
 
 ## Operational (when going live)
 - [ ] Set `MESHY_API_KEY` + `MONGODB_URI` + `JWT_SECRET` in `server/.env`
