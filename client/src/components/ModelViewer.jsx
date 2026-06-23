@@ -7,34 +7,47 @@ const MARKER_COLOR = 0xff7a1f // molten amber — matches the brand action accen
 
 /**
  * Browser 3D viewer: loads a GLB/glTF model, orbit controls, and raycast click
- * selection. Each click adds a point (reported via onAddPoint); the parent owns
- * the list of points and passes it back as `points`, which the viewer draws as
- * amber markers — so points can be removed from the sidebar.
+ * selection. Each click on the mesh adds a point (onAddPoint); the parent owns
+ * the list of points and passes it back as `points`, drawn as amber markers.
+ *
+ * Each point carries its own prompt. The viewer overlays a numbered label on
+ * every marker; clicking a label selects that point (onSelectPoint) and opens an
+ * inline editor for its prompt (onPromptChange) — the same prompt is also edited
+ * in the sidebar, so the two stay in sync.
  *
  * Props:
- *   modelUrl    — URL (or object URL) of the GLB to display
- *   points      — [{ point: {x,y,z}, meshName }] markers to draw (source of truth)
- *   onAddPoint  — called with { point, meshName } when the user clicks the mesh
- *   onLoaded    — called once the model has been added to the scene
- *   onError     — called with a human-readable message when loading fails
+ *   modelUrl       — URL (or object URL) of the GLB to display
+ *   points         — [{ point:{x,y,z}, meshName, prompt }] markers (source of truth)
+ *   onAddPoint     — called with { point, meshName } when the user clicks the mesh
+ *   selectedIndex  — index of the point whose inline editor is open (or null)
+ *   onSelectPoint  — called with an index (or null) when a label is clicked / closed
+ *   onPromptChange — called with (index, value) as the inline editor is typed in
+ *   onLoaded / onError — load lifecycle
+ *   showcase       — landing/post hero: auto-rotate, no toolbar, no point UI
  */
 export default function ModelViewer({
   modelUrl,
   points,
   onAddPoint,
+  selectedIndex = null,
+  onSelectPoint,
+  onPromptChange,
   onLoaded,
   onError,
-  showcase = false, // landing hero: auto-rotate, no toolbar
+  showcase = false,
 }) {
   const containerRef = useRef(null)
   // keep latest callbacks/points without re-creating the whole scene on re-render
   const callbacksRef = useRef({})
-  callbacksRef.current = { onAddPoint, onLoaded, onError }
+  callbacksRef.current = { onAddPoint, onSelectPoint, onLoaded, onError }
   const pointsRef = useRef(points)
   pointsRef.current = points
   // imperative handles the toolbar + points effect reach into the live scene
   const apiRef = useRef({})
   const [autoRotate, setAutoRotate] = useState(showcase)
+  // projected screen position of every marker, for the HTML label overlay
+  const [labels, setLabels] = useState([]) // [{ x, y, visible }]
+  const popupRef = useRef(null)
 
   useEffect(() => {
     const container = containerRef.current
@@ -101,6 +114,23 @@ export default function ModelViewer({
       })
     }
 
+    // project every marker to 2D screen space for the HTML label overlay
+    const v = new THREE.Vector3()
+    const updateLabels = () => {
+      if (showcase) return
+      const w = container.clientWidth
+      const h = container.clientHeight
+      const next = pointsRef.current.map((p) => {
+        v.set(p.point.x, p.point.y, p.point.z).project(camera)
+        const x = (v.x * 0.5 + 0.5) * w
+        const y = (-v.y * 0.5 + 0.5) * h
+        // in front of the camera AND within the canvas — don't draw labels that
+        // would land on the toolbar/sidebar when a point is panned off-screen
+        return { x, y, visible: v.z < 1 && x >= 0 && x <= w && y >= 0 && y <= h }
+      })
+      setLabels(next)
+    }
+
     // walk up the hierarchy until a named node is found — generated GLBs often
     // name groups rather than leaf meshes. Stop at the model root: exporters
     // name it "Scene", which is useless as a region label.
@@ -115,6 +145,7 @@ export default function ModelViewer({
     apiRef.current = {
       controls,
       syncMarkers,
+      updateLabels,
       resetView: () => {
         if (!homePosition) return
         camera.position.copy(homePosition)
@@ -155,6 +186,7 @@ export default function ModelViewer({
 
         scene.add(model)
         syncMarkers(pointsRef.current)
+        updateLabels()
         callbacksRef.current.onLoaded?.()
       },
       undefined,
@@ -198,12 +230,15 @@ export default function ModelViewer({
 
     renderer.domElement.addEventListener('pointerdown', onPointerDown)
     renderer.domElement.addEventListener('pointerup', onPointerUp)
+    // labels follow the model as the camera moves (orbit/zoom/pan)
+    controls.addEventListener('change', updateLabels)
 
     const onResize = () => {
       if (!container.clientWidth || !container.clientHeight) return
       camera.aspect = container.clientWidth / container.clientHeight
       camera.updateProjectionMatrix()
       renderer.setSize(container.clientWidth, container.clientHeight)
+      updateLabels()
     }
     // observe the container, not just the window — so the canvas also resizes
     // when the sidebar collapses/expands (no window resize event fires then)
@@ -225,6 +260,7 @@ export default function ModelViewer({
       resizeObserver.disconnect()
       renderer.domElement.removeEventListener('pointerdown', onPointerDown)
       renderer.domElement.removeEventListener('pointerup', onPointerUp)
+      controls.removeEventListener('change', updateLabels)
       controls.dispose()
       markersGroup.clear()
       markerGeom.dispose()
@@ -237,9 +273,10 @@ export default function ModelViewer({
     }
   }, [modelUrl])
 
-  // redraw markers whenever the point list changes
+  // redraw markers + reproject labels whenever the point list changes
   useEffect(() => {
     apiRef.current.syncMarkers?.(points)
+    apiRef.current.updateLabels?.()
   }, [points])
 
   // reflect auto-rotate into the live controls
@@ -247,46 +284,105 @@ export default function ModelViewer({
     if (apiRef.current.controls) apiRef.current.controls.autoRotate = autoRotate
   }, [autoRotate])
 
+  // focus the inline editor when it opens
+  useEffect(() => {
+    if (selectedIndex != null) popupRef.current?.focus()
+  }, [selectedIndex])
+
+  const selected = selectedIndex != null ? points[selectedIndex] : null
+  const selectedPos = selectedIndex != null ? labels[selectedIndex] : null
+
   return (
     <div className="viewer" ref={containerRef}>
       {!showcase && (
-      <div className="viewer-toolbar">
-        <button
-          type="button"
-          title="Reset camera"
-          aria-label="Reset camera"
-          onClick={() => apiRef.current.resetView?.()}
+        <div className="viewer-labels">
+          {labels.map((l, i) =>
+            l.visible ? (
+              <button
+                key={i}
+                type="button"
+                className={`point-label ${i === selectedIndex ? 'active' : ''} ${
+                  points[i]?.prompt?.trim() ? 'has-prompt' : ''
+                }`}
+                style={{ left: `${l.x}px`, top: `${l.y}px` }}
+                onClick={() => callbacksRef.current.onSelectPoint?.(i)}
+                title={points[i]?.prompt?.trim() || 'Add a prompt for this point'}
+              >
+                {i + 1}
+              </button>
+            ) : null,
+          )}
+        </div>
+      )}
+
+      {!showcase && selected && selectedPos?.visible && (
+        <div
+          className="point-popup"
+          style={{ left: `${selectedPos.x}px`, top: `${selectedPos.y}px` }}
         >
-          <svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true">
-            <path
-              d="M4 12a8 8 0 1 1 2.3 5.6M4 12V7m0 5h5"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-          </svg>
-        </button>
-        <button
-          type="button"
-          className={autoRotate ? 'on' : ''}
-          title="Auto-rotate"
-          aria-pressed={autoRotate}
-          onClick={() => setAutoRotate((v) => !v)}
-        >
-          <svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true">
-            <path
-              d="M3.5 9a9 9 0 0 1 16-2m1 1.5V3.5m0 4h-4M20.5 15a9 9 0 0 1-16 2m-1-1.5V20.5m0-4h4"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-          </svg>
-        </button>
-      </div>
+          <div className="point-popup-head">
+            <span className="point-popup-num">{selectedIndex + 1}</span>
+            <span className="point-popup-region" title={selected.meshName}>
+              {selected.meshName}
+            </span>
+            <button
+              type="button"
+              className="point-popup-close"
+              onClick={() => onSelectPoint?.(null)}
+              aria-label="Close"
+            >
+              ✕
+            </button>
+          </div>
+          <textarea
+            ref={popupRef}
+            className="point-popup-input"
+            value={selected.prompt || ''}
+            onChange={(e) => onPromptChange?.(selectedIndex, e.target.value)}
+            placeholder={`e.g. "make this finger longer"`}
+            rows={3}
+          />
+        </div>
+      )}
+
+      {!showcase && (
+        <div className="viewer-toolbar">
+          <button
+            type="button"
+            title="Reset camera"
+            aria-label="Reset camera"
+            onClick={() => apiRef.current.resetView?.()}
+          >
+            <svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true">
+              <path
+                d="M4 12a8 8 0 1 1 2.3 5.6M4 12V7m0 5h5"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
+          </button>
+          <button
+            type="button"
+            className={autoRotate ? 'on' : ''}
+            title="Auto-rotate"
+            aria-pressed={autoRotate}
+            onClick={() => setAutoRotate((vv) => !vv)}
+          >
+            <svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true">
+              <path
+                d="M3.5 9a9 9 0 0 1 16-2m1 1.5V3.5m0 4h-4M20.5 15a9 9 0 0 1-16 2m-1-1.5V20.5m0-4h4"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
+          </button>
+        </div>
       )}
     </div>
   )
