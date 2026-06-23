@@ -22,9 +22,11 @@ export default function ForgePage() {
   const [modelError, setModelError] = useState(null)
   // text description that produced the current model — context for edits
   const [baseModelPrompt, setBaseModelPrompt] = useState(null)
-  // selected points on the mesh: [{ point: {x,y,z}, meshName }]
+  // selected points on the mesh: [{ point: {x,y,z}, meshName, prompt }]
   const [points, setPoints] = useState([])
-  const [instruction, setInstruction] = useState('')
+  // which point's inline editor is open (index, or null) — shared by the model
+  // overlay and the sidebar so the two stay in sync
+  const [selectedIndex, setSelectedIndex] = useState(null)
   // spatial = M3 engine (clicks + region + base); plain = bare instruction (M5
   // comparison control)
   const [spatialGrounding, setSpatialGrounding] = useState(true)
@@ -50,6 +52,7 @@ export default function ForgePage() {
     }
     if (isObjectUrl) objectUrlRef.current = url
     setPoints([])
+    setSelectedIndex(null)
     setModelError(null)
     setModelStatus('loading')
     setModelUrl(url)
@@ -57,9 +60,8 @@ export default function ForgePage() {
   }
 
   const editTask = useGenerationTask((url) => {
-    swapModel(url)
+    swapModel(url) // clears points + selection
     setBaseModelPrompt(pendingEditPromptRef.current)
-    setInstruction('')
   })
 
   const busy = genBusy || editTask.generating
@@ -72,11 +74,40 @@ export default function ForgePage() {
     setHistoryKey((k) => k + 1)
   }, [busy])
 
-  const addPoint = (p) => setPoints((prev) => [...prev, p])
-  const removePoint = (i) => setPoints((prev) => prev.filter((_, idx) => idx !== i))
+  // stable per-point id so React keys by identity (not array index) — survives
+  // removing a middle point without focus/value jumping between rows
+  const pointIdRef = useRef(0)
+  const justAddedRef = useRef(false)
+
+  // a click on the mesh adds a point and opens its prompt editor right away
+  const addPoint = (p) => {
+    justAddedRef.current = true
+    setPoints((prev) => [...prev, { ...p, id: pointIdRef.current++, prompt: '' }])
+  }
+  // select the new point once the add has committed (avoids reading a stale
+  // points.length from the click closure)
+  useEffect(() => {
+    if (!justAddedRef.current) return
+    justAddedRef.current = false
+    setSelectedIndex(points.length - 1)
+  }, [points])
+  const removePoint = (i) => {
+    setPoints((prev) => prev.filter((_, idx) => idx !== i))
+    setSelectedIndex(null)
+  }
+  const setPointPrompt = (i, value) =>
+    setPoints((prev) => prev.map((p, idx) => (idx === i ? { ...p, prompt: value } : p)))
+  const clearPoints = () => {
+    setPoints([])
+    setSelectedIndex(null)
+  }
+
+  // at least one point with a prompt is required to edit
+  const hasPrompts = points.some((p) => (p.prompt || '').trim())
 
   // the mode-independent edit payload: a representative centroid of the selected
-  // points (for the M3 engine), the raw points, and the joined region names
+  // points (for the M3 engine), the raw points, and a region-annotated
+  // instruction composed from each point's own prompt
   const buildEditBase = () => {
     const n = points.length
     const centroid = points.reduce(
@@ -87,8 +118,12 @@ export default function ForgePage() {
       }),
       { x: 0, y: 0, z: 0 },
     )
+    const instruction = points
+      .filter((p) => (p.prompt || '').trim())
+      .map((p) => `${p.meshName}: ${p.prompt.trim()}`)
+      .join('; ')
     return {
-      instruction: instruction.trim(),
+      instruction,
       point: centroid,
       points: points.map((p) => p.point),
       regionLabel: [...new Set(points.map((p) => p.meshName))].join(', '),
@@ -97,7 +132,7 @@ export default function ForgePage() {
   }
 
   const sendEdit = async () => {
-    if (points.length === 0 || !instruction.trim()) return
+    if (!hasPrompts) return
     const data = await editTask.start('/api/edit', {
       ...buildEditBase(),
       mode: spatialGrounding ? 'spatial' : 'plain',
@@ -109,7 +144,7 @@ export default function ForgePage() {
   }
 
   const startCompare = () => {
-    if (points.length === 0 || !instruction.trim()) return
+    if (!hasPrompts) return
     setCompare(buildEditBase())
   }
 
@@ -165,6 +200,9 @@ export default function ForgePage() {
               modelUrl={modelUrl}
               points={points}
               onAddPoint={addPoint}
+              selectedIndex={selectedIndex}
+              onSelectPoint={setSelectedIndex}
+              onPromptChange={setPointPrompt}
               onLoaded={() => setModelStatus('ready')}
               onError={(message) => {
                 setModelError(message)
@@ -172,7 +210,7 @@ export default function ForgePage() {
               }}
             />
             {modelStatus === 'ready' && points.length === 0 && (
-              <div className="viewer-hint">Click the model to add points</div>
+              <div className="viewer-hint">Click the model to add a point</div>
             )}
           </>
         )}
@@ -228,45 +266,52 @@ export default function ForgePage() {
           <div className="field">
             <label>Selected points ({points.length})</label>
             {points.length === 0 ? (
-              <code>click the model to add one or more points</code>
+              <code>click the model to add a point, then describe its change</code>
             ) : (
               <div className="point-list">
                 {points.map((p, i) => (
-                  <div className="point-row" key={i}>
-                    <span className="point-region" title={p.meshName}>
-                      {p.meshName}
-                    </span>
-                    <code>
-                      {p.point.x.toFixed(2)}, {p.point.y.toFixed(2)},{' '}
-                      {p.point.z.toFixed(2)}
-                    </code>
-                    <button
-                      className="point-remove"
-                      onClick={() => removePoint(i)}
-                      aria-label="Remove point"
-                      title="Remove point"
-                    >
-                      ✕
-                    </button>
+                  <div
+                    className={`point-item ${i === selectedIndex ? 'active' : ''}`}
+                    key={p.id}
+                  >
+                    <div className="point-item-head">
+                      <button
+                        type="button"
+                        className="point-badge"
+                        onClick={() => setSelectedIndex(i === selectedIndex ? null : i)}
+                        title="Focus this point on the model"
+                      >
+                        {i + 1}
+                      </button>
+                      <span className="point-region" title={p.meshName}>
+                        {p.meshName}
+                      </span>
+                      <button
+                        className="point-remove"
+                        onClick={() => removePoint(i)}
+                        aria-label="Remove point"
+                        title="Remove point"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                    <textarea
+                      className="point-prompt"
+                      value={p.prompt || ''}
+                      onChange={(e) => setPointPrompt(i, e.target.value)}
+                      onFocus={() => setSelectedIndex(i)}
+                      placeholder={`Prompt for point ${i + 1} — e.g. "make this finger longer"`}
+                      rows={2}
+                    />
                   </div>
                 ))}
               </div>
             )}
             {points.length > 0 && (
-              <button className="link-button" onClick={() => setPoints([])}>
+              <button className="link-button" onClick={clearPoints}>
                 Clear all points
               </button>
             )}
-          </div>
-          <div className="field">
-            <label htmlFor="instruction">Instruction</label>
-            <textarea
-              id="instruction"
-              value={instruction}
-              onChange={(e) => setInstruction(e.target.value)}
-              placeholder='e.g. "make this finger longer"'
-              rows={4}
-            />
           </div>
           <label className="toggle">
             <input
@@ -282,9 +327,7 @@ export default function ForgePage() {
           <button
             className="submit"
             onClick={sendEdit}
-            disabled={
-              points.length === 0 || !instruction.trim() || editTask.generating || genBusy
-            }
+            disabled={!hasPrompts || editTask.generating || genBusy}
           >
             {editTask.generating
               ? `Applying edit… ${editTask.task.progress}%`
@@ -293,7 +336,7 @@ export default function ForgePage() {
           <button
             className="ghost-button"
             onClick={startCompare}
-            disabled={points.length === 0 || !instruction.trim() || busy}
+            disabled={!hasPrompts || busy}
             title="Run this edit both ways and compare the results"
           >
             Compare spatial vs plain

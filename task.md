@@ -23,7 +23,7 @@ posts, profiles, and a polished multi-screen app. Ten directions:
 - [x] **11. Tags & search** — tags on publish (normalized: lowercase, hyphenated, deduped, ≤6), `GET /api/posts/tags` popular-tag counts, `?tag=` / `?q=` feed filters, Explore search box + tag filter chips synced to the URL (shareable views), clickable tag chips on cards + post pages
 - [x] **12. Notifications** — likes/comments on your post notify you (self-actions skipped); `Notification` model + service (in-memory + Mongo), `GET /api/notifications`(+`/count`), `POST /api/notifications/read`; TopNav bell with unread badge, polling, and a dropdown that marks all read on open
 - [x] **13. Community on the landing page** — Home now shows a live gallery of everyone's published models (with likes, public/no-login), under the rotating-hand showcase; cards link to the post; "Explore all" → full searchable gallery
-- [ ] **14. Per-point prompts** — each clicked point on the model carries its own prompt; edit inline on the model + mirror in the Selected-points panel; numbered labels on the mesh
+- [x] **14. Per-point prompts** — each clicked point carries its own prompt; numbered labels overlaid on the mesh (filled when a prompt is set), click a label → inline popup editor, mirrored in the Selected-points panel; the edit composes a region-annotated instruction (`<region>: <prompt>; …`) from every point
 
 ## Operational (when going live)
 - [ ] Set `MESHY_API_KEY` + `MONGODB_URI` + `JWT_SECRET` in `server/.env`

@@ -239,6 +239,122 @@ body {
   display: block;
 }
 
+/* numbered point labels + inline prompt editor, overlaid on the canvas */
+.viewer-labels {
+  position: absolute;
+  inset: 0;
+  pointer-events: none; /* labels themselves re-enable it */
+  overflow: hidden;
+}
+
+.point-label {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  width: 22px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  border: 1px solid var(--forge);
+  background: rgba(11, 13, 18, 0.85);
+  color: var(--forge);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  pointer-events: auto;
+  transition: transform 0.1s, box-shadow 0.15s;
+}
+
+.point-label:hover {
+  box-shadow: 0 0 0 3px var(--forge-glow);
+}
+
+.point-label.has-prompt {
+  background: var(--forge);
+  color: var(--bg);
+}
+
+.point-label.active {
+  box-shadow: 0 0 0 3px var(--forge-glow);
+  transform: translate(-50%, -50%) scale(1.15);
+}
+
+.point-popup {
+  position: absolute;
+  transform: translate(-50%, calc(-100% - 16px));
+  width: 240px;
+  background: var(--panel);
+  border: 1px solid var(--forge);
+  border-radius: var(--radius);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5);
+  padding: 10px;
+  z-index: 5;
+}
+
+.point-popup-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.point-popup-num {
+  flex: none;
+  width: 20px;
+  height: 20px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--forge);
+  color: var(--bg);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.point-popup-region {
+  flex: 1;
+  font-size: 11px;
+  color: var(--text-dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.point-popup-close {
+  flex: none;
+  background: none;
+  border: none;
+  color: var(--text-faint);
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 2px;
+}
+
+.point-popup-close:hover {
+  color: var(--danger);
+}
+
+.point-popup-input {
+  width: 100%;
+  resize: vertical;
+  font-family: var(--font-ui);
+  font-size: 12.5px;
+  color: var(--text);
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  padding: 7px 8px;
+}
+
+.point-popup-input:focus {
+  outline: none;
+  border-color: var(--steel);
+  box-shadow: 0 0 0 2px var(--steel-soft);
+}
+
 .viewer-toolbar {
   position: absolute;
   top: 14px;
@@ -723,34 +839,75 @@ body {
 .point-list {
   display: flex;
   flex-direction: column;
-  gap: 5px;
-  max-height: 150px;
+  gap: 7px;
+  max-height: 280px;
   overflow-y: auto;
 }
 
-.point-row {
+.point-item {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-left: 2px solid var(--line);
+  border-radius: 6px;
+  transition: border-color 0.15s;
+}
+
+.point-item.active {
+  border-left-color: var(--forge);
+  border-color: var(--forge);
+}
+
+.point-item-head {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 5px 8px;
-  background: var(--panel-2);
-  border: 1px solid var(--line);
-  border-left: 2px solid var(--forge);
-  border-radius: 6px;
 }
 
-.point-row code {
-  flex: 1;
+.point-badge {
+  flex: none;
+  width: 20px;
+  height: 20px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  border: 1px solid var(--forge);
+  background: rgba(255, 122, 31, 0.14);
+  color: var(--forge);
   font-family: var(--font-mono);
-  font-size: 11.5px;
-  color: var(--steel);
-  background: none;
-  border: none;
-  padding: 0;
-  min-height: 0;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.point-item.active .point-badge {
+  background: var(--forge);
+  color: var(--bg);
+}
+
+.point-prompt {
+  width: 100%;
+  resize: vertical;
+  font-family: var(--font-ui);
+  font-size: 12.5px;
+  color: var(--text);
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  padding: 6px 8px;
+}
+
+.point-prompt:focus {
+  outline: none;
+  border-color: var(--steel);
+  box-shadow: 0 0 0 2px var(--steel-soft);
 }
 
 .point-region {
+  flex: 1;
   max-width: 88px;
   overflow: hidden;
   text-overflow: ellipsis;
