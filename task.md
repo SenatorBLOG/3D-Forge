@@ -27,7 +27,7 @@ posts, profiles, and a polished multi-screen app. Ten directions:
 - [x] **15. Demo seed** — `services/seed.js` fills the gallery on boot (mock mode only, idempotent, non-fatal): 12 posts by 6 demo users with varied tags/likes/comments. Auto-discovers every `.glb` in `client/public/models/` — drop models in and they're used automatically (`SEED_DEMO=false` to disable)
 - [x] **16. Edit/delete your own posts** — `PATCH`/`DELETE /api/posts/:id` (author-only, 403 otherwise); delete cascades to likes/comments/notifications; PostPage shows owner Edit (inline title/tags/description) + Delete (confirm) controls
 - [x] **17. Follow / Following** — `Follow` model + service; `GET /api/users/:username` (counts + isFollowing), `POST /api/users/:username/follow` (toggle, self-follow 400); `?following=1` feed; ProfilePage follower/following counts + Follow button; Explore "All / Following" tab; "started following you" notification
-- [ ] **18. Model thumbnails on cards** — render each model once to an image, cache by URL, show on PostCard
+- [x] **18. Model thumbnails on cards** — `lib/thumbnailer.js` renders each GLB once to a PNG data URL (serialized, one transient WebGL context, disposed after capture), cached by model URL; PostCard shows the preview (logo fallback while rendering/on error). One render serves every card with that model — no per-card live viewer, no context exhaustion
 
 ## Operational (when going live)
 - [ ] Set `MESHY_API_KEY` + `MONGODB_URI` + `JWT_SECRET` in `server/.env`

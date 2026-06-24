@@ -1,14 +1,35 @@
+import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import Logo from './Logo.jsx'
 import TagList from './TagList.jsx'
+import { getThumbnail } from '../lib/thumbnailer.js'
 
-/** A community feed card. Static placeholder thumbnail (no live WebGL per card —
- *  that would exhaust the browser's context limit on a large feed). */
+/** A community feed card. Shows a real model preview rendered once per model URL
+ *  (shared cache — no live WebGL viewer per card, which would exhaust the
+ *  browser's context limit). Falls back to the logo while rendering / on error. */
 export default function PostCard({ post }) {
+  const [thumb, setThumb] = useState(null)
+
+  useEffect(() => {
+    let cancelled = false
+    getThumbnail(post.modelUrl)
+      .then((url) => {
+        if (!cancelled) setThumb(url)
+      })
+      .catch(() => {})
+    return () => {
+      cancelled = true
+    }
+  }, [post.modelUrl])
+
   return (
     <Link className="post-card" to={`/post/${post.id}`}>
       <div className="post-thumb">
-        <Logo size={56} />
+        {thumb ? (
+          <img className="post-thumb-img" src={thumb} alt={post.title} loading="lazy" />
+        ) : (
+          <Logo size={56} />
+        )}
       </div>
       <div className="post-card-body">
         <h3 className="post-card-title" title={post.title}>
