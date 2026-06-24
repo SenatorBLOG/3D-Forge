@@ -88,3 +88,19 @@ export async function markAllRead(userId) {
   }
   if (changed) saveNotifs()
 }
+
+// Drop notifications that point at a post (called when the post is deleted).
+export async function removePostNotifications(postId) {
+  if (dbReady()) {
+    await Notification.deleteMany({ postId })
+    return
+  }
+  let changed = false
+  for (let i = memNotifs.length - 1; i >= 0; i--) {
+    if (memNotifs[i].postId === postId) {
+      memNotifs.splice(i, 1)
+      changed = true
+    }
+  }
+  if (changed) saveNotifs()
+}

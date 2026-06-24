@@ -107,3 +107,14 @@ export async function commentCount(postId) {
   if (dbReady()) return Comment.countDocuments({ postId })
   return (memComments.get(postId) || []).length
 }
+
+// Drop all likes + comments for a post (called when the post is deleted).
+export async function removePostSocial(postId) {
+  if (dbReady()) {
+    await Promise.all([Like.deleteMany({ postId }), Comment.deleteMany({ postId })])
+    return
+  }
+  const had = memLikes.delete(postId)
+  const had2 = memComments.delete(postId)
+  if (had || had2) saveSocial()
+}

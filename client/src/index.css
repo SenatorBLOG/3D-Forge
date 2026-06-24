@@ -1907,6 +1907,49 @@ button.tag:hover {
   gap: 10px;
   align-items: center;
   margin-top: 20px;
+  flex-wrap: wrap;
+}
+
+.ghost-button.danger:hover:not(:disabled) {
+  color: var(--danger);
+  border-color: var(--danger);
+}
+
+/* owner edit form on the post page */
+.post-edit {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 4px 0 8px;
+}
+
+.post-edit input,
+.post-edit textarea {
+  font-family: var(--font-ui);
+  font-size: 14px;
+  color: var(--text);
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 9px 12px;
+  resize: vertical;
+}
+
+.post-edit .post-edit-title {
+  font-family: var(--font-display);
+  font-size: 20px;
+}
+
+.post-edit input:focus,
+.post-edit textarea:focus {
+  outline: none;
+  border-color: var(--steel);
+  box-shadow: 0 0 0 3px var(--steel-soft);
+}
+
+.post-edit-actions {
+  display: flex;
+  gap: 10px;
 }
 
 .like-button {

@@ -140,3 +140,35 @@ export async function getPost(id) {
   const p = memPosts.find((x) => x.id === id)
   return p ? publicPost(p) : null
 }
+
+// Patch a post's editable fields (only those present in `fields`). Caller
+// enforces ownership. Returns the updated public post, or null if it's gone.
+export async function updatePost(id, fields) {
+  const patch = {}
+  if (fields.title !== undefined) patch.title = fields.title
+  if (fields.description !== undefined) patch.description = fields.description
+  if (fields.tags !== undefined) patch.tags = normalizeTags(fields.tags)
+  if (dbReady()) {
+    const d = await Post.findByIdAndUpdate(id, patch, { new: true })
+      .lean()
+      .catch(() => null)
+    return d ? publicPost({ ...d, id: String(d._id) }) : null
+  }
+  const p = memPosts.find((x) => x.id === id)
+  if (!p) return null
+  Object.assign(p, patch)
+  savePosts()
+  return publicPost(p)
+}
+
+export async function deletePost(id) {
+  if (dbReady()) {
+    const r = await Post.findByIdAndDelete(id).catch(() => null)
+    return !!r
+  }
+  const i = memPosts.findIndex((x) => x.id === id)
+  if (i === -1) return false
+  memPosts.splice(i, 1)
+  savePosts()
+  return true
+}
