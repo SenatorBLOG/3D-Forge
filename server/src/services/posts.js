@@ -15,7 +15,7 @@ const MAX_TAGS = 6
   const saved = load('posts', null)
   if (saved) {
     memPosts.push(...(saved.posts || []).slice(0, MAX))
-    memSeq = saved.seq || memSeq
+    memSeq = saved.seq ?? memSeq
   }
 }
 

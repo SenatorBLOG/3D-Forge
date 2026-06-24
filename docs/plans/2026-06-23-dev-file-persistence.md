@@ -41,8 +41,8 @@ and demos.
 ## Design decisions
 
 - **One file, not one-per-collection.** A single `server/.devdata/store.json`
-  with a top-level key per store (`{ version, users, posts, likes, comments,
-  commentSeq, notifications, history, seqs: {...} }`). One file = one atomic
+  shaped `{ version, data: { users, posts, social, notifications, history } }`,
+  one key per service (likes/comments/commentSeq are grouped under `social`). One file = one atomic
   snapshot, simplest restore, no cross-file consistency to reason about. Volume is
   tiny (ring buffers cap at 100–500 entries). Path lives under `server/` so it is
   colocated with the process that owns it.

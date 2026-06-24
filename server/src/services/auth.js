@@ -23,7 +23,7 @@ let memSeq = 1
   const saved = load('users', null)
   if (saved) {
     for (const u of saved.users || []) memUsers.set(u.username, u)
-    memSeq = saved.seq || memSeq
+    memSeq = saved.seq ?? memSeq
   }
 }
 

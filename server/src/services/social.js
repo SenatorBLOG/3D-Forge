@@ -21,7 +21,7 @@ let memCommentSeq = 1
     for (const [postId, comments] of Object.entries(saved.comments || {})) {
       memComments.set(postId, comments)
     }
-    memCommentSeq = saved.commentSeq || memCommentSeq
+    memCommentSeq = saved.commentSeq ?? memCommentSeq
   }
 }
 

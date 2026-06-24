@@ -14,7 +14,7 @@ const MAX = 500
   const saved = load('notifications', null)
   if (saved) {
     memNotifs.push(...(saved.notifs || []).slice(0, MAX))
-    memSeq = saved.seq || memSeq
+    memSeq = saved.seq ?? memSeq
   }
 }
 
