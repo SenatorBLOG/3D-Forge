@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { useParams, Link } from 'react-router-dom'
+import { useParams, Link, useNavigate } from 'react-router-dom'
 import ModelViewer from '../components/ModelViewer.jsx'
 import TagList from '../components/TagList.jsx'
 import { useAuth } from '../auth/AuthContext.jsx'
@@ -20,11 +20,19 @@ const Heart = ({ filled }) => (
 export default function PostPage() {
   const { id } = useParams()
   const { user, token } = useAuth()
+  const navigate = useNavigate()
   const [post, setPost] = useState(null)
   const [error, setError] = useState(null)
   const [comments, setComments] = useState([])
   const [body, setBody] = useState('')
   const [copied, setCopied] = useState(false)
+  // owner edit mode
+  const [editing, setEditing] = useState(false)
+  const [editTitle, setEditTitle] = useState('')
+  const [editDesc, setEditDesc] = useState('')
+  const [editTags, setEditTags] = useState('')
+  const [editError, setEditError] = useState(null)
+  const [saving, setSaving] = useState(false)
   const stageRef = useRef(null)
 
   const present = () => stageRef.current?.requestFullscreen?.().catch(() => {})
@@ -88,8 +96,53 @@ export default function PostPage() {
     }
   }
 
+  const startEdit = () => {
+    setEditTitle(post.title)
+    setEditDesc(post.description || '')
+    setEditTags((post.tags || []).join(', '))
+    setEditError(null)
+    setEditing(true)
+  }
+
+  const saveEdit = async (e) => {
+    e.preventDefault()
+    if (!editTitle.trim()) return
+    setSaving(true)
+    setEditError(null)
+    try {
+      const res = await fetch(`/api/posts/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({
+          title: editTitle.trim(),
+          description: editDesc,
+          tags: editTags,
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`)
+      setPost(data.post)
+      setEditing(false)
+    } catch (err) {
+      setEditError(err.message)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const removePost = async () => {
+    if (!window.confirm('Delete this post? This cannot be undone.')) return
+    const res = await fetch(`/api/posts/${id}`, {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${token}` },
+    })
+    if (res.ok) navigate(`/u/${post.authorUsername}`)
+  }
+
   if (error) return <div className="post-page"><span className="url-error">{error}</span></div>
   if (!post) return <div className="post-page"><span className="hint">Loading…</span></div>
+
+  const isOwner = !!(user && user.id === post.authorId)
 
   return (
     <div className="post-page">
@@ -97,15 +150,50 @@ export default function PostPage() {
         <ModelViewer modelUrl={post.modelUrl} points={[]} onAddPoint={() => {}} showcase />
       </div>
       <div className="post-info">
-        <h1 className="post-page-title">{post.title}</h1>
-        <div className="post-page-meta">
-          <Link to={`/u/${post.authorUsername}`} className="post-author">
-            @{post.authorUsername}
-          </Link>
-          {post.createdAt && <span>· {new Date(post.createdAt).toLocaleDateString()}</span>}
-        </div>
-        <TagList tags={post.tags} />
-        {post.description && <p className="post-page-desc">{post.description}</p>}
+        {editing ? (
+          <form className="post-edit" onSubmit={saveEdit}>
+            <input
+              className="post-edit-title"
+              value={editTitle}
+              onChange={(e) => setEditTitle(e.target.value)}
+              placeholder="Title"
+              maxLength={120}
+            />
+            <input
+              value={editTags}
+              onChange={(e) => setEditTags(e.target.value)}
+              placeholder="tags, comma-separated"
+            />
+            <textarea
+              value={editDesc}
+              onChange={(e) => setEditDesc(e.target.value)}
+              placeholder="Description"
+              rows={3}
+              maxLength={600}
+            />
+            <div className="post-edit-actions">
+              <button className="submit" type="submit" disabled={!editTitle.trim() || saving}>
+                {saving ? 'Saving…' : 'Save changes'}
+              </button>
+              <button type="button" className="ghost-button" onClick={() => setEditing(false)}>
+                Cancel
+              </button>
+            </div>
+            {editError && <span className="url-error">{editError}</span>}
+          </form>
+        ) : (
+          <>
+            <h1 className="post-page-title">{post.title}</h1>
+            <div className="post-page-meta">
+              <Link to={`/u/${post.authorUsername}`} className="post-author">
+                @{post.authorUsername}
+              </Link>
+              {post.createdAt && <span>· {new Date(post.createdAt).toLocaleDateString()}</span>}
+            </div>
+            <TagList tags={post.tags} />
+            {post.description && <p className="post-page-desc">{post.description}</p>}
+          </>
+        )}
         <div className="post-actions">
           <button
             className={`like-button ${post.likedByMe ? 'liked' : ''}`}
@@ -124,6 +212,16 @@ export default function PostPage() {
           <button className="ghost-button" onClick={present}>
             Present
           </button>
+          {isOwner && !editing && (
+            <>
+              <button className="ghost-button" onClick={startEdit}>
+                Edit
+              </button>
+              <button className="ghost-button danger" onClick={removePost}>
+                Delete
+              </button>
+            </>
+          )}
         </div>
 
         <div className="post-comments">

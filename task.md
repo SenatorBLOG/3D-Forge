@@ -25,6 +25,9 @@ posts, profiles, and a polished multi-screen app. Ten directions:
 - [x] **13. Community on the landing page** — Home now shows a live gallery of everyone's published models (with likes, public/no-login), under the rotating-hand showcase; cards link to the post; "Explore all" → full searchable gallery
 - [x] **14. Per-point prompts** — each clicked point carries its own prompt; numbered labels overlaid on the mesh (filled when a prompt is set), click a label → inline popup editor, mirrored in the Selected-points panel; the edit composes a region-annotated instruction (`<region>: <prompt>; …`) from every point
 - [x] **15. Demo seed** — `services/seed.js` fills the gallery on boot (mock mode only, idempotent, non-fatal): 12 posts by 6 demo users with varied tags/likes/comments. Auto-discovers every `.glb` in `client/public/models/` — drop models in and they're used automatically (`SEED_DEMO=false` to disable)
+- [x] **16. Edit/delete your own posts** — `PATCH`/`DELETE /api/posts/:id` (author-only, 403 otherwise); delete cascades to likes/comments/notifications; PostPage shows owner Edit (inline title/tags/description) + Delete (confirm) controls
+- [ ] **17. Follow / Following** — follow users, Following feed, "started following you" notification
+- [ ] **18. Model thumbnails on cards** — render each model once to an image, cache by URL, show on PostCard
 
 ## Operational (when going live)
 - [ ] Set `MESHY_API_KEY` + `MONGODB_URI` + `JWT_SECRET` in `server/.env`
