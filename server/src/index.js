@@ -11,6 +11,7 @@ import datasetRouter from './routes/dataset.js'
 import authRouter from './routes/auth.js'
 import postsRouter from './routes/posts.js'
 import notificationsRouter from './routes/notifications.js'
+import { seedDemoData } from './services/seed.js'
 
 const app = express()
 app.use(cors())
@@ -33,6 +34,9 @@ const port = process.env.PORT || 3001
 await connectDb()
 // When Mongo owns the data, stop the dev file layer from writing snapshots.
 if (dbReady()) setActive(false)
+// Populate a demo gallery in mock mode (no-op under Mongo / when already seeded);
+// never blocks boot if it fails.
+await seedDemoData().catch((err) => console.error('demo seed failed:', err))
 app.listen(port, () => {
   console.log(`3D Forge API listening on http://localhost:${port}`)
 })

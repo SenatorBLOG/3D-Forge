@@ -24,6 +24,7 @@ posts, profiles, and a polished multi-screen app. Ten directions:
 - [x] **12. Notifications** — likes/comments on your post notify you (self-actions skipped); `Notification` model + service (in-memory + Mongo), `GET /api/notifications`(+`/count`), `POST /api/notifications/read`; TopNav bell with unread badge, polling, and a dropdown that marks all read on open
 - [x] **13. Community on the landing page** — Home now shows a live gallery of everyone's published models (with likes, public/no-login), under the rotating-hand showcase; cards link to the post; "Explore all" → full searchable gallery
 - [x] **14. Per-point prompts** — each clicked point carries its own prompt; numbered labels overlaid on the mesh (filled when a prompt is set), click a label → inline popup editor, mirrored in the Selected-points panel; the edit composes a region-annotated instruction (`<region>: <prompt>; …`) from every point
+- [x] **15. Demo seed** — `services/seed.js` fills the gallery on boot (mock mode only, idempotent, non-fatal): 12 posts by 6 demo users with varied tags/likes/comments. Auto-discovers every `.glb` in `client/public/models/` — drop models in and they're used automatically (`SEED_DEMO=false` to disable)
 
 ## Operational (when going live)
 - [ ] Set `MESHY_API_KEY` + `MONGODB_URI` + `JWT_SECRET` in `server/.env`
