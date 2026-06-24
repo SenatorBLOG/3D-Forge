@@ -1,7 +1,8 @@
 import 'dotenv/config'
 import express from 'express'
 import cors from 'cors'
-import { connectDb } from './db.js'
+import { connectDb, dbReady } from './db.js'
+import { setActive } from './services/persistence.js'
 import modelsRouter from './routes/models.js'
 import generateRouter from './routes/generate.js'
 import editRouter from './routes/edit.js'
@@ -31,7 +32,10 @@ app.use('/api/notifications', notificationsRouter)
 
 const port = process.env.PORT || 3001
 await connectDb()
-// populate a demo gallery in mock mode — never blocks boot if it fails
+// When Mongo owns the data, stop the dev file layer from writing snapshots.
+if (dbReady()) setActive(false)
+// Populate a demo gallery in mock mode (no-op under Mongo / when already seeded);
+// never blocks boot if it fails.
 await seedDemoData().catch((err) => console.error('demo seed failed:', err))
 app.listen(port, () => {
   console.log(`3D Forge API listening on http://localhost:${port}`)

@@ -1,6 +1,7 @@
 import { dbReady } from '../db.js'
 import Like from '../models/Like.js'
 import Comment from '../models/Comment.js'
+import { load, flush } from './persistence.js'
 
 // Likes and comments on posts. In-memory when no Mongo (keyless dev), Mongo when
 // connected — same dual-store pattern as the rest of the project.
@@ -8,6 +9,29 @@ import Comment from '../models/Comment.js'
 const memLikes = new Map() // postId -> Set(userId)
 const memComments = new Map() // postId -> [comment]
 let memCommentSeq = 1
+
+// Hydrate from the dev file (no-op under Mongo/tests). Map<postId,Set> and
+// Map<postId,[]> are stored as plain { postId: [...] } objects.
+{
+  const saved = load('social', null)
+  if (saved) {
+    for (const [postId, userIds] of Object.entries(saved.likes || {})) {
+      memLikes.set(postId, new Set(userIds))
+    }
+    for (const [postId, comments] of Object.entries(saved.comments || {})) {
+      memComments.set(postId, comments)
+    }
+    memCommentSeq = saved.commentSeq ?? memCommentSeq
+  }
+}
+
+const saveSocial = () => {
+  const likes = {}
+  for (const [postId, set] of memLikes) likes[postId] = [...set]
+  const comments = {}
+  for (const [postId, arr] of memComments) comments[postId] = arr
+  flush('social', { likes, comments, commentSeq: memCommentSeq })
+}
 
 // --- likes ---
 
@@ -26,6 +50,7 @@ export async function toggleLike(userId, postId) {
   const liked = !set.has(userId)
   if (liked) set.add(userId)
   else set.delete(userId)
+  saveSocial()
   return { liked, likes: set.size }
 }
 
@@ -66,6 +91,7 @@ export async function addComment(user, postId, body) {
   }
   const c = { ...base, id: String(memCommentSeq++), createdAt: new Date().toISOString() }
   arr.push(c)
+  saveSocial()
   return publicComment(c)
 }
 
