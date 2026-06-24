@@ -17,6 +17,7 @@ import {
   removePostSocial,
 } from '../services/social.js'
 import { notify, removePostNotifications } from '../services/notifications.js'
+import { followingIds } from '../services/follows.js'
 
 const router = Router()
 
@@ -31,11 +32,19 @@ const withSocial = async (post, userId) => {
 
 const str = (v) => (typeof v === 'string' ? v : undefined)
 
-// GET /api/posts — public community feed (optional ?author / ?username / ?tag / ?q)
+// GET /api/posts — public community feed.
+// Filters: ?author / ?username / ?tag / ?q, or ?following=1 for your follows' posts
 router.get('/', optionalAuth, async (req, res) => {
   try {
+    // ?following=1 → only posts by people the signed-in user follows. Anonymous
+    // callers get an empty set (not the whole feed) so the filter never leaks.
+    let authorIds
+    if (req.query.following === '1') {
+      authorIds = req.user ? await followingIds(req.user.id) : []
+    }
     const posts = await listPosts({
       authorId: str(req.query.author),
+      authorIds,
       authorUsername: str(req.query.username),
       tag: str(req.query.tag),
       q: str(req.query.q),

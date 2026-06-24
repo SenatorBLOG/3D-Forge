@@ -1,13 +1,18 @@
 import { useEffect, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import PostCard from '../components/PostCard.jsx'
+import { useAuth } from '../auth/AuthContext.jsx'
 
-/** The community gallery: models published by everyone, with free-text search
- *  and tag filters. The active tag/query live in the URL so views are shareable. */
+/** The community gallery: models published by everyone, with free-text search,
+ *  tag filters, and an "All / Following" feed switch. Active tag/query/feed live
+ *  in the URL so views are shareable. */
 export default function ExplorePage() {
+  const { user, token } = useAuth()
   const [params, setParams] = useSearchParams()
   const tag = params.get('tag') || ''
   const q = params.get('q') || ''
+  // Following feed only applies when signed in
+  const feed = user && params.get('feed') === 'following' ? 'following' : 'all'
 
   const [posts, setPosts] = useState(null)
   const [tags, setTags] = useState([])
@@ -24,19 +29,20 @@ export default function ExplorePage() {
     setParams(p, { replace: true })
   }
 
-  // keep the box in sync when the query changes from elsewhere (chip, clear)
   useEffect(() => {
     setDraft(q)
   }, [q])
 
-  // reload the feed whenever the tag or query changes
+  // reload the feed whenever the tag / query / feed changes
   useEffect(() => {
     let cancelled = false
     const qs = new URLSearchParams()
     if (tag) qs.set('tag', tag)
     if (q) qs.set('q', q)
+    if (feed === 'following') qs.set('following', '1')
+    const headers = feed === 'following' && token ? { Authorization: `Bearer ${token}` } : {}
     setPosts(null)
-    fetch(`/api/posts?${qs}`)
+    fetch(`/api/posts?${qs}`, { headers })
       .then(async (r) => {
         const d = await r.json()
         if (cancelled) return
@@ -50,7 +56,7 @@ export default function ExplorePage() {
     return () => {
       cancelled = true
     }
-  }, [tag, q])
+  }, [tag, q, feed, token])
 
   // popular tags for the filter row (once)
   useEffect(() => {
@@ -68,7 +74,8 @@ export default function ExplorePage() {
 
   const filtered = tag || q
   const empty =
-    tag && q ? `No models tagged #${tag} match “${q}”.`
+    feed === 'following' ? 'No posts from people you follow yet — follow some makers.'
+    : tag && q ? `No models tagged #${tag} match “${q}”.`
     : tag ? `No models tagged #${tag} yet.`
     : q ? `No models match “${q}”.`
     : 'No posts yet — publish one from the Forge.'
@@ -79,6 +86,23 @@ export default function ExplorePage() {
         <h1>Explore</h1>
         <p className="hint">Models forged by the community.</p>
       </div>
+
+      {user && (
+        <div className="explore-feed-tabs">
+          <button
+            className={`feed-tab ${feed === 'all' ? 'active' : ''}`}
+            onClick={() => update({ feed: '' })}
+          >
+            All
+          </button>
+          <button
+            className={`feed-tab ${feed === 'following' ? 'active' : ''}`}
+            onClick={() => update({ feed: 'following' })}
+          >
+            Following
+          </button>
+        </div>
+      )}
 
       <form
         className="explore-search"
@@ -129,7 +153,7 @@ export default function ExplorePage() {
             )}
             {posts && ` · ${posts.length} result${posts.length === 1 ? '' : 's'}`}
           </span>
-          <button className="link-button" onClick={() => setParams({})}>
+          <button className="link-button" onClick={() => update({ tag: '', q: '' })}>
             Clear
           </button>
         </div>
