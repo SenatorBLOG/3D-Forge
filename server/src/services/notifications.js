@@ -1,5 +1,6 @@
 import { dbReady } from '../db.js'
 import Notification from '../models/Notification.js'
+import { load, flush } from './persistence.js'
 
 // Activity notifications. In-memory when no Mongo (keyless dev), Mongo when
 // connected — same dual-store pattern as the rest of the project.
@@ -7,6 +8,18 @@ import Notification from '../models/Notification.js'
 const memNotifs = [] // newest first
 let memSeq = 1
 const MAX = 500
+
+// Hydrate from the dev file (no-op under Mongo/tests).
+{
+  const saved = load('notifications', null)
+  if (saved) {
+    memNotifs.push(...(saved.notifs || []).slice(0, MAX))
+    memSeq = saved.seq ?? memSeq
+  }
+}
+
+const saveNotifs = () =>
+  flush('notifications', { notifs: memNotifs, seq: memSeq })
 
 const publicNotif = (n) => ({
   id: n.id,
@@ -38,6 +51,7 @@ export async function notify({ recipientId, type, actor, postId, postTitle }) {
   const n = { ...base, id: String(memSeq++), createdAt: new Date().toISOString() }
   memNotifs.unshift(n)
   if (memNotifs.length > MAX) memNotifs.pop()
+  saveNotifs()
   return publicNotif(n)
 }
 
@@ -65,5 +79,12 @@ export async function markAllRead(userId) {
     await Notification.updateMany({ userId, read: false }, { read: true })
     return
   }
-  for (const n of memNotifs) if (n.userId === userId) n.read = true
+  let changed = false
+  for (const n of memNotifs) {
+    if (n.userId === userId && !n.read) {
+      n.read = true
+      changed = true
+    }
+  }
+  if (changed) saveNotifs()
 }

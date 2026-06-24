@@ -1,5 +1,6 @@
 import { dbReady } from '../db.js'
 import Post from '../models/Post.js'
+import { load, flush } from './persistence.js'
 
 // Persists to Mongo when connected; otherwise an in-memory ring buffer keeps the
 // community feed working in keyless/mock dev.
@@ -8,6 +9,17 @@ const memPosts = [] // newest first
 let memSeq = 1
 const MAX = 200
 const MAX_TAGS = 6
+
+// Hydrate from the dev file (no-op under Mongo/tests).
+{
+  const saved = load('posts', null)
+  if (saved) {
+    memPosts.push(...(saved.posts || []).slice(0, MAX))
+    memSeq = saved.seq ?? memSeq
+  }
+}
+
+const savePosts = () => flush('posts', { posts: memPosts, seq: memSeq })
 
 // "#Robot, sci fi" → ['robot', 'sci-fi']: lowercase, hyphenate spaces, drop
 // leading '#', keep [a-z0-9-], dedupe, cap length + count.
@@ -62,6 +74,7 @@ export async function createPost(user, { title, modelUrl, description, tags }) {
   const p = { ...base, id: String(memSeq++), createdAt: new Date().toISOString() }
   memPosts.unshift(p)
   if (memPosts.length > MAX) memPosts.pop()
+  savePosts()
   return publicPost(p)
 }
 

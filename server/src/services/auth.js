@@ -2,6 +2,7 @@ import bcrypt from 'bcryptjs'
 import jwt from 'jsonwebtoken'
 import { dbReady } from '../db.js'
 import User from '../models/User.js'
+import { load, flush } from './persistence.js'
 
 // Accounts persist to Mongo when connected; otherwise an in-memory store keeps
 // auth working in the keyless/mock dev setup (same pattern as history/meshy).
@@ -15,6 +16,19 @@ if (!process.env.JWT_SECRET) {
 
 const memUsers = new Map() // username -> { id, username, passwordHash, createdAt }
 let memSeq = 1
+
+// Hydrate from the dev file (no-op under Mongo/tests). The Map is stored as a
+// plain array of users so it round-trips through JSON.
+{
+  const saved = load('users', null)
+  if (saved) {
+    for (const u of saved.users || []) memUsers.set(u.username, u)
+    memSeq = saved.seq ?? memSeq
+  }
+}
+
+const saveUsers = () =>
+  flush('users', { users: [...memUsers.values()], seq: memSeq })
 
 const publicUser = (u) => ({ id: u.id, username: u.username, createdAt: u.createdAt })
 
@@ -41,6 +55,7 @@ export async function register(username, password) {
     createdAt: new Date().toISOString(),
   }
   memUsers.set(username, u)
+  saveUsers()
   return { token: signToken(u), user: publicUser(u) }
 }
 

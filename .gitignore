@@ -10,6 +10,9 @@ build/
 .env.*
 !.env.example
 
+# dev-mode file persistence (local data when running without MongoDB)
+server/.devdata/
+
 # logs
 *.log
 npm-debug.log*

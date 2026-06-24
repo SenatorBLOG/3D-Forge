@@ -67,7 +67,11 @@ truth for scope; this file is the working reference for implementation.
 - ✅ Viewer skeleton: loads `client/public/models/robotic_hand.glb`, orbit controls,
   raycast click selection with a visual marker, coordinates shown in the sidebar.
 - ✅ Server skeleton: `/api/health` live; Mongo connection optional (server runs
-  without a DB for local dev).
+  without a DB for local dev). Without `MONGODB_URI`, the in-memory stores
+  (accounts, posts, likes, comments, notifications, history) are snapshotted to a
+  gitignored `server/.devdata/store.json` so they survive restarts; the file
+  layer is disabled under tests and goes dormant once Mongo is connected
+  (`DEV_PERSIST=0` opts out).
 - ✅ Text-to-3D pipeline (M2): `POST /api/generate` → Meshy preview task →
   `GET /api/generate/:taskId` polling → generated GLB loads in the viewer.
   Built-in mock mode (no `MESHY_API_KEY`) simulates the lifecycle for free;

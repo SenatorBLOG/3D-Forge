@@ -1,5 +1,6 @@
 import GeneratedModel from '../models/GeneratedModel.js'
 import SpatialPromptRecord from '../models/SpatialPromptRecord.js'
+import { load, flush } from './persistence.js'
 
 // Session-scoped version history: an in-memory ring buffer recorded for every
 // generation/edit task, so the History panel works without a database.
@@ -7,6 +8,13 @@ import SpatialPromptRecord from '../models/SpatialPromptRecord.js'
 
 const MAX_ENTRIES = 100
 const memory = []
+
+// Hydrate from the dev file (no-op under Mongo/tests). This module has no
+// dbReady() fork, so persistence relies on its own isEnabled() guard plus the
+// setActive(false) toggle index.js flips once Mongo owns the data.
+memory.push(...(load('history', []) || []).slice(0, MAX_ENTRIES))
+
+const saveHistory = () => flush('history', memory)
 
 export function recordTask(entry) {
   memory.unshift({
@@ -17,6 +25,7 @@ export function recordTask(entry) {
     createdAt: new Date().toISOString(),
   })
   if (memory.length > MAX_ENTRIES) memory.pop()
+  saveHistory()
 }
 
 export function updateTask(taskId, status, modelUrl) {
@@ -24,6 +33,7 @@ export function updateTask(taskId, status, modelUrl) {
   if (entry) {
     entry.status = status
     entry.modelUrl = modelUrl
+    saveHistory()
   }
 }
 
@@ -32,6 +42,7 @@ export function updateEvaluation(taskId, evaluation) {
   const entry = memory.find((e) => e.taskId === taskId)
   if (!entry) return false
   entry.evaluation = evaluation
+  saveHistory()
   return true
 }
 
