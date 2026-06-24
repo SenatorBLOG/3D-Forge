@@ -78,12 +78,22 @@ export async function createPost(user, { title, modelUrl, description, tags }) {
   return publicPost(p)
 }
 
-export async function listPosts({ authorId, authorUsername, tag, q, limit = 50 } = {}) {
+export async function listPosts({
+  authorId,
+  authorIds,
+  authorUsername,
+  tag,
+  q,
+  limit = 50,
+} = {}) {
   const query = typeof q === 'string' ? q.trim().toLowerCase() : ''
   const wantTag = tag ? normalizeTags(tag)[0] : undefined
+  // an empty authorIds list means "follows nobody" → no posts (not "all posts")
+  if (authorIds && authorIds.length === 0) return []
   if (dbReady()) {
     const filter = {}
     if (authorId) filter.authorId = authorId
+    if (authorIds) filter.authorId = { $in: authorIds }
     if (authorUsername) filter.authorUsername = authorUsername
     if (wantTag) filter.tags = wantTag
     if (query) {
@@ -93,8 +103,10 @@ export async function listPosts({ authorId, authorUsername, tag, q, limit = 50 }
     const docs = await Post.find(filter).sort({ createdAt: -1 }).limit(limit).lean()
     return docs.map((d) => publicPost({ ...d, id: String(d._id) }))
   }
+  const idSet = authorIds ? new Set(authorIds) : null
   const list = memPosts.filter((p) => {
     if (authorId && p.authorId !== authorId) return false
+    if (idSet && !idSet.has(p.authorId)) return false
     if (authorUsername && p.authorUsername !== authorUsername) return false
     if (wantTag && !(p.tags || []).includes(wantTag)) return false
     if (query) {

@@ -100,3 +100,14 @@ export async function getUserById(id) {
   for (const u of memUsers.values()) if (u.id === id) return publicUser(u)
   return null
 }
+
+export async function getUserByUsername(username) {
+  if (dbReady()) {
+    const doc = await User.findOne({ username }).lean()
+    return doc
+      ? publicUser({ id: String(doc._id), username: doc.username, createdAt: doc.createdAt })
+      : null
+  }
+  const u = memUsers.get(username)
+  return u ? publicUser(u) : null
+}

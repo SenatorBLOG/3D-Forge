@@ -40,7 +40,7 @@ export async function notify({ recipientId, type, actor, postId, postTitle }) {
     type,
     actorId: actor.id,
     actorUsername: actor.username,
-    postId,
+    postId: postId ?? null, // null for 'follow'
     postTitle: postTitle || '',
     read: false,
   }

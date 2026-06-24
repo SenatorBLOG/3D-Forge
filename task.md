@@ -26,7 +26,7 @@ posts, profiles, and a polished multi-screen app. Ten directions:
 - [x] **14. Per-point prompts** — each clicked point carries its own prompt; numbered labels overlaid on the mesh (filled when a prompt is set), click a label → inline popup editor, mirrored in the Selected-points panel; the edit composes a region-annotated instruction (`<region>: <prompt>; …`) from every point
 - [x] **15. Demo seed** — `services/seed.js` fills the gallery on boot (mock mode only, idempotent, non-fatal): 12 posts by 6 demo users with varied tags/likes/comments. Auto-discovers every `.glb` in `client/public/models/` — drop models in and they're used automatically (`SEED_DEMO=false` to disable)
 - [x] **16. Edit/delete your own posts** — `PATCH`/`DELETE /api/posts/:id` (author-only, 403 otherwise); delete cascades to likes/comments/notifications; PostPage shows owner Edit (inline title/tags/description) + Delete (confirm) controls
-- [ ] **17. Follow / Following** — follow users, Following feed, "started following you" notification
+- [x] **17. Follow / Following** — `Follow` model + service; `GET /api/users/:username` (counts + isFollowing), `POST /api/users/:username/follow` (toggle, self-follow 400); `?following=1` feed; ProfilePage follower/following counts + Follow button; Explore "All / Following" tab; "started following you" notification
 - [ ] **18. Model thumbnails on cards** — render each model once to an image, cache by URL, show on PostCard
 
 ## Operational (when going live)
