@@ -10,6 +10,7 @@ import datasetRouter from './routes/dataset.js'
 import authRouter from './routes/auth.js'
 import postsRouter from './routes/posts.js'
 import notificationsRouter from './routes/notifications.js'
+import { seedDemoData } from './services/seed.js'
 
 const app = express()
 app.use(cors())
@@ -30,6 +31,8 @@ app.use('/api/notifications', notificationsRouter)
 
 const port = process.env.PORT || 3001
 await connectDb()
+// populate a demo gallery in mock mode — never blocks boot if it fails
+await seedDemoData().catch((err) => console.error('demo seed failed:', err))
 app.listen(port, () => {
   console.log(`3D Forge API listening on http://localhost:${port}`)
 })
