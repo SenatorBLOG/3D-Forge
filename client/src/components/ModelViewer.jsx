@@ -3,6 +3,7 @@ import * as THREE from 'three'
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
 import MicButton from './MicButton.jsx'
+import { toLoadableUrl } from '../lib/modelUrl.js'
 
 const MARKER_COLOR = 0xff7a1f // molten amber — matches the brand action accent
 
@@ -158,7 +159,7 @@ export default function ModelViewer({
     let model = null
     const loader = new GLTFLoader()
     loader.load(
-      modelUrl,
+      toLoadableUrl(modelUrl),
       (gltf) => {
         if (disposed) {
           disposeObject(gltf.scene)

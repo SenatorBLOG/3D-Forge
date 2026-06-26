@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { toLoadableUrl } from '../lib/modelUrl.js'
 
 const SparkIcon = () => (
   <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
@@ -72,7 +73,7 @@ export default function HistoryPanel({ refreshKey, busy, onLoad }) {
       .slice(0, 40)
       .replace(/[^a-z0-9-_]+/gi, '_')
     try {
-      const res = await fetch(entry.modelUrl)
+      const res = await fetch(toLoadableUrl(entry.modelUrl))
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
       const blob = await res.blob()
       const url = URL.createObjectURL(blob)
