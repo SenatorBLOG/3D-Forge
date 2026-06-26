@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import * as THREE from 'three'
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
+import MicButton from './MicButton.jsx'
 
 const MARKER_COLOR = 0xff7a1f // molten amber — matches the brand action accent
 
@@ -334,14 +335,22 @@ export default function ModelViewer({
               ✕
             </button>
           </div>
-          <textarea
-            ref={popupRef}
-            className="point-popup-input"
-            value={selected.prompt || ''}
-            onChange={(e) => onPromptChange?.(selectedIndex, e.target.value)}
-            placeholder={`e.g. "make this finger longer"`}
-            rows={3}
-          />
+          <div className="input-with-mic">
+            <textarea
+              ref={popupRef}
+              className="point-popup-input"
+              value={selected.prompt || ''}
+              onChange={(e) => onPromptChange?.(selectedIndex, e.target.value)}
+              placeholder={`e.g. "make this finger longer"`}
+              rows={3}
+            />
+            <MicButton
+              onTranscript={(text) => {
+                const cur = selected.prompt || ''
+                onPromptChange?.(selectedIndex, cur.trim() ? `${cur.trim()} ${text}` : text)
+              }}
+            />
+          </div>
         </div>
       )}
 

@@ -65,6 +65,29 @@ export default function HistoryPanel({ refreshKey, busy, onLoad }) {
     }
   }
 
+  // download a finished model's GLB. Same-origin (mock) downloads directly;
+  // a cross-origin Meshy URL that blocks fetch falls back to opening the link.
+  const downloadModel = async (entry) => {
+    const base = String(entry.prompt || entry.instruction || entry.taskId || 'model')
+      .slice(0, 40)
+      .replace(/[^a-z0-9-_]+/gi, '_')
+    try {
+      const res = await fetch(entry.modelUrl)
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      const blob = await res.blob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `${base}.glb`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(url)
+    } catch {
+      window.open(entry.modelUrl, '_blank', 'noopener')
+    }
+  }
+
   const exportJson = async () => {
     try {
       const res = await fetch('/api/dataset')
@@ -136,6 +159,15 @@ export default function HistoryPanel({ refreshKey, busy, onLoad }) {
                       onClick={() => onLoad(entry)}
                     >
                       Load
+                    </button>
+                  )}
+                  {done && entry.modelUrl && (
+                    <button
+                      className="history-load"
+                      onClick={() => downloadModel(entry)}
+                      title="Download this model as .glb"
+                    >
+                      Download
                     </button>
                   )}
                 </div>

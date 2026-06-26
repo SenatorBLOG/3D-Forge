@@ -5,6 +5,7 @@ import GeneratePanel from '../components/GeneratePanel.jsx'
 import HistoryPanel from '../components/HistoryPanel.jsx'
 import CompareView from '../components/CompareView.jsx'
 import PublishPanel from '../components/PublishPanel.jsx'
+import MicButton from '../components/MicButton.jsx'
 import useGenerationTask from '../hooks/useGenerationTask.js'
 
 const DEFAULT_MODEL_URL = '/models/robotic_hand.glb'
@@ -295,14 +296,22 @@ export default function ForgePage() {
                         ✕
                       </button>
                     </div>
-                    <textarea
-                      className="point-prompt"
-                      value={p.prompt || ''}
-                      onChange={(e) => setPointPrompt(i, e.target.value)}
-                      onFocus={() => setSelectedIndex(i)}
-                      placeholder={`Prompt for point ${i + 1} — e.g. "make this finger longer"`}
-                      rows={2}
-                    />
+                    <div className="input-with-mic">
+                      <textarea
+                        className="point-prompt"
+                        value={p.prompt || ''}
+                        onChange={(e) => setPointPrompt(i, e.target.value)}
+                        onFocus={() => setSelectedIndex(i)}
+                        placeholder={`Prompt for point ${i + 1} — e.g. "make this finger longer"`}
+                        rows={2}
+                      />
+                      <MicButton
+                        onTranscript={(text) => {
+                          const cur = p.prompt || ''
+                          setPointPrompt(i, cur.trim() ? `${cur.trim()} ${text}` : text)
+                        }}
+                      />
+                    </div>
                   </div>
                 ))}
               </div>

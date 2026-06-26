@@ -78,6 +78,7 @@ router.post('/', async (req, res) => {
   try {
     taskId = await createPreviewTask(prompt)
   } catch (err) {
+    if (err.code === 'DAILY_LIMIT') return res.status(429).json({ error: err.message })
     console.error('edit generation failed:', err)
     return res.status(502).json({ error: 'Model generation service failed' })
   }

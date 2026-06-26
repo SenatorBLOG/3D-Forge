@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import useGenerationTask from '../hooks/useGenerationTask.js'
+import MicButton from './MicButton.jsx'
 
 // one-click starter prompts — fast onboarding and quick demos
 const QUICK_PROMPTS = ['a small dragon', 'a medieval sword', 'a sci-fi helmet', 'a wooden chair']
@@ -10,6 +11,9 @@ const QUICK_PROMPTS = ['a small dragon', 'a medieval sword', 'a sci-fi helmet', 
  */
 export default function GeneratePanel({ onModelReady, disabled, onGeneratingChange }) {
   const [prompt, setPrompt] = useState('')
+  // which Meshy model to generate with: meshy-5 (cheap, for tests) or
+  // meshy-6 (prettier, more credits). Sent to the server as `model`.
+  const [aiModel, setAiModel] = useState('meshy-5')
   // prompt that produced the in-flight task — reported alongside the result
   const submittedRef = useRef(null)
   const { task, error, generating, start } = useGenerationTask((url) =>
@@ -26,22 +30,29 @@ export default function GeneratePanel({ onModelReady, disabled, onGeneratingChan
     const trimmed = prompt.trim()
     if (!trimmed) return
     submittedRef.current = trimmed
-    start('/api/generate', { prompt: trimmed })
+    start('/api/generate', { prompt: trimmed, model: aiModel })
   }
+
+  // append a spoken phrase to whatever is already in the field
+  const appendSpeech = (text) =>
+    setPrompt((prev) => (prev.trim() ? `${prev.trim()} ${text}` : text))
 
   return (
     <section className="panel">
       <h2>Generate</h2>
       <div className="field">
         <label htmlFor="gen-prompt">Describe a model</label>
-        <textarea
-          id="gen-prompt"
-          rows={3}
-          value={prompt}
-          onChange={(e) => setPrompt(e.target.value)}
-          placeholder='e.g. "a small dragon with big wings"'
-          disabled={generating || disabled}
-        />
+        <div className="input-with-mic">
+          <textarea
+            id="gen-prompt"
+            rows={3}
+            value={prompt}
+            onChange={(e) => setPrompt(e.target.value)}
+            placeholder='e.g. "a small dragon with big wings"'
+            disabled={generating || disabled}
+          />
+          <MicButton onTranscript={appendSpeech} disabled={generating || disabled} />
+        </div>
       </div>
       {!generating && (
         <div className="chips">
@@ -58,6 +69,27 @@ export default function GeneratePanel({ onModelReady, disabled, onGeneratingChan
           ))}
         </div>
       )}
+      <div className="model-select">
+        <span className="model-label">Model</span>
+        <button
+          type="button"
+          className={`chip ${aiModel === 'meshy-5' ? 'chip--on' : ''}`}
+          onClick={() => setAiModel('meshy-5')}
+          disabled={generating || disabled}
+          title="Meshy-5 — cheaper (5 credits), good for tests"
+        >
+          M5 · cheap
+        </button>
+        <button
+          type="button"
+          className={`chip ${aiModel === 'meshy-6' ? 'chip--on' : ''}`}
+          onClick={() => setAiModel('meshy-6')}
+          disabled={generating || disabled}
+          title="Meshy-6 — prettier (20 credits), for the demo"
+        >
+          M6 · pretty
+        </button>
+      </div>
       <button
         className="submit"
         onClick={startGeneration}
