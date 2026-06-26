@@ -149,13 +149,28 @@ export default function ForgePage() {
     setCompare(buildEditBase())
   }
 
-  const onFileChosen = (e) => {
+  const onFileChosen = async (e) => {
     const file = e.target.files?.[0]
     e.target.value = '' // allow re-choosing the same file
     if (!file) return
     setBaseModelPrompt(null)
     setLastEditPrompt(null)
-    swapModel(URL.createObjectURL(file), { isObjectUrl: true })
+    // save to the server so it persists + appears in History (Load works on it);
+    // fall back to a view-only object URL if the upload fails
+    try {
+      const name = file.name.replace(/\.glb$/i, '')
+      const res = await fetch(`/api/models/upload?name=${encodeURIComponent(name)}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/octet-stream' },
+        body: file,
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`)
+      swapModel(data.url)
+      setHistoryKey((k) => k + 1) // refresh History to show the new card
+    } catch {
+      swapModel(URL.createObjectURL(file), { isObjectUrl: true })
+    }
   }
 
   const loadFromUrl = () => {

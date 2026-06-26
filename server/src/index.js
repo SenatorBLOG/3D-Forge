@@ -3,7 +3,7 @@ import express from 'express'
 import cors from 'cors'
 import { connectDb, dbReady } from './db.js'
 import { setActive } from './services/persistence.js'
-import modelsRouter from './routes/models.js'
+import modelsRouter, { UPLOAD_DIR } from './routes/models.js'
 import generateRouter from './routes/generate.js'
 import editRouter from './routes/edit.js'
 import historyRouter from './routes/history.js'
@@ -15,6 +15,8 @@ import notificationsRouter from './routes/notifications.js'
 const app = express()
 app.use(cors())
 app.use(express.json({ limit: '1mb' }))
+// serve user-uploaded models (saved by POST /api/models/upload)
+app.use('/uploads', express.static(UPLOAD_DIR))
 
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', uptime: process.uptime() })
