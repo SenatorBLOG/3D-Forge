@@ -1108,6 +1108,46 @@ body {
   justify-content: space-between;
   align-items: center;
   gap: 8px;
+  flex-wrap: wrap;
+}
+
+.hcard-actions {
+  flex: none;
+  display: flex;
+  gap: 6px;
+  margin-left: auto;
+}
+
+.hbtn {
+  flex: none;
+  padding: 3px 9px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: transparent;
+  color: var(--steel);
+  font-family: var(--font-ui);
+  font-size: 11.5px;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+
+.hbtn:hover:not(:disabled) {
+  background: var(--steel-soft);
+  border-color: var(--steel);
+}
+
+.hbtn:disabled {
+  color: var(--text-faint);
+  cursor: not-allowed;
+}
+
+.hbtn--danger {
+  color: var(--danger);
+}
+
+.hbtn--danger:hover:not(:disabled) {
+  background: rgba(255, 107, 107, 0.12);
+  border-color: var(--danger);
 }
 
 .hcard-time {

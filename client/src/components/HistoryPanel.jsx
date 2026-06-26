@@ -89,6 +89,18 @@ export default function HistoryPanel({ refreshKey, busy, onLoad }) {
     }
   }
 
+  const del = async (taskId) => {
+    try {
+      const res = await fetch(`/api/history/${encodeURIComponent(taskId)}`, {
+        method: 'DELETE',
+      })
+      if (!res.ok) throw new Error((await res.json()).error || `HTTP ${res.status}`)
+      setEntries((es) => es.filter((e) => e.taskId !== taskId))
+    } catch (err) {
+      setError(err.message)
+    }
+  }
+
   const exportJson = async () => {
     try {
       const res = await fetch('/api/dataset')
@@ -153,24 +165,29 @@ export default function HistoryPanel({ refreshKey, busy, onLoad }) {
                   <span className="hcard-time">
                     {new Date(entry.createdAt).toLocaleString()}
                   </span>
-                  {done && entry.modelUrl && (
+                  <div className="hcard-actions">
+                    {done && entry.modelUrl && (
+                      <button className="hbtn" disabled={busy} onClick={() => onLoad(entry)}>
+                        Load
+                      </button>
+                    )}
+                    {done && entry.modelUrl && (
+                      <button
+                        className="hbtn"
+                        onClick={() => downloadModel(entry)}
+                        title="Download this model as .glb"
+                      >
+                        Download
+                      </button>
+                    )}
                     <button
-                      className="history-load"
-                      disabled={busy}
-                      onClick={() => onLoad(entry)}
+                      className="hbtn hbtn--danger"
+                      onClick={() => del(entry.taskId)}
+                      title="Remove from history"
                     >
-                      Load
+                      Delete
                     </button>
-                  )}
-                  {done && entry.modelUrl && (
-                    <button
-                      className="history-load"
-                      onClick={() => downloadModel(entry)}
-                      title="Download this model as .glb"
-                    >
-                      Download
-                    </button>
-                  )}
+                  </div>
                 </div>
                 {isEdit && done && (
                   <div className="rating">

@@ -50,6 +50,15 @@ export function listMemory() {
   return memory
 }
 
+/** Remove a memory entry by taskId; returns the removed entry, or null. */
+export function removeTask(taskId) {
+  const i = memory.findIndex((e) => e.taskId === taskId)
+  if (i === -1) return null
+  const [removed] = memory.splice(i, 1)
+  saveHistory()
+  return removed
+}
+
 /**
  * Persisted history: GeneratedModel + SpatialPromptRecord merged into the
  * unified entry shape, newest first. Coalesces fields that may be missing on
