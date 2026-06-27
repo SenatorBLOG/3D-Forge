@@ -14,6 +14,8 @@ export default function GeneratePanel({ onModelReady, disabled, onGeneratingChan
   // which Meshy model to generate with: meshy-5 (cheap, for tests) or
   // meshy-6 (prettier, more credits). Sent to the server as `model`.
   const [aiModel, setAiModel] = useState('meshy-5')
+  // add the refine (texture/color) stage after preview — costs +10 credits
+  const [textured, setTextured] = useState(false)
   // prompt that produced the in-flight task — reported alongside the result
   const submittedRef = useRef(null)
   const { task, error, generating, start } = useGenerationTask((url) =>
@@ -30,7 +32,11 @@ export default function GeneratePanel({ onModelReady, disabled, onGeneratingChan
     const trimmed = prompt.trim()
     if (!trimmed) return
     submittedRef.current = trimmed
-    start('/api/generate', { prompt: trimmed, model: aiModel })
+    start(
+      '/api/generate',
+      { prompt: trimmed, model: aiModel },
+      { refine: textured, model: aiModel, prompt: trimmed },
+    )
   }
 
   // append a spoken phrase to whatever is already in the field
@@ -90,6 +96,16 @@ export default function GeneratePanel({ onModelReady, disabled, onGeneratingChan
           M6 · pretty
         </button>
       </div>
+      <label className="toggle">
+        <input
+          type="checkbox"
+          checked={textured}
+          onChange={(e) => setTextured(e.target.checked)}
+          disabled={generating || disabled}
+        />
+        Add textures (color){' '}
+        <span className="hint">({textured ? '+10 credits, colored' : 'off — gray preview'})</span>
+      </label>
       <button
         className="submit"
         onClick={startGeneration}

@@ -15,11 +15,16 @@ export default function useGenerationTask(onModelReady) {
   onModelReadyRef.current = onModelReady
   const notifiedRef = useRef(null)
   const pollFailsRef = useRef(0)
+  // two-stage support: { refine, model, prompt }; refinedRef guards the handoff
+  const optsRef = useRef({})
+  const refinedRef = useRef(false)
 
   const generating = !!task && !TERMINAL.includes(task.status)
 
-  const start = async (endpoint, body) => {
+  const start = async (endpoint, body, options = {}) => {
     setError(null)
+    optsRef.current = options
+    refinedRef.current = false
     try {
       const res = await fetch(endpoint, {
         method: 'POST',
@@ -57,6 +62,29 @@ export default function useGenerationTask(onModelReady) {
         )
 
         if (data.status === 'SUCCEEDED') {
+          // preview done + textures requested → kick off the refine stage and
+          // switch polling to the new task; the final model fires onModelReady
+          if (optsRef.current.refine && !refinedRef.current) {
+            refinedRef.current = true
+            try {
+              const r = await fetch('/api/generate/refine', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  previewTaskId: data.taskId,
+                  model: optsRef.current.model,
+                  prompt: optsRef.current.prompt,
+                }),
+              })
+              const rd = await r.json()
+              if (!r.ok) throw new Error(rd.error || `HTTP ${r.status}`)
+              notifiedRef.current = null
+              setTask({ id: rd.taskId, status: 'PENDING', progress: 0, mock: rd.mock })
+            } catch (err) {
+              setError(`Texturing failed: ${err.message}`)
+            }
+            return
+          }
           if (!data.modelUrl) {
             setError('Generation finished but the service returned no model file.')
           } else if (notifiedRef.current !== data.taskId) {

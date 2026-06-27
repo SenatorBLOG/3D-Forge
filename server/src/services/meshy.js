@@ -103,6 +103,25 @@ export async function createPreviewTask(prompt, aiModel = 'meshy-5') {
 }
 
 /**
+ * Start a text-to-3D refine task from a SUCCEEDED preview — this is the stage
+ * that adds color/textures. Resolves to the (new) Meshy task id.
+ */
+export async function createRefineTask(previewTaskId, { aiModel = 'meshy-5' } = {}) {
+  if (isMockMode()) return createMockTask('refine')
+  const data = await meshyFetch('', {
+    method: 'POST',
+    body: JSON.stringify({
+      mode: 'refine',
+      preview_task_id: previewTaskId,
+      ai_model: aiModel,
+      enable_pbr: true,
+      target_formats: ['glb'],
+    }),
+  })
+  return data.result
+}
+
+/**
  * Fetch a task. Resolves to the Meshy task object ({ id, status, progress,
  * model_urls, ... }) or null when the id is unknown — in both mock and real
  * mode, so the route can answer a uniform 404.

@@ -1,9 +1,9 @@
 import { Router } from 'express'
-import { createPreviewTask, getTask, isMockMode } from '../services/meshy.js'
+import { createPreviewTask, createRefineTask, getTask, isMockMode } from '../services/meshy.js'
 import { dbReady } from '../db.js'
 import GeneratedModel from '../models/GeneratedModel.js'
 import SpatialPromptRecord from '../models/SpatialPromptRecord.js'
-import { recordTask, updateTask } from '../services/history.js'
+import { recordTask, updateTask, removeTask } from '../services/history.js'
 
 const router = Router()
 
@@ -45,6 +45,27 @@ router.post('/', async (req, res) => {
   }
 
   res.status(202).json({ taskId, mock: isMockMode() })
+})
+
+// POST /api/generate/refine — add color/textures to a SUCCEEDED preview task
+router.post('/refine', async (req, res) => {
+  const previewTaskId = typeof req.body?.previewTaskId === 'string' ? req.body.previewTaskId : ''
+  if (!previewTaskId) {
+    return res.status(400).json({ error: 'previewTaskId is required' })
+  }
+  const aiModel = req.body?.model === 'meshy-6' ? 'meshy-6' : 'meshy-5'
+  const prompt = typeof req.body?.prompt === 'string' ? req.body.prompt : 'textured model'
+  try {
+    const taskId = await createRefineTask(previewTaskId, { aiModel })
+    // the textured result supersedes the gray preview entry — drop it, keep one card
+    removeTask(previewTaskId)
+    recordTask({ kind: 'generate', taskId, prompt, mock: isMockMode() })
+    res.status(202).json({ taskId, mock: isMockMode() })
+  } catch (err) {
+    if (err.code === 'DAILY_LIMIT') return res.status(429).json({ error: err.message })
+    console.error('refine failed:', err)
+    res.status(502).json({ error: 'Texturing service failed' })
+  }
 })
 
 // GET /api/generate/:taskId — poll task status/progress/result
