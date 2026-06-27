@@ -1,14 +1,23 @@
 import { Router } from 'express'
 import { requireAuth, optionalAuth } from '../middleware/auth.js'
-import { createPost, listPosts, getPost, listTags } from '../services/posts.js'
+import {
+  createPost,
+  listPosts,
+  getPost,
+  listTags,
+  updatePost,
+  deletePost,
+} from '../services/posts.js'
 import {
   toggleLike,
   likeInfo,
   addComment,
   listComments,
   commentCount,
+  removePostSocial,
 } from '../services/social.js'
-import { notify } from '../services/notifications.js'
+import { notify, removePostNotifications } from '../services/notifications.js'
+import { followingIds } from '../services/follows.js'
 
 const router = Router()
 
@@ -23,11 +32,19 @@ const withSocial = async (post, userId) => {
 
 const str = (v) => (typeof v === 'string' ? v : undefined)
 
-// GET /api/posts — public community feed (optional ?author / ?username / ?tag / ?q)
+// GET /api/posts — public community feed.
+// Filters: ?author / ?username / ?tag / ?q, or ?following=1 for your follows' posts
 router.get('/', optionalAuth, async (req, res) => {
   try {
+    // ?following=1 → only posts by people the signed-in user follows. Anonymous
+    // callers get an empty set (not the whole feed) so the filter never leaks.
+    let authorIds
+    if (req.query.following === '1') {
+      authorIds = req.user ? await followingIds(req.user.id) : []
+    }
     const posts = await listPosts({
       authorId: str(req.query.author),
+      authorIds,
       authorUsername: str(req.query.username),
       tag: str(req.query.tag),
       q: str(req.query.q),
@@ -83,6 +100,54 @@ router.post('/', requireAuth, async (req, res) => {
   } catch (err) {
     console.error('create post failed:', err)
     res.status(500).json({ error: 'Failed to publish' })
+  }
+})
+
+// PATCH /api/posts/:id — edit your own post's title / description / tags
+router.patch('/:id', requireAuth, async (req, res) => {
+  try {
+    const post = await getPost(req.params.id)
+    if (!post) return res.status(404).json({ error: 'Post not found' })
+    if (post.authorId !== req.user.id) {
+      return res.status(403).json({ error: 'You can only edit your own posts' })
+    }
+    const fields = {}
+    if (typeof req.body?.title === 'string') {
+      const title = req.body.title.trim()
+      if (title.length < 1 || title.length > 120) {
+        return res.status(400).json({ error: 'title must be 1-120 characters' })
+      }
+      fields.title = title
+    }
+    if (typeof req.body?.description === 'string') {
+      fields.description = req.body.description.slice(0, 600)
+    }
+    if (Array.isArray(req.body?.tags) || typeof req.body?.tags === 'string') {
+      fields.tags = req.body.tags
+    }
+    const updated = await updatePost(req.params.id, fields)
+    res.json({ post: await withSocial(updated, req.user.id) })
+  } catch (err) {
+    console.error('update post failed:', err)
+    res.status(500).json({ error: 'Failed to update post' })
+  }
+})
+
+// DELETE /api/posts/:id — delete your own post (and its likes/comments/notifs)
+router.delete('/:id', requireAuth, async (req, res) => {
+  try {
+    const post = await getPost(req.params.id)
+    if (!post) return res.status(404).json({ error: 'Post not found' })
+    if (post.authorId !== req.user.id) {
+      return res.status(403).json({ error: 'You can only delete your own posts' })
+    }
+    await deletePost(req.params.id)
+    await removePostSocial(req.params.id)
+    await removePostNotifications(req.params.id)
+    res.json({ ok: true })
+  } catch (err) {
+    console.error('delete post failed:', err)
+    res.status(500).json({ error: 'Failed to delete post' })
   }
 })
 

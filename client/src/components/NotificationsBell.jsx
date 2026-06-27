@@ -19,7 +19,11 @@ const Bell = () => (
   </svg>
 )
 
-const verb = (type) => (type === 'like' ? 'liked' : 'commented on')
+const verb = (type) =>
+  type === 'like' ? 'liked' : type === 'follow' ? 'started following you' : 'commented on'
+
+// follow notifications point at the actor's profile; others at the post
+const linkFor = (n) => (n.type === 'follow' ? `/u/${n.actorUsername}` : `/post/${n.postId}`)
 
 /** Bell + unread badge in the top nav; opens a dropdown of recent activity and
  *  marks everything read on open. Polls the unread count while logged in. */
@@ -94,12 +98,14 @@ export default function NotificationsBell() {
               {items.map((n) => (
                 <Link
                   key={n.id}
-                  to={`/post/${n.postId}`}
+                  to={linkFor(n)}
                   className={`notif-item ${n.read ? '' : 'unread'}`}
                   onClick={() => setOpen(false)}
                 >
-                  <span className="notif-actor">@{n.actorUsername}</span> {verb(n.type)}{' '}
-                  <span className="notif-post">{n.postTitle || 'your model'}</span>
+                  <span className="notif-actor">@{n.actorUsername}</span> {verb(n.type)}
+                  {n.type !== 'follow' && (
+                    <> <span className="notif-post">{n.postTitle || 'your model'}</span></>
+                  )}
                 </Link>
               ))}
             </div>

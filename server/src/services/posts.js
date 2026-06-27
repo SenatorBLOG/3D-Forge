@@ -78,12 +78,22 @@ export async function createPost(user, { title, modelUrl, description, tags }) {
   return publicPost(p)
 }
 
-export async function listPosts({ authorId, authorUsername, tag, q, limit = 50 } = {}) {
+export async function listPosts({
+  authorId,
+  authorIds,
+  authorUsername,
+  tag,
+  q,
+  limit = 50,
+} = {}) {
   const query = typeof q === 'string' ? q.trim().toLowerCase() : ''
   const wantTag = tag ? normalizeTags(tag)[0] : undefined
+  // an empty authorIds list means "follows nobody" → no posts (not "all posts")
+  if (authorIds && authorIds.length === 0) return []
   if (dbReady()) {
     const filter = {}
     if (authorId) filter.authorId = authorId
+    if (authorIds) filter.authorId = { $in: authorIds }
     if (authorUsername) filter.authorUsername = authorUsername
     if (wantTag) filter.tags = wantTag
     if (query) {
@@ -93,8 +103,10 @@ export async function listPosts({ authorId, authorUsername, tag, q, limit = 50 }
     const docs = await Post.find(filter).sort({ createdAt: -1 }).limit(limit).lean()
     return docs.map((d) => publicPost({ ...d, id: String(d._id) }))
   }
+  const idSet = authorIds ? new Set(authorIds) : null
   const list = memPosts.filter((p) => {
     if (authorId && p.authorId !== authorId) return false
+    if (idSet && !idSet.has(p.authorId)) return false
     if (authorUsername && p.authorUsername !== authorUsername) return false
     if (wantTag && !(p.tags || []).includes(wantTag)) return false
     if (query) {
@@ -139,4 +151,36 @@ export async function getPost(id) {
   }
   const p = memPosts.find((x) => x.id === id)
   return p ? publicPost(p) : null
+}
+
+// Patch a post's editable fields (only those present in `fields`). Caller
+// enforces ownership. Returns the updated public post, or null if it's gone.
+export async function updatePost(id, fields) {
+  const patch = {}
+  if (fields.title !== undefined) patch.title = fields.title
+  if (fields.description !== undefined) patch.description = fields.description
+  if (fields.tags !== undefined) patch.tags = normalizeTags(fields.tags)
+  if (dbReady()) {
+    const d = await Post.findByIdAndUpdate(id, patch, { new: true })
+      .lean()
+      .catch(() => null)
+    return d ? publicPost({ ...d, id: String(d._id) }) : null
+  }
+  const p = memPosts.find((x) => x.id === id)
+  if (!p) return null
+  Object.assign(p, patch)
+  savePosts()
+  return publicPost(p)
+}
+
+export async function deletePost(id) {
+  if (dbReady()) {
+    const r = await Post.findByIdAndDelete(id).catch(() => null)
+    return !!r
+  }
+  const i = memPosts.findIndex((x) => x.id === id)
+  if (i === -1) return false
+  memPosts.splice(i, 1)
+  savePosts()
+  return true
 }

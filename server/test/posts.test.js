@@ -6,6 +6,8 @@ import {
   getPost,
   listTags,
   normalizeTags,
+  updatePost,
+  deletePost,
 } from '../src/services/posts.js'
 
 // no MONGODB_URI in tests → the in-memory store is exercised
@@ -39,6 +41,24 @@ test('listPosts returns newest first and filters by author', async () => {
 
 test('getPost returns null for unknown id', async () => {
   assert.equal(await getPost('does-not-exist'), null)
+})
+
+test('updatePost patches only provided fields and normalizes tags', async () => {
+  const p = await createPost(alice, { title: 'Old title', modelUrl: '/m.glb', tags: ['a'] })
+  const up = await updatePost(p.id, { title: 'New title', tags: '#Robot, sci fi' })
+  assert.equal(up.title, 'New title')
+  assert.deepEqual(up.tags, ['robot', 'sci-fi'])
+  // description was not provided → unchanged
+  assert.equal(up.description, '')
+  assert.equal((await getPost(p.id)).title, 'New title')
+  assert.equal(await updatePost('nope', { title: 'x' }), null)
+})
+
+test('deletePost removes the post', async () => {
+  const p = await createPost(alice, { title: 'Doomed', modelUrl: '/m.glb' })
+  assert.equal(await deletePost(p.id), true)
+  assert.equal(await getPost(p.id), null)
+  assert.equal(await deletePost(p.id), false) // already gone
 })
 
 test('normalizeTags cleans, hyphenates, dedupes and caps', () => {

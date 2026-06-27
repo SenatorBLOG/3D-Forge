@@ -40,7 +40,7 @@ export async function notify({ recipientId, type, actor, postId, postTitle }) {
     type,
     actorId: actor.id,
     actorUsername: actor.username,
-    postId,
+    postId: postId ?? null, // null for 'follow'
     postTitle: postTitle || '',
     read: false,
   }
@@ -83,6 +83,22 @@ export async function markAllRead(userId) {
   for (const n of memNotifs) {
     if (n.userId === userId && !n.read) {
       n.read = true
+      changed = true
+    }
+  }
+  if (changed) saveNotifs()
+}
+
+// Drop notifications that point at a post (called when the post is deleted).
+export async function removePostNotifications(postId) {
+  if (dbReady()) {
+    await Notification.deleteMany({ postId })
+    return
+  }
+  let changed = false
+  for (let i = memNotifs.length - 1; i >= 0; i--) {
+    if (memNotifs[i].postId === postId) {
+      memNotifs.splice(i, 1)
       changed = true
     }
   }
