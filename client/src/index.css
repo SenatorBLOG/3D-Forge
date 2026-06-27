@@ -688,6 +688,63 @@ body {
   box-shadow: 0 0 0 3px var(--steel-soft);
 }
 
+/* voice input — round mic button pinned to a field's bottom-right */
+.input-with-mic {
+  position: relative;
+}
+
+.input-with-mic > textarea {
+  padding-right: 42px;
+}
+
+.input-with-mic > .mic-btn {
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+}
+
+.mic-btn {
+  flex: none;
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border-radius: 50%;
+  border: 1px solid var(--line);
+  background: var(--panel-2);
+  color: var(--text-dim);
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s, background 0.15s;
+}
+
+.mic-btn:hover:not(:disabled) {
+  color: var(--steel);
+  border-color: var(--steel);
+}
+
+.mic-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.mic-btn--on {
+  color: var(--bg);
+  background: var(--danger);
+  border-color: var(--danger);
+  animation: mic-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes mic-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(255, 107, 107, 0.5);
+  }
+  50% {
+    box-shadow: 0 0 0 5px rgba(255, 107, 107, 0);
+  }
+}
+
 /* ---- buttons ---- */
 
 .submit {
@@ -1051,6 +1108,46 @@ body {
   justify-content: space-between;
   align-items: center;
   gap: 8px;
+  flex-wrap: wrap;
+}
+
+.hcard-actions {
+  flex: none;
+  display: flex;
+  gap: 6px;
+  margin-left: auto;
+}
+
+.hbtn {
+  flex: none;
+  padding: 3px 9px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: transparent;
+  color: var(--steel);
+  font-family: var(--font-ui);
+  font-size: 11.5px;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+
+.hbtn:hover:not(:disabled) {
+  background: var(--steel-soft);
+  border-color: var(--steel);
+}
+
+.hbtn:disabled {
+  color: var(--text-faint);
+  cursor: not-allowed;
+}
+
+.hbtn--danger {
+  color: var(--danger);
+}
+
+.hbtn--danger:hover:not(:disabled) {
+  background: rgba(255, 107, 107, 0.12);
+  border-color: var(--danger);
 }
 
 .hcard-time {
@@ -1120,6 +1217,28 @@ body {
 
 .rating .star-clear:hover {
   color: var(--danger);
+}
+
+/* ---- generation model selector (M5 / M6) ---- */
+.model-select {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 2px 0 8px;
+}
+
+.model-select .model-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--text-dim);
+  margin-right: 2px;
+}
+
+.chip.chip--on {
+  border-color: var(--forge);
+  color: var(--forge);
+  box-shadow: 0 0 0 2px var(--forge-glow);
 }
 
 /* ---- scrollbars ---- */

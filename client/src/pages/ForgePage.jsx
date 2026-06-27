@@ -5,6 +5,7 @@ import GeneratePanel from '../components/GeneratePanel.jsx'
 import HistoryPanel from '../components/HistoryPanel.jsx'
 import CompareView from '../components/CompareView.jsx'
 import PublishPanel from '../components/PublishPanel.jsx'
+import MicButton from '../components/MicButton.jsx'
 import useGenerationTask from '../hooks/useGenerationTask.js'
 
 const DEFAULT_MODEL_URL = '/models/robotic_hand.glb'
@@ -37,6 +38,9 @@ export default function ForgePage() {
   const pendingEditPromptRef = useRef(null)
   const [lastEditPrompt, setLastEditPrompt] = useState(null) // { text, refinedBy }
   const [genBusy, setGenBusy] = useState(false)
+  // an uploaded file being previewed but not yet saved to History (explicit Save)
+  const [pendingFile, setPendingFile] = useState(null)
+  const [saving, setSaving] = useState(false)
   const [historyKey, setHistoryKey] = useState(0)
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const [compare, setCompare] = useState(null)
@@ -51,6 +55,8 @@ export default function ForgePage() {
       objectUrlRef.current = null
     }
     if (isObjectUrl) objectUrlRef.current = url
+    // any model switch discards an unsaved upload preview (re-set by onFileChosen)
+    setPendingFile(null)
     setPoints([])
     setSelectedIndex(null)
     setModelError(null)
@@ -148,13 +154,39 @@ export default function ForgePage() {
     setCompare(buildEditBase())
   }
 
+  // upload = preview only (view-only object URL); History gets nothing until the
+  // user explicitly clicks "Save to History" (keeps History uncluttered)
   const onFileChosen = (e) => {
     const file = e.target.files?.[0]
     e.target.value = '' // allow re-choosing the same file
     if (!file) return
     setBaseModelPrompt(null)
     setLastEditPrompt(null)
-    swapModel(URL.createObjectURL(file), { isObjectUrl: true })
+    swapModel(URL.createObjectURL(file), { isObjectUrl: true }) // clears pendingFile
+    setPendingFile(file) // mark as previewed-but-unsaved
+  }
+
+  // explicit save: store the previewed upload on the server + add to History
+  const saveUpload = async () => {
+    if (!pendingFile || saving) return
+    setSaving(true)
+    try {
+      const name = pendingFile.name.replace(/\.glb$/i, '')
+      const res = await fetch(`/api/models/upload?name=${encodeURIComponent(name)}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/octet-stream' },
+        body: pendingFile,
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`)
+      swapModel(data.url) // switch to the stored URL + clear pendingFile
+      setHistoryKey((k) => k + 1) // refresh History to show the new card
+    } catch (err) {
+      setModelError(`Couldn't save the model: ${err.message}`)
+      setModelStatus('error')
+    } finally {
+      setSaving(false)
+    }
   }
 
   const loadFromUrl = () => {
@@ -231,6 +263,16 @@ export default function ForgePage() {
             Upload .glb
             <input type="file" accept=".glb" hidden onChange={onFileChosen} />
           </label>
+          {pendingFile && (
+            <>
+              <span className="hint">
+                Previewing “{pendingFile.name}” — not saved yet.
+              </span>
+              <button className="submit" onClick={saveUpload} disabled={saving}>
+                {saving ? 'Saving…' : 'Save to History'}
+              </button>
+            </>
+          )}
           <div className="url-row">
             <input
               type="text"
@@ -295,14 +337,22 @@ export default function ForgePage() {
                         ✕
                       </button>
                     </div>
-                    <textarea
-                      className="point-prompt"
-                      value={p.prompt || ''}
-                      onChange={(e) => setPointPrompt(i, e.target.value)}
-                      onFocus={() => setSelectedIndex(i)}
-                      placeholder={`Prompt for point ${i + 1} — e.g. "make this finger longer"`}
-                      rows={2}
-                    />
+                    <div className="input-with-mic">
+                      <textarea
+                        className="point-prompt"
+                        value={p.prompt || ''}
+                        onChange={(e) => setPointPrompt(i, e.target.value)}
+                        onFocus={() => setSelectedIndex(i)}
+                        placeholder={`Prompt for point ${i + 1} — e.g. "make this finger longer"`}
+                        rows={2}
+                      />
+                      <MicButton
+                        onTranscript={(text) => {
+                          const cur = p.prompt || ''
+                          setPointPrompt(i, cur.trim() ? `${cur.trim()} ${text}` : text)
+                        }}
+                      />
+                    </div>
                   </div>
                 ))}
               </div>

@@ -20,11 +20,14 @@ router.post('/', async (req, res) => {
   if (prompt.length > 600) {
     return res.status(400).json({ error: 'prompt must be 600 characters or fewer' })
   }
+  // meshy-5 (cheap) by default; meshy-6 is prettier but costs more credits
+  const aiModel = req.body?.model === 'meshy-6' ? 'meshy-6' : 'meshy-5'
 
   let taskId
   try {
-    taskId = await createPreviewTask(prompt)
+    taskId = await createPreviewTask(prompt, aiModel)
   } catch (err) {
+    if (err.code === 'DAILY_LIMIT') return res.status(429).json({ error: err.message })
     console.error('generate failed:', err)
     return res.status(502).json({ error: 'Model generation service failed' })
   }

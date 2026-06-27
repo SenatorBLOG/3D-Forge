@@ -17,6 +17,8 @@ import { seedDemoData } from './services/seed.js'
 const app = express()
 app.use(cors())
 app.use(express.json({ limit: '1mb' }))
+// serve user-uploaded models (saved by POST /api/models/upload)
+app.use('/uploads', express.static(UPLOAD_DIR))
 
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', uptime: process.uptime() })

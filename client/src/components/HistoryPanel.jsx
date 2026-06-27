@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { toLoadableUrl } from '../lib/modelUrl.js'
 
 const SparkIcon = () => (
   <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
@@ -60,6 +61,41 @@ export default function HistoryPanel({ refreshKey, busy, onLoad }) {
       setEntries((es) =>
         es.map((e) => (e.taskId === taskId ? { ...e, evaluation } : e)),
       )
+    } catch (err) {
+      setError(err.message)
+    }
+  }
+
+  // download a finished model's GLB. Same-origin (mock) downloads directly;
+  // a cross-origin Meshy URL that blocks fetch falls back to opening the link.
+  const downloadModel = async (entry) => {
+    const base = String(entry.prompt || entry.instruction || entry.taskId || 'model')
+      .slice(0, 40)
+      .replace(/[^a-z0-9-_]+/gi, '_')
+    try {
+      const res = await fetch(toLoadableUrl(entry.modelUrl))
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      const blob = await res.blob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `${base}.glb`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(url)
+    } catch {
+      window.open(entry.modelUrl, '_blank', 'noopener')
+    }
+  }
+
+  const del = async (taskId) => {
+    try {
+      const res = await fetch(`/api/history/${encodeURIComponent(taskId)}`, {
+        method: 'DELETE',
+      })
+      if (!res.ok) throw new Error((await res.json()).error || `HTTP ${res.status}`)
+      setEntries((es) => es.filter((e) => e.taskId !== taskId))
     } catch (err) {
       setError(err.message)
     }
@@ -129,15 +165,29 @@ export default function HistoryPanel({ refreshKey, busy, onLoad }) {
                   <span className="hcard-time">
                     {new Date(entry.createdAt).toLocaleString()}
                   </span>
-                  {done && entry.modelUrl && (
+                  <div className="hcard-actions">
+                    {done && entry.modelUrl && (
+                      <button className="hbtn" disabled={busy} onClick={() => onLoad(entry)}>
+                        Load
+                      </button>
+                    )}
+                    {done && entry.modelUrl && (
+                      <button
+                        className="hbtn"
+                        onClick={() => downloadModel(entry)}
+                        title="Download this model as .glb"
+                      >
+                        Download
+                      </button>
+                    )}
                     <button
-                      className="history-load"
-                      disabled={busy}
-                      onClick={() => onLoad(entry)}
+                      className="hbtn hbtn--danger"
+                      onClick={() => del(entry.taskId)}
+                      title="Remove from history"
                     >
-                      Load
+                      Delete
                     </button>
-                  )}
+                  </div>
                 </div>
                 {isEdit && done && (
                   <div className="rating">

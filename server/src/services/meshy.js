@@ -9,6 +9,33 @@ const apiKey = () => process.env.MESHY_API_KEY
 
 export const isMockMode = () => !apiKey() || apiKey() === 'mock'
 
+// --- cost guard: cap real (credit-spending) generations per day ----------
+// Mock mode is never limited. The counter lives in memory: it resets daily and
+// also resets on server restart, so the developer can always get past it by
+// raising MESHY_DAILY_LIMIT or restarting. Protects against runaway loops / a
+// tester accidentally burning the Meshy credit balance.
+const DAILY_LIMIT = Number(process.env.MESHY_DAILY_LIMIT || 15)
+let limitDay = ''
+let usedToday = 0
+
+function enforceDailyLimit() {
+  const today = new Date().toISOString().slice(0, 10)
+  if (today !== limitDay) {
+    limitDay = today
+    usedToday = 0
+  }
+  if (usedToday >= DAILY_LIMIT) {
+    const err = new Error(
+      `Daily real-generation limit reached (${DAILY_LIMIT}). ` +
+        'Raise MESHY_DAILY_LIMIT in server/.env or restart the server.',
+    )
+    err.code = 'DAILY_LIMIT'
+    err.status = 429
+    throw err
+  }
+  usedToday += 1
+}
+
 // --- mock implementation -------------------------------------------------
 
 const MOCK_DURATION_MS = 8000
@@ -61,12 +88,16 @@ async function meshyFetch(path, options = {}) {
   return res.json()
 }
 
-/** Start a text-to-3D preview task; resolves to the Meshy task id. */
-export async function createPreviewTask(prompt) {
+/**
+ * Start a text-to-3D preview task; resolves to the Meshy task id.
+ * `aiModel` is 'meshy-5' (cheap, default) or 'meshy-6' (prettier, more credits).
+ */
+export async function createPreviewTask(prompt, aiModel = 'meshy-5') {
   if (isMockMode()) return createMockTask(prompt)
+  enforceDailyLimit() // throws DAILY_LIMIT once the daily cap is hit
   const data = await meshyFetch('', {
     method: 'POST',
-    body: JSON.stringify({ mode: 'preview', prompt }),
+    body: JSON.stringify({ mode: 'preview', prompt, ai_model: aiModel }),
   })
   return data.result
 }
