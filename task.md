@@ -1,5 +1,9 @@
 # 3D Forge — Tasks
 
+> **▶ Active plan: see [`ROADMAP-v3.md`](ROADMAP-v3.md)** — the v3 "creation platform" month,
+> split into Track A (Mikhail) + Track B (Javid) with weekly checkpoints. This file below is
+> the shipped history (v1, v2, #11–#18).
+
 Living task list. **v1 shipped — now building v2: a community platform.**
 
 ## v2 — Community platform (in progress)
