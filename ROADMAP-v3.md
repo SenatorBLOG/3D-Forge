@@ -102,9 +102,10 @@ mock data so you're never blocked.
 ### Week 3 — Discover & gorgeous community
 - [ ] **A8. Discover page** — theme tabs + filters (3D / Gaming / Collections / Creators),
       infinite grid of community models.
-- [ ] **A9. Hover-reveal gallery card** — card shows rendered model; **on hover, cross-fade to a
-      wireframe/orig view**, show likes ♥, favorite ★, and creator @nick. This is the "make it
-      sexy" card — replace the plain HTML cards everywhere.
+- [x] **A9. Hover-reveal gallery card** — card shows the rendered model; **on hover it cross-fades
+      to a steel wireframe** (+ "wireframe" hint), with likes ♥ and creator @nick. Used everywhere
+      (landing / Explore / profiles) via the shared thumbnailer (renders shaded + wire once per
+      model). *(Pulled forward from Wk3 since A3 is blocked on B1. Favorites ★ deferred — needs a B endpoint.)*
 - [ ] **A10. Creator pages & rich profile** — avatar, banner, followers/following, tabs
       (Creations / Published / Favorites / Badges), edit profile, **Share profile** link.
 - [ ] **A11. Badges/achievements UI** — render achievements as little 3D/medal tiles (reads B's stats).

@@ -1,26 +1,25 @@
 import * as THREE from 'three'
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
 
-// Renders a GLB to a PNG data URL once and caches it by model URL. Cards can
-// then show a real preview without each mounting a live WebGL viewer (browsers
+// Renders a GLB to two PNG data URLs once and caches them by model URL:
+//   { shaded } — the lit model, and
+//   { wire }   — a steel wireframe ("reveal the geometry" on card hover).
+// Cards show a real preview without each mounting a live WebGL viewer (browsers
 // cap concurrent contexts). Renders are serialized through a queue, so at most
 // one transient context exists at a time and it's disposed right after capture.
 
 const WIDTH = 440
 const HEIGHT = 300
+const WIRE_COLOR = 0x5cc8ff // steel — matches the brand data accent
 
-const cache = new Map() // modelUrl -> Promise<dataURL>
+const cache = new Map() // modelUrl -> Promise<{ shaded, wire }>
 let queue = Promise.resolve() // one render at a time
 
-function disposeTree(root) {
-  root?.traverse?.((o) => {
-    o.geometry?.dispose()
-    const mats = Array.isArray(o.material) ? o.material : [o.material]
-    mats.forEach((m) => {
-      if (!m) return
-      Object.values(m).forEach((v) => v?.isTexture && v.dispose())
-      m.dispose()
-    })
+const disposeMaterial = (m) => {
+  if (!m) return
+  ;(Array.isArray(m) ? m : [m]).forEach((mat) => {
+    Object.values(mat).forEach((v) => v?.isTexture && v.dispose())
+    mat.dispose()
   })
 }
 
@@ -51,8 +50,17 @@ function renderThumbnail(modelUrl) {
     rim.position.set(-3, 2, -4)
     scene.add(rim)
 
+    let wireMat
     const teardown = (model) => {
-      disposeTree(model)
+      if (model) {
+        const origMats = []
+        model.traverse((o) => {
+          o.geometry?.dispose()
+          if (o.isMesh && o.userData.origMat) origMats.push(o.userData.origMat)
+        })
+        origMats.forEach(disposeMaterial)
+      }
+      wireMat?.dispose()
       renderer.dispose()
       renderer.forceContextLoss() // release the context immediately
     }
@@ -72,10 +80,24 @@ function renderThumbnail(modelUrl) {
           camera.lookAt(0, 0, 0)
           camera.updateProjectionMatrix()
           scene.add(model)
+
+          // pass 1 — shaded
           renderer.render(scene, camera)
-          const url = canvas.toDataURL('image/png')
+          const shaded = canvas.toDataURL('image/png')
+
+          // pass 2 — steel wireframe (stash originals so we can dispose them)
+          wireMat = new THREE.MeshBasicMaterial({ color: WIRE_COLOR, wireframe: true })
+          model.traverse((o) => {
+            if (o.isMesh) {
+              o.userData.origMat = o.material
+              o.material = wireMat
+            }
+          })
+          renderer.render(scene, camera)
+          const wire = canvas.toDataURL('image/png')
+
           teardown(model)
-          resolve(url)
+          resolve({ shaded, wire })
         } catch (err) {
           teardown()
           reject(err)
@@ -90,7 +112,7 @@ function renderThumbnail(modelUrl) {
   })
 }
 
-/** Get (or start) the cached thumbnail render for a model URL. */
+/** Get (or start) the cached { shaded, wire } render for a model URL. */
 export function getThumbnail(modelUrl) {
   if (!modelUrl) return Promise.reject(new Error('no modelUrl'))
   if (cache.has(modelUrl)) return cache.get(modelUrl)
