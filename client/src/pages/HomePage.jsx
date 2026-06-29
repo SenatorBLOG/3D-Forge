@@ -2,29 +2,30 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import ModelViewer from '../components/ModelViewer.jsx'
 import PostCard from '../components/PostCard.jsx'
-import { useAuth } from '../auth/AuthContext.jsx'
 
-const FEATURES = [
-  {
-    title: 'Generate',
-    body: 'Describe a model in plain text and get a 3D mesh you can spin in the browser.',
-  },
-  {
-    title: 'Edit by region',
-    body: 'Click the exact part you want to change — the system grounds your instruction in 3D space.',
-  },
-  {
-    title: 'Compare & rate',
-    body: 'Run an edit spatially vs as a plain prompt, see both side by side, and rate the result.',
-  },
-]
-
+const THEMES = ['Dragon', 'Sci-fi helmet', 'Castle', 'Anime', 'Vehicle', 'Sword']
 const HOME_LIMIT = 8
 
-/** Landing page: hero with an auto-rotating model showcase, feature cards, and a
- *  live gallery of the community's latest published models (with likes). */
+const ImageIcon = () => (
+  <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor"
+    strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <rect x="3" y="4" width="18" height="16" rx="2.5" />
+    <circle cx="8.5" cy="9.5" r="1.6" />
+    <path d="M21 16l-5-5L5 20" />
+  </svg>
+)
+
+const SparkIcon = () => (
+  <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor"
+    strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <path d="M12 3l1.8 4.7L18.5 9.5 13.8 11.3 12 16l-1.8-4.7L5.5 9.5 10.2 7.7z" />
+    <path d="M19 14.5l.7 1.8 1.8.7-1.8.7-.7 1.8-.7-1.8-1.8-.7 1.8-.7z" />
+  </svg>
+)
+
+/** Landing / "Create" home: greeting, two entry modes (image or describe), theme
+ *  shortcuts, and a live gallery of the community's latest models. */
 export default function HomePage() {
-  const { user } = useAuth()
   const [posts, setPosts] = useState(null)
 
   useEffect(() => {
@@ -46,25 +47,45 @@ export default function HomePage() {
     <div className="home">
       <section className="home-hero">
         <div className="home-copy">
-          <span className="home-eyebrow">AI-assisted 3D, in the browser</span>
+          <span className="home-eyebrow">AI-assisted 3D · in your browser</span>
           <h1 className="home-title">
-            Forge 3D models by <span className="accent">pointing and talking</span>.
+            What do you want to <span className="accent">make today?</span>
           </h1>
           <p className="home-sub">
-            Generate a model from text, click the part you want to change, and describe
-            the edit in plain language. No 3D modelling skills required.
+            Generate a 3D model, then edit it by pointing at the part you want to change.
           </p>
-          <div className="home-cta">
-            <Link className="submit" to="/forge">
-              Open the Forge
+
+          <div className="create-cards">
+            <Link className="create-card" to="/forge?mode=image">
+              <span className="create-icon">
+                <ImageIcon />
+              </span>
+              <h3>Start from an image</h3>
+              <p>Upload or paste a reference — get a 3D model.</p>
+              <span className="create-badge">image → 3D</span>
             </Link>
-            {!user && (
-              <Link className="ghost-button" to="/register">
-                Create an account
-              </Link>
-            )}
+            <Link className="create-card" to="/forge?mode=text">
+              <span className="create-icon steel">
+                <SparkIcon />
+              </span>
+              <h3>Describe it</h3>
+              <p>Tell us what to build in plain words.</p>
+              <span className="create-badge steel">text → 3D</span>
+            </Link>
+          </div>
+
+          <div className="home-themes">
+            <span className="home-themes-label">Or jump into a theme</span>
+            <div className="theme-chips">
+              {THEMES.map((t) => (
+                <Link key={t} className="theme-chip" to={`/explore?q=${encodeURIComponent(t)}`}>
+                  {t}
+                </Link>
+              ))}
+            </div>
           </div>
         </div>
+
         <div className="home-showcase">
           <ModelViewer
             modelUrl="/models/robotic_hand.glb"
@@ -75,21 +96,11 @@ export default function HomePage() {
         </div>
       </section>
 
-      <section className="home-features">
-        {FEATURES.map((f, i) => (
-          <div className="home-feature" key={f.title}>
-            <span className="home-feature-num">{String(i + 1).padStart(2, '0')}</span>
-            <h3>{f.title}</h3>
-            <p>{f.body}</p>
-          </div>
-        ))}
-      </section>
-
       <section className="home-community">
         <div className="home-community-head">
           <div>
             <h2>Forged by the community</h2>
-            <p className="hint">Models people have published — spin them, like them, remix them.</p>
+            <p className="hint">Real models people have published — spin them, like them, remix them.</p>
           </div>
           <Link className="ghost-button" to="/explore">
             Explore all
@@ -106,7 +117,7 @@ export default function HomePage() {
           <div className="home-community-empty">
             <p>No models published yet — be the first.</p>
             <Link className="submit" to="/forge">
-              {user ? 'Publish from the Forge' : 'Open the Forge'}
+              Open the Forge
             </Link>
           </div>
         ) : (
