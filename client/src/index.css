@@ -1789,10 +1789,12 @@ a.ghost-button {
 }
 
 .post-thumb {
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
   height: 150px;
+  overflow: hidden;
   background:
     radial-gradient(circle at 50% 40%, rgba(255, 122, 31, 0.12), transparent 70%),
     var(--panel-2);
@@ -1808,6 +1810,43 @@ a.ghost-button {
   height: 100%;
   object-fit: contain;
   display: block;
+  transition: opacity 0.3s ease;
+}
+
+/* shaded preview by default; on hover it fades out and the wireframe fades in */
+.post-thumb-img.wire {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+}
+
+.post-card:hover .post-thumb-img.shaded {
+  opacity: 0;
+}
+
+.post-card:hover .post-thumb-img.wire {
+  opacity: 1;
+}
+
+.post-thumb-hint {
+  position: absolute;
+  bottom: 8px;
+  right: 8px;
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  color: var(--steel);
+  background: rgba(11, 13, 18, 0.7);
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  padding: 2px 7px;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.post-card:hover .post-thumb-hint {
+  opacity: 1;
 }
 
 .post-card-body {

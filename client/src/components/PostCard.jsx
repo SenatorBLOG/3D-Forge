@@ -5,16 +5,17 @@ import TagList from './TagList.jsx'
 import { getThumbnail } from '../lib/thumbnailer.js'
 
 /** A community feed card. Shows a real model preview rendered once per model URL
- *  (shared cache — no live WebGL viewer per card, which would exhaust the
- *  browser's context limit). Falls back to the logo while rendering / on error. */
+ *  (shared cache — no live WebGL viewer per card). On hover the shaded preview
+ *  cross-fades to a steel wireframe, revealing the geometry. Falls back to the
+ *  logo while rendering / on error. */
 export default function PostCard({ post }) {
-  const [thumb, setThumb] = useState(null)
+  const [thumb, setThumb] = useState(null) // { shaded, wire }
 
   useEffect(() => {
     let cancelled = false
     getThumbnail(post.modelUrl)
-      .then((url) => {
-        if (!cancelled) setThumb(url)
+      .then((urls) => {
+        if (!cancelled) setThumb(urls)
       })
       .catch(() => {})
     return () => {
@@ -26,7 +27,11 @@ export default function PostCard({ post }) {
     <Link className="post-card" to={`/post/${post.id}`}>
       <div className="post-thumb">
         {thumb ? (
-          <img className="post-thumb-img" src={thumb} alt={post.title} loading="lazy" />
+          <>
+            <img className="post-thumb-img shaded" src={thumb.shaded} alt={post.title} loading="lazy" />
+            <img className="post-thumb-img wire" src={thumb.wire} alt="" aria-hidden="true" loading="lazy" />
+            <span className="post-thumb-hint">wireframe</span>
+          </>
         ) : (
           <Logo size={56} />
         )}
