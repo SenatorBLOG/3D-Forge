@@ -19,7 +19,7 @@ export default function TopNav() {
 
       <nav className="topnav-links">
         <NavLink to="/" end>
-          Home
+          Create
         </NavLink>
         <NavLink to="/forge">Forge</NavLink>
         <NavLink to="/explore">Explore</NavLink>

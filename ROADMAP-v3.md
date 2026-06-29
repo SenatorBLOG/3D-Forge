@@ -80,9 +80,10 @@ mock data so you're never blocked.
 ### Week 1 — New shell & "Create" landing
 - [ ] **A1. App shell refresh** — restructure nav: logo · Create · Discover · Community · API ·
       wallet/coins chip · avatar. Mobile-friendly.
-- [ ] **A2. "Create" landing** — hero "What do you want to make today?" with **two entry cards**:
-      *Drop an image* (upload/paste) and *Describe it* (prompt box). Themes row below
-      (chips: Game, Anime, Castle, Dragon, Sci-fi…). Logged-out friendly.
+- [x] **A2. "Create" landing** — hero "What do you want to make today?" with **two entry cards**:
+      *Start from an image* and *Describe it* (→ `/forge?mode=…`), theme chips (→ `/explore?q=`),
+      a live rotating-hand showcase, and the community gallery below. Logged-out friendly. *(nav
+      also renamed Home→Create; full Discover/API/wallet nav lands with those tasks.)*
 - [ ] **A3. Wallet chip UI** — show 3D-token balance in the nav (reads `GET /api/wallet`,
       mock until B ships it). "Get tokens" opens a simple modal.
 - [ ] **A4. Visual polish pass** — page transitions, button/hover states, empty states. No AI-slop;

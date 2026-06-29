@@ -1414,7 +1414,7 @@ a.ghost-button {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 32px;
-  align-items: center;
+  align-items: start;
   padding: 56px 48px;
   max-width: 1200px;
   margin: 0 auto;
@@ -1453,6 +1453,111 @@ a.ghost-button {
   display: flex;
   gap: 12px;
   margin-top: 26px;
+}
+
+/* "Create" landing — two entry modes */
+.create-cards {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+  margin-top: 28px;
+}
+
+.create-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 20px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  text-decoration: none;
+  transition: border-color 0.15s, transform 0.15s, background 0.15s;
+}
+
+.create-card:hover {
+  border-color: var(--forge);
+  transform: translateY(-2px);
+  background: var(--panel-2);
+}
+
+.create-icon {
+  width: 44px;
+  height: 44px;
+  display: grid;
+  place-items: center;
+  border-radius: 10px;
+  background: rgba(255, 122, 31, 0.12);
+  color: var(--forge);
+  margin-bottom: 4px;
+}
+
+.create-icon.steel {
+  background: var(--steel-soft);
+  color: var(--steel);
+}
+
+.create-card h3 {
+  font-size: 17px;
+  color: var(--text);
+}
+
+.create-card p {
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--text-dim);
+}
+
+.create-badge {
+  align-self: flex-start;
+  margin-top: 8px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.5px;
+  color: var(--forge);
+  border: 1px solid var(--forge);
+  border-radius: 999px;
+  padding: 3px 10px;
+}
+
+.create-badge.steel {
+  color: var(--steel);
+  border-color: var(--steel);
+}
+
+.home-themes {
+  margin-top: 26px;
+}
+
+.home-themes-label {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+
+.theme-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.theme-chip {
+  font-size: 13px;
+  color: var(--text-dim);
+  text-decoration: none;
+  padding: 7px 14px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--panel-2);
+  transition: color 0.15s, border-color 0.15s;
+}
+
+.theme-chip:hover {
+  color: var(--steel);
+  border-color: var(--steel);
 }
 
 .home-cta .submit,
