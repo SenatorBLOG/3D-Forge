@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs'
+import { readFileSync, rmSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { join, basename } from 'node:path'
 import { dbReady } from '../db.js'
@@ -52,10 +52,20 @@ export async function createImage({ id, url, source, prompt = '', mime = '', own
   }
   const rec = { ...base, createdAt: new Date().toISOString() }
   memImages.set(id, rec)
-  // cap the metadata index so a long dev session's map doesn't grow unbounded.
-  // (The bytes on disk are dev-only data; eviction here drops the pointer, not
-  // the file — B4 deletes the file too once the service owns IMAGE_DIR.)
-  if (memImages.size > MAX) memImages.delete(memImages.keys().next().value)
+  // cap the metadata index so a long dev session's map doesn't grow unbounded,
+  // and delete the evicted image's bytes too so disk usage stays bounded.
+  if (memImages.size > MAX) {
+    const oldestId = memImages.keys().next().value
+    const evicted = memImages.get(oldestId)
+    memImages.delete(oldestId)
+    if (evicted?.url) {
+      try {
+        rmSync(join(IMAGE_DIR, basename(evicted.url)), { force: true })
+      } catch (err) {
+        console.error('evicted image cleanup failed:', err)
+      }
+    }
+  }
   saveImages()
   return publicImage(rec)
 }
