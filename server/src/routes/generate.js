@@ -5,40 +5,51 @@ import GeneratedModel from '../models/GeneratedModel.js'
 import SpatialPromptRecord from '../models/SpatialPromptRecord.js'
 import { recordTask, updateTask, removeTask } from '../services/history.js'
 import { optionalAuth } from '../middleware/auth.js'
-import { getWallet, spend } from '../services/wallet.js'
+import { getWallet, spend, grant } from '../services/wallet.js'
 import { generationCost, priceList } from '../services/costs.js'
 
 const router = Router()
 
 const TERMINAL_STATUSES = ['SUCCEEDED', 'FAILED', 'CANCELED']
 
-// Cost-gate a generation: free + ungated in mock mode; in real (keyed) mode it
-// requires a signed-in user with enough 3D-tokens. Returns null when the request
-// may proceed, or a { status, body } to send back (401 / 402). Caller charges
-// AFTER the upstream task actually starts (see chargeGeneration) so a failed
-// generation never costs tokens.
-async function gateGeneration(req, { kind, aiModel }) {
-  const cost = generationCost({ kind, aiModel, mock: isMockMode() })
-  if (cost === 0) return null // mock mode — never gated
-  if (!req.user) {
-    return { status: 401, body: { error: 'Sign in to generate — real generation costs 3D-tokens' } }
-  }
-  const { balance } = await getWallet(req.user.id)
-  if (balance < cost) {
-    return { status: 402, body: { error: 'Not enough 3D-tokens', cost, balance } }
-  }
-  return null
-}
-
-// Charge the user after a real task has started. Best-effort: a rare race (balance
-// dropped since the pre-check) only logs — we don't fail an already-started job.
+// Cost-gate a generation by charging UP FRONT: free + ungated in mock mode; in
+// real (keyed) mode it requires a signed-in user and atomically spends the cost
+// before the upstream task starts. Spending atomically (wallet.spend uses a
+// conditional $inc) is what closes the race — two concurrent requests can't both
+// pass on the same balance. Returns { ok:true, cost } to proceed, or
+// { ok:false, status, body } (401 / 402) to reject. If the task then fails to
+// start, the caller must refundGeneration() so a failed generation costs nothing.
 async function chargeGeneration(req, { kind, aiModel }) {
   const cost = generationCost({ kind, aiModel, mock: isMockMode() })
-  if (cost === 0 || !req.user) return
+  if (cost === 0) return { ok: true, cost } // mock mode — never gated/charged
+  if (!req.user) {
+    return {
+      ok: false,
+      status: 401,
+      body: { error: 'Sign in to generate — real generation costs 3D-tokens' },
+    }
+  }
   try {
     await spend(req.user.id, cost, `${kind}:${aiModel}`)
   } catch (err) {
-    console.error('post-generation charge failed:', err)
+    if (err.code === 'INSUFFICIENT') {
+      const { balance } = await getWallet(req.user.id)
+      return { ok: false, status: 402, body: { error: 'Not enough 3D-tokens', cost, balance } }
+    }
+    throw err
+  }
+  return { ok: true, cost }
+}
+
+// Give the tokens back when an already-charged generation fails to start.
+// Best-effort: a failed refund only logs (the user can be made whole manually).
+async function refundGeneration(req, { kind, aiModel }) {
+  const cost = generationCost({ kind, aiModel, mock: isMockMode() })
+  if (cost === 0 || !req.user) return
+  try {
+    await grant(req.user.id, cost, `refund:${kind}:${aiModel}`)
+  } catch (err) {
+    console.error('generation refund failed:', err)
   }
 }
 
@@ -56,21 +67,20 @@ router.post('/', optionalAuth, async (req, res) => {
   // meshy-5 (cheap) by default; meshy-6 is prettier but costs more credits
   const aiModel = req.body?.model === 'meshy-6' ? 'meshy-6' : 'meshy-5'
 
-  // cost gating (real mode only — mock stays free): block before spending a
-  // Meshy credit if the user can't pay
-  const gate = await gateGeneration(req, { kind: 'preview', aiModel })
-  if (gate) return res.status(gate.status).json(gate.body)
+  // cost gating (real mode only — mock stays free): charge up front so
+  // concurrent requests can't race the balance check
+  const charge = await chargeGeneration(req, { kind: 'preview', aiModel })
+  if (!charge.ok) return res.status(charge.status).json(charge.body)
 
   let taskId
   try {
     taskId = await createPreviewTask(prompt, aiModel)
   } catch (err) {
+    await refundGeneration(req, { kind: 'preview', aiModel }) // task never started — give it back
     if (err.code === 'DAILY_LIMIT') return res.status(429).json({ error: err.message })
     console.error('generate failed:', err)
     return res.status(502).json({ error: 'Model generation service failed' })
   }
-
-  await chargeGeneration(req, { kind: 'preview', aiModel })
 
   recordTask({ kind: 'generate', taskId, prompt, mock: isMockMode() })
 
@@ -100,25 +110,27 @@ router.post('/refine', optionalAuth, async (req, res) => {
   const aiModel = req.body?.model === 'meshy-6' ? 'meshy-6' : 'meshy-5'
   const prompt = typeof req.body?.prompt === 'string' ? req.body.prompt : 'textured model'
 
-  const gate = await gateGeneration(req, { kind: 'refine', aiModel })
-  if (gate) return res.status(gate.status).json(gate.body)
+  // charge up front (real mode only — mock stays free)
+  const charge = await chargeGeneration(req, { kind: 'refine', aiModel })
+  if (!charge.ok) return res.status(charge.status).json(charge.body)
 
+  let taskId
   try {
-    const taskId = await createRefineTask(previewTaskId, { aiModel })
-    await chargeGeneration(req, { kind: 'refine', aiModel })
-    // the textured result supersedes the gray preview entry — drop it, keep one card
-    removeTask(previewTaskId)
-    recordTask({ kind: 'generate', taskId, prompt, mock: isMockMode() })
-    res.status(202).json({
-      taskId,
-      mock: isMockMode(),
-      cost: generationCost({ kind: 'refine', aiModel, mock: isMockMode() }),
-    })
+    taskId = await createRefineTask(previewTaskId, { aiModel })
   } catch (err) {
+    await refundGeneration(req, { kind: 'refine', aiModel }) // task never started — give it back
     if (err.code === 'DAILY_LIMIT') return res.status(429).json({ error: err.message })
     console.error('refine failed:', err)
-    res.status(502).json({ error: 'Texturing service failed' })
+    return res.status(502).json({ error: 'Texturing service failed' })
   }
+  // the textured result supersedes the gray preview entry — drop it, keep one card
+  removeTask(previewTaskId)
+  recordTask({ kind: 'generate', taskId, prompt, mock: isMockMode() })
+  res.status(202).json({
+    taskId,
+    mock: isMockMode(),
+    cost: generationCost({ kind: 'refine', aiModel, mock: isMockMode() }),
+  })
 })
 
 // GET /api/generate/costs — the token price list for the UI (declared before
