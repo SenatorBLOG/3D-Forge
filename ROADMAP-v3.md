@@ -156,8 +156,15 @@ Write each endpoint's contract in this doc the day before A needs it.
       "renders" an SVG placeholder. → `201 { "image": { id, url, source:"generated", prompt, … }, "stub": true }`.
       <br>• `GET /api/images/:id` → `{ "image": { … } }` or `404`. Files served at `/images/<id>.<ext>`.
       The `image.id` is what **B4** consumes as `imageId`.
-- [ ] **B4. Image→3D** — extend the generate pipeline to accept an image input (Meshy image-to-3D
+- [x] **B4. Image→3D** — extend the generate pipeline to accept an image input (Meshy image-to-3D
       when keyed; mock returns a stub GLB). Contract: `POST /api/generate { mode:'image', imageId }`.
+      <br>**Contract (for A6):** `POST /api/generate` now takes an optional `mode` (`"text"` default | `"image"`).
+      <br>• `mode:"text"` — `{ prompt, model? }` (unchanged).
+      <br>• `mode:"image"` — `{ mode:"image", imageId, model? }` where `imageId` comes from B3.
+      `404` for an unknown imageId. Cost-gated exactly like a text preview (tier price; mock = free).
+      <br>Both reply `202 { taskId, mode, mock, cost }`; poll `GET /api/generate/:taskId` as before
+      (it now resolves either text- or image-to-3D tasks). Mock returns the stub GLB; real (keyed)
+      mode calls Meshy image-to-3D, inlining the stored image as a data URI.
 
 ### Week 2 — Unified generation pipeline + model metadata
 - [ ] **B5. Unified generate API** — one `POST /api/generate` taking `{ mode: 'text'|'image'|'batch',

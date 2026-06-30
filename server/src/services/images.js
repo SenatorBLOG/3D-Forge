@@ -1,6 +1,13 @@
+import { readFileSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
+import { join, basename } from 'node:path'
 import { dbReady } from '../db.js'
 import Image from '../models/Image.js'
 import { load, flush } from './persistence.js'
+
+// where reference image bytes live (gitignored, alongside the dev store). The
+// route writes here; this module reads back for the real image→3D path.
+export const IMAGE_DIR = fileURLToPath(new URL('../../.devdata/images/', import.meta.url))
 
 // Reference-image metadata store for the Image → Model pipeline. In-memory when
 // no Mongo (keyless dev), Mongo when connected — same dual-store pattern as the
@@ -61,6 +68,23 @@ export async function getImage(id) {
   }
   const rec = memImages.get(id)
   return rec ? publicImage(rec) : null
+}
+
+/**
+ * Read a stored image back as a base64 data URI. Meshy's image-to-3D can't
+ * reach our localhost `/images` URLs, so the real pipeline inlines the bytes.
+ * Returns null if the image (record or file) is missing.
+ */
+export async function imageDataUri(id) {
+  const rec = await getImage(id)
+  if (!rec) return null
+  try {
+    const bytes = readFileSync(join(IMAGE_DIR, basename(rec.url)))
+    return `data:${rec.mime || 'application/octet-stream'};base64,${bytes.toString('base64')}`
+  } catch (err) {
+    console.error('image read failed:', err)
+    return null
+  }
 }
 
 /** A user's images, newest-first (for a future "my references" view). */
