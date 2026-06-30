@@ -40,13 +40,23 @@ const taken = () => Object.assign(new Error('Username already taken'), { code: '
 const badCreds = () =>
   Object.assign(new Error('Invalid username or password'), { code: 'BAD_CREDS' })
 
+// The account already exists by this point, so a wallet-grant hiccup must not
+// fail registration (the user couldn't re-register that name). Log and move on.
+const grantStarterSafe = async (userId) => {
+  try {
+    await grantStarter(userId)
+  } catch (err) {
+    console.error('starter token grant failed:', err)
+  }
+}
+
 export async function register(username, password) {
   const passwordHash = await bcrypt.hash(password, 10)
   if (dbReady()) {
     if (await User.findOne({ username }).lean()) throw taken()
     const doc = await User.create({ username, passwordHash })
     const u = { id: String(doc._id), username: doc.username, createdAt: doc.createdAt }
-    await grantStarter(u.id) // new accounts get a simulated starter balance
+    await grantStarterSafe(u.id) // new accounts get a simulated starter balance
     return { token: signToken(u), user: publicUser(u) }
   }
   if (memUsers.has(username)) throw taken()
@@ -58,7 +68,7 @@ export async function register(username, password) {
   }
   memUsers.set(username, u)
   saveUsers()
-  await grantStarter(u.id) // new accounts get a simulated starter balance
+  await grantStarterSafe(u.id) // new accounts get a simulated starter balance
   return { token: signToken(u), user: publicUser(u) }
 }
 

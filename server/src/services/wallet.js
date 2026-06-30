@@ -90,7 +90,7 @@ export async function getWallet(userId) {
 
 /** Add `amount` (positive) tokens; records a ledger entry. Returns the entry. */
 export async function grant(userId, amount, reason) {
-  if (!(amount > 0)) throw new Error('grant amount must be positive')
+  if (!(Number.isFinite(amount) && amount > 0)) throw new Error('grant amount must be a positive finite number')
   if (dbReady()) {
     let doc = await Wallet.findOne({ userId })
     if (!doc) doc = new Wallet({ userId, balance: 0, history: [] })
@@ -106,11 +106,16 @@ export async function grant(userId, amount, reason) {
 
 /** Deduct `amount` (positive) tokens; throws INSUFFICIENT if the balance is too low. */
 export async function spend(userId, amount, reason) {
-  if (!(amount > 0)) throw new Error('spend amount must be positive')
+  if (!(Number.isFinite(amount) && amount > 0)) throw new Error('spend amount must be a positive finite number')
   if (dbReady()) {
-    const doc = await Wallet.findOne({ userId })
-    if (!doc || doc.balance < amount) throw insufficient()
-    doc.balance -= amount
+    // Atomic check-and-decrement: the balance guard and the deduction happen in
+    // one update so two concurrent spends can't both pass the check (over-spend).
+    const doc = await Wallet.findOneAndUpdate(
+      { userId, balance: { $gte: amount } },
+      { $inc: { balance: -amount } },
+      { new: true },
+    )
+    if (!doc) throw insufficient()
     doc.history.push({ amount: -amount, reason: reason || '', balanceAfter: doc.balance })
     if (doc.history.length > MAX_HISTORY) doc.history = doc.history.slice(-MAX_HISTORY)
     await doc.save()
