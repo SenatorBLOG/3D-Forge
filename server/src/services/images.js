@@ -45,7 +45,9 @@ export async function createImage({ id, url, source, prompt = '', mime = '', own
   }
   const rec = { ...base, createdAt: new Date().toISOString() }
   memImages.set(id, rec)
-  // cap the in-memory map so a long dev session can't grow unbounded
+  // cap the metadata index so a long dev session's map doesn't grow unbounded.
+  // (The bytes on disk are dev-only data; eviction here drops the pointer, not
+  // the file — B4 deletes the file too once the service owns IMAGE_DIR.)
   if (memImages.size > MAX) memImages.delete(memImages.keys().next().value)
   saveImages()
   return publicImage(rec)
