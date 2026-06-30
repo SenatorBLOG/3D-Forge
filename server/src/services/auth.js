@@ -3,6 +3,7 @@ import jwt from 'jsonwebtoken'
 import { dbReady } from '../db.js'
 import User from '../models/User.js'
 import { load, flush } from './persistence.js'
+import { grantStarter } from './wallet.js'
 
 // Accounts persist to Mongo when connected; otherwise an in-memory store keeps
 // auth working in the keyless/mock dev setup (same pattern as history/meshy).
@@ -45,6 +46,7 @@ export async function register(username, password) {
     if (await User.findOne({ username }).lean()) throw taken()
     const doc = await User.create({ username, passwordHash })
     const u = { id: String(doc._id), username: doc.username, createdAt: doc.createdAt }
+    await grantStarter(u.id) // new accounts get a simulated starter balance
     return { token: signToken(u), user: publicUser(u) }
   }
   if (memUsers.has(username)) throw taken()
@@ -56,6 +58,7 @@ export async function register(username, password) {
   }
   memUsers.set(username, u)
   saveUsers()
+  await grantStarter(u.id) // new accounts get a simulated starter balance
   return { token: signToken(u), user: publicUser(u) }
 }
 
