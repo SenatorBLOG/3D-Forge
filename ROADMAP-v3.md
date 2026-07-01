@@ -125,9 +125,16 @@ Your job: build the **engine**. Every feature: in-memory mock + Mongo, file-pers
 Write each endpoint's contract in this doc the day before A needs it.
 
 ### Week 1 — Tokens economy + Image step backend
-- [ ] **B1. 3D-token wallet** — `Wallet`/balance per user (mock + Mongo + persistence).
+- [x] **B1. 3D-token wallet** — `Wallet`/balance per user (mock + Mongo + persistence).
       `GET /api/wallet` → `{ balance, history }`; grant starter tokens on register; helper
       `spend(userId, amount, reason)`. **Contract for A3 due day 1.**
+      <br>**Contract (for A3):**
+      `GET /api/wallet` — auth required (`Authorization: Bearer <token>`).
+      → `200 { "balance": 100, "history": [ { "id": "3", "amount": -10, "reason": "gen:m6", "balanceAfter": 90, "createdAt": "ISO" }, … ] }`
+      (history newest-first; `amount` is signed: +grant / −spend). `401` if not authenticated.
+      New accounts are granted **100** starter tokens on register (`reason: "starter"`).
+      Server helpers (for B2): `grant(userId, amount, reason)`, `spend(userId, amount, reason)`
+      (throws `INSUFFICIENT`, HTTP 402, when balance too low), `getWallet(userId)`.
 - [ ] **B2. Cost gating** — each generation tier has a cost (M5 cheap, M6 pretty); generation
       endpoints check + spend tokens (mock mode = free/unlimited, real = gated). Reuse the daily cap.
 - [ ] **B3. Image step (the missing Step 1)** — `POST /api/images` to upload/accept a reference
