@@ -13,6 +13,7 @@ import postsRouter from './routes/posts.js'
 import notificationsRouter from './routes/notifications.js'
 import usersRouter from './routes/users.js'
 import walletRouter from './routes/wallet.js'
+import imagesRouter, { IMAGE_DIR } from './routes/images.js'
 import { seedDemoData } from './services/seed.js'
 
 const app = express()
@@ -20,6 +21,8 @@ app.use(cors())
 app.use(express.json({ limit: '1mb' }))
 // serve user-uploaded models (saved by POST /api/models/upload)
 app.use('/uploads', express.static(UPLOAD_DIR))
+// serve reference images (saved by POST /api/images[/generate])
+app.use('/images', express.static(IMAGE_DIR))
 
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', uptime: process.uptime() })
@@ -35,6 +38,7 @@ app.use('/api/posts', postsRouter)
 app.use('/api/notifications', notificationsRouter)
 app.use('/api/users', usersRouter)
 app.use('/api/wallet', walletRouter)
+app.use('/api/images', imagesRouter)
 
 const port = process.env.PORT || 3001
 await connectDb()

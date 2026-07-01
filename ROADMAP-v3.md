@@ -135,13 +135,36 @@ Write each endpoint's contract in this doc the day before A needs it.
       New accounts are granted **100** starter tokens on register (`reason: "starter"`).
       Server helpers (for B2): `grant(userId, amount, reason)`, `spend(userId, amount, reason)`
       (throws `INSUFFICIENT`, HTTP 402, when balance too low), `getWallet(userId)`.
-- [ ] **B2. Cost gating** — each generation tier has a cost (M5 cheap, M6 pretty); generation
+- [x] **B2. Cost gating** — each generation tier has a cost (M5 cheap, M6 pretty); generation
       endpoints check + spend tokens (mock mode = free/unlimited, real = gated). Reuse the daily cap.
-- [ ] **B3. Image step (the missing Step 1)** — `POST /api/images` to upload/accept a reference
+      <br>**Prices (3D-tokens):** preview `meshy-5` = **10**, `meshy-6` = **30**, refine = **20**. Mock mode = **0** (free).
+      <br>**Contract (for A6):**
+      `GET /api/generate/costs` → `{ "tiers": { "meshy-5": 10, "meshy-6": 30 }, "refine": 20 }`.
+      `POST /api/generate` / `POST /api/generate/refine` accept an optional `Authorization: Bearer <token>`.
+      In **mock mode** they're free + ungated (no auth needed). In **real (keyed) mode** they're gated:
+      `401` if not signed in, `402 { error, cost, balance }` if balance < cost; otherwise the success
+      `202` now also returns `cost`. Tokens are charged only **after** the upstream task starts (a failed
+      generation never costs tokens). Meshy's existing daily cap still applies.
+- [x] **B3. Image step (the missing Step 1)** — `POST /api/images` to upload/accept a reference
       image (and a stubbed text→image generator in mock); store it; return an image id/URL the
       Model step can consume. Lays the groundwork for image→3D.
-- [ ] **B4. Image→3D** — extend the generate pipeline to accept an image input (Meshy image-to-3D
+      <br>**Contract (for A's Create/image step):** images are free (generation cost is B2/B4).
+      Optional `Authorization: Bearer <token>` (sets the image owner).
+      <br>• `POST /api/images` — **raw image bytes** as the body (PNG/JPEG/GIF/WEBP, ≤15MB; type
+      sniffed from magic bytes, header ignored). → `201 { "image": { id, url, source:"upload", mime, ownerId, createdAt } }`. `400` if not a supported image.
+      <br>• `POST /api/images/generate` — JSON `{ "prompt": "…" }` (≤600 chars). Stubbed text→image:
+      "renders" an SVG placeholder. → `201 { "image": { id, url, source:"generated", prompt, … }, "stub": true }`.
+      <br>• `GET /api/images/:id` → `{ "image": { … } }` or `404`. Files served at `/images/<id>.<ext>`.
+      The `image.id` is what **B4** consumes as `imageId`.
+- [x] **B4. Image→3D** — extend the generate pipeline to accept an image input (Meshy image-to-3D
       when keyed; mock returns a stub GLB). Contract: `POST /api/generate { mode:'image', imageId }`.
+      <br>**Contract (for A6):** `POST /api/generate` now takes an optional `mode` (`"text"` default | `"image"`).
+      <br>• `mode:"text"` — `{ prompt, model? }` (unchanged).
+      <br>• `mode:"image"` — `{ mode:"image", imageId, model? }` where `imageId` comes from B3.
+      `404` for an unknown imageId. Cost-gated exactly like a text preview (tier price; mock = free).
+      <br>Both reply `202 { taskId, mode, mock, cost }`; poll `GET /api/generate/:taskId` as before
+      (it now resolves either text- or image-to-3D tasks). Mock returns the stub GLB; real (keyed)
+      mode calls Meshy image-to-3D, inlining the stored image as a data URI.
 
 ### Week 2 — Unified generation pipeline + model metadata
 - [ ] **B5. Unified generate API** — one `POST /api/generate` taking `{ mode: 'text'|'image'|'batch',
