@@ -2077,6 +2077,158 @@ button.tag:hover {
 
 /* ---- notifications ---- */
 
+/* ---- wallet chip ---- */
+.wallet {
+  position: relative;
+  display: inline-flex;
+}
+
+.wallet-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 34px;
+  padding: 0 12px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--panel-2);
+  color: var(--forge);
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.wallet-chip:hover {
+  border-color: var(--forge);
+  background: rgba(255, 122, 31, 0.1);
+}
+
+.wallet-panel {
+  position: absolute;
+  top: calc(100% + 10px);
+  right: 0;
+  width: 260px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.45);
+  padding: 14px;
+  z-index: 50;
+}
+
+.wallet-balance {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--forge);
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.wallet-balance strong {
+  font-family: var(--font-display);
+  font-size: 26px;
+  color: var(--text);
+}
+
+.wallet-balance span {
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+.wallet-history {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 12px 0;
+}
+
+.wallet-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12.5px;
+  color: var(--text-dim);
+}
+
+.wallet-row .pos {
+  color: var(--good);
+  font-family: var(--font-mono);
+}
+
+.wallet-row .neg {
+  color: var(--danger);
+  font-family: var(--font-mono);
+}
+
+.wallet-get {
+  width: 100%;
+}
+
+/* ---- generic modal + token packs ---- */
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: grid;
+  place-items: center;
+  background: rgba(6, 8, 12, 0.7);
+  padding: 20px;
+}
+
+.modal {
+  width: 100%;
+  max-width: 420px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 24px;
+}
+
+.modal h3 {
+  font-family: var(--font-display);
+  font-size: 20px;
+  margin-bottom: 6px;
+}
+
+.token-packs {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  margin: 16px 0;
+}
+
+.token-pack {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 14px 8px;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+
+.token-pack-n {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-family: var(--font-display);
+  font-size: 18px;
+  color: var(--forge);
+}
+
+.token-pack-price {
+  font-size: 13px;
+  color: var(--text-dim);
+}
+
+.modal-close {
+  width: 100%;
+  margin-top: 4px;
+}
+
 .notif {
   position: relative;
   display: inline-flex;

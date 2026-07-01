@@ -2,6 +2,7 @@ import { Link, NavLink } from 'react-router-dom'
 import Logo from './Logo.jsx'
 import Avatar from './Avatar.jsx'
 import NotificationsBell from './NotificationsBell.jsx'
+import WalletChip from './WalletChip.jsx'
 import { useAuth } from '../auth/AuthContext.jsx'
 
 /** Global navigation: brand, primary links, and the auth area. */
@@ -28,6 +29,7 @@ export default function TopNav() {
       <div className="topnav-auth">
         {user ? (
           <>
+            <WalletChip />
             <NotificationsBell />
             <Link to={`/u/${user.username}`} className="topnav-user">
               <Avatar username={user.username} size={26} />@{user.username}
