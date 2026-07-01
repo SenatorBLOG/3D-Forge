@@ -1,15 +1,15 @@
 import express, { Router } from 'express'
 import { mkdirSync, writeFileSync } from 'node:fs'
-import { fileURLToPath } from 'node:url'
 import { join } from 'node:path'
 import { optionalAuth } from '../middleware/auth.js'
-import { createImage, getImage } from '../services/images.js'
+import { createImage, getImage, IMAGE_DIR } from '../services/images.js'
 import { detectImage } from '../services/imageType.js'
 
 const router = Router()
 
-// where reference images live (gitignored, alongside the dev store + uploads)
-export const IMAGE_DIR = fileURLToPath(new URL('../../.devdata/images/', import.meta.url))
+// IMAGE_DIR is owned by the images service (it also reads files back for the
+// real image→3D path); re-export so index.js can mount /images static from here.
+export { IMAGE_DIR }
 
 const newId = () => `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
 
