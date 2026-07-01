@@ -145,9 +145,17 @@ Write each endpoint's contract in this doc the day before A needs it.
       `401` if not signed in, `402 { error, cost, balance }` if balance < cost; otherwise the success
       `202` now also returns `cost`. Tokens are charged only **after** the upstream task starts (a failed
       generation never costs tokens). Meshy's existing daily cap still applies.
-- [ ] **B3. Image step (the missing Step 1)** — `POST /api/images` to upload/accept a reference
+- [x] **B3. Image step (the missing Step 1)** — `POST /api/images` to upload/accept a reference
       image (and a stubbed text→image generator in mock); store it; return an image id/URL the
       Model step can consume. Lays the groundwork for image→3D.
+      <br>**Contract (for A's Create/image step):** images are free (generation cost is B2/B4).
+      Optional `Authorization: Bearer <token>` (sets the image owner).
+      <br>• `POST /api/images` — **raw image bytes** as the body (PNG/JPEG/GIF/WEBP, ≤15MB; type
+      sniffed from magic bytes, header ignored). → `201 { "image": { id, url, source:"upload", mime, ownerId, createdAt } }`. `400` if not a supported image.
+      <br>• `POST /api/images/generate` — JSON `{ "prompt": "…" }` (≤600 chars). Stubbed text→image:
+      "renders" an SVG placeholder. → `201 { "image": { id, url, source:"generated", prompt, … }, "stub": true }`.
+      <br>• `GET /api/images/:id` → `{ "image": { … } }` or `404`. Files served at `/images/<id>.<ext>`.
+      The `image.id` is what **B4** consumes as `imageId`.
 - [ ] **B4. Image→3D** — extend the generate pipeline to accept an image input (Meshy image-to-3D
       when keyed; mock returns a stub GLB). Contract: `POST /api/generate { mode:'image', imageId }`.
 
