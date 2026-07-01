@@ -250,6 +250,7 @@ export default function ForgePage() {
       <aside className={`sidebar ${sidebarOpen ? '' : 'sidebar--collapsed'}`}>
         <GeneratePanel
           disabled={editTask.generating}
+          initialMode={searchParams.get('mode') === 'image' ? 'image' : 'text'}
           onGeneratingChange={setGenBusy}
           onModelReady={(url, prompt) => {
             setBaseModelPrompt(prompt)
