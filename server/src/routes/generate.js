@@ -1,11 +1,18 @@
 import { Router } from 'express'
-import { createPreviewTask, createRefineTask, getTask, isMockMode } from '../services/meshy.js'
+import {
+  createPreviewTask,
+  createRefineTask,
+  createImageTask,
+  getTask,
+  isMockMode,
+} from '../services/meshy.js'
 import { dbReady } from '../db.js'
 import GeneratedModel from '../models/GeneratedModel.js'
 import SpatialPromptRecord from '../models/SpatialPromptRecord.js'
 import { recordTask, updateTask, removeTask } from '../services/history.js'
 import { optionalAuth } from '../middleware/auth.js'
 import { getWallet, spend, grant } from '../services/wallet.js'
+import { getImage, imageDataUri } from '../services/images.js'
 import { generationCost, priceList } from '../services/costs.js'
 
 const router = Router()
@@ -56,16 +63,31 @@ async function refundGeneration(req, { kind, aiModel }) {
 // POST /api/generate — start a text-to-3D preview task (Meshy AI, or the
 // built-in mock when no MESHY_API_KEY is configured)
 router.post('/', optionalAuth, async (req, res) => {
-  const raw = req.body?.prompt
-  const prompt = typeof raw === 'string' ? raw.trim() : ''
-  if (!prompt) {
-    return res.status(400).json({ error: 'prompt (non-empty string) is required' })
-  }
-  if (prompt.length > 600) {
-    return res.status(400).json({ error: 'prompt must be 600 characters or fewer' })
-  }
   // meshy-5 (cheap) by default; meshy-6 is prettier but costs more credits
   const aiModel = req.body?.model === 'meshy-6' ? 'meshy-6' : 'meshy-5'
+  const mode = req.body?.mode === 'image' ? 'image' : 'text'
+
+  // resolve the input per mode: a text prompt, or a stored reference image
+  let prompt = ''
+  let image = null
+  if (mode === 'image') {
+    const imageId = typeof req.body?.imageId === 'string' ? req.body.imageId : ''
+    if (!imageId) {
+      return res.status(400).json({ error: 'imageId is required for mode "image"' })
+    }
+    image = await getImage(imageId)
+    if (!image) return res.status(404).json({ error: 'Unknown imageId' })
+    // a label for History; image-to-3D is driven by the image, not a prompt
+    prompt = image.prompt || 'image-to-3d'
+  } else {
+    prompt = typeof req.body?.prompt === 'string' ? req.body.prompt.trim() : ''
+    if (!prompt) {
+      return res.status(400).json({ error: 'prompt (non-empty string) is required' })
+    }
+    if (prompt.length > 600) {
+      return res.status(400).json({ error: 'prompt must be 600 characters or fewer' })
+    }
+  }
 
   // cost gating (real mode only — mock stays free): charge up front so
   // concurrent requests can't race the balance check
@@ -74,7 +96,20 @@ router.post('/', optionalAuth, async (req, res) => {
 
   let taskId
   try {
-    taskId = await createPreviewTask(prompt, aiModel)
+    if (mode === 'image') {
+      // Meshy can't reach our localhost /images URL, so inline the bytes as a
+      // data URI in real mode; the mock ignores the input entirely.
+      let imageInput = image.url
+      if (!isMockMode()) {
+        imageInput = await imageDataUri(image.id)
+        if (!imageInput) {
+          return res.status(500).json({ error: 'failed to read the reference image' })
+        }
+      }
+      taskId = await createImageTask(imageInput, { aiModel })
+    } else {
+      taskId = await createPreviewTask(prompt, aiModel)
+    }
   } catch (err) {
     await refundGeneration(req, { kind: 'preview', aiModel }) // task never started — give it back
     if (err.code === 'DAILY_LIMIT') return res.status(429).json({ error: err.message })
@@ -96,6 +131,7 @@ router.post('/', optionalAuth, async (req, res) => {
 
   res.status(202).json({
     taskId,
+    mode,
     mock: isMockMode(),
     cost: generationCost({ kind: 'preview', aiModel, mock: isMockMode() }),
   })
