@@ -23,6 +23,7 @@ export default function TopNav() {
           Create
         </NavLink>
         <NavLink to="/forge">Forge</NavLink>
+        <NavLink to="/discover">Discover</NavLink>
         <NavLink to="/explore">Explore</NavLink>
       </nav>
 

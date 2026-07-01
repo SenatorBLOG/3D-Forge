@@ -1840,6 +1840,87 @@ a.ghost-button {
   padding: 40px 48px 56px;
 }
 
+/* ---- discover ---- */
+.discover {
+  max-width: 1200px;
+  margin: 0 auto;
+  width: 100%;
+  padding: 40px 48px 56px;
+}
+
+.discover-head h1 {
+  font-family: var(--font-display);
+  font-size: 28px;
+}
+
+.discover-head .hint {
+  display: block;
+  margin-top: 4px;
+}
+
+.discover-themes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 22px 0 30px;
+}
+
+.discover-creators {
+  margin-bottom: 34px;
+}
+
+.discover-creators h2,
+.discover-grid-title {
+  font-family: var(--font-display);
+  font-size: 18px;
+  margin-bottom: 16px;
+}
+
+.discover-grid-title {
+  margin-top: 8px;
+}
+
+.creator-strip {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 12px;
+}
+
+.creator-tile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 18px 12px;
+  background: var(--panel);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius);
+  text-decoration: none;
+  transition: border-color 0.15s, transform 0.15s;
+}
+
+.creator-tile:hover {
+  border-color: var(--steel);
+  transform: translateY(-2px);
+}
+
+.creator-name {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  color: var(--steel);
+}
+
+.creator-count {
+  font-size: 11px;
+  color: var(--text-faint);
+}
+
+@media (max-width: 820px) {
+  .discover {
+    padding: 28px 24px 40px;
+  }
+}
+
 .explore-head h1 {
   font-family: var(--font-display);
   font-size: 28px;
