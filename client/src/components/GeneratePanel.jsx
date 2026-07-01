@@ -6,17 +6,25 @@ import MicButton from './MicButton.jsx'
 const QUICK_PROMPTS = ['a small dragon', 'a medieval sword', 'a sci-fi helmet', 'a wooden chair']
 
 /**
- * Text-to-3D generation panel. On success hands up (modelUrl, promptText) so
- * the app can track what description produced the current model.
+ * Generation panel with two modes:
+ *   text  — describe a model (text-to-3D)
+ *   image — upload / drop / paste a reference image (image-to-3D)
+ * On success hands up (modelUrl, label) so the app can track what produced the model.
  */
-export default function GeneratePanel({ onModelReady, disabled, onGeneratingChange }) {
+export default function GeneratePanel({ onModelReady, disabled, onGeneratingChange, initialMode = 'text' }) {
+  const [mode, setMode] = useState(initialMode === 'image' ? 'image' : 'text')
   const [prompt, setPrompt] = useState('')
-  // which Meshy model to generate with: meshy-5 (cheap, for tests) or
-  // meshy-6 (prettier, more credits). Sent to the server as `model`.
+  // which Meshy model to generate with: meshy-5 (cheap) or meshy-6 (prettier)
   const [aiModel, setAiModel] = useState('meshy-5')
-  // add the refine (texture/color) stage after preview — costs +10 credits
+  // add the refine (texture/color) stage after preview
   const [textured, setTextured] = useState(false)
-  // prompt that produced the in-flight task — reported alongside the result
+  // image mode: the uploaded reference (server id) + a local preview URL
+  const [image, setImage] = useState(null) // { id }
+  const [preview, setPreview] = useState(null) // object URL for instant preview
+  const [uploading, setUploading] = useState(false)
+  const [imgError, setImgError] = useState(null)
+  const fileRef = useRef(null)
+
   const submittedRef = useRef(null)
   const { task, error, generating, start } = useGenerationTask((url) =>
     onModelReady(url, submittedRef.current),
@@ -28,7 +36,59 @@ export default function GeneratePanel({ onModelReady, disabled, onGeneratingChan
     onGeneratingChangeRef.current?.(generating)
   }, [generating])
 
-  const startGeneration = () => {
+  // revoke the last preview object URL when it changes / on unmount
+  useEffect(() => () => preview && URL.revokeObjectURL(preview), [preview])
+
+  const busy = generating || disabled
+
+  const uploadImage = async (file) => {
+    if (!file || !file.type?.startsWith('image/')) {
+      setImgError('Please choose a PNG, JPEG, GIF or WEBP image')
+      return
+    }
+    setUploading(true)
+    setImgError(null)
+    try {
+      const res = await fetch('/api/images', {
+        method: 'POST',
+        headers: { 'Content-Type': file.type },
+        body: file,
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`)
+      setImage(data.image)
+      setPreview((prev) => {
+        if (prev) URL.revokeObjectURL(prev)
+        return URL.createObjectURL(file)
+      })
+    } catch (e) {
+      setImgError(e.message)
+    } finally {
+      setUploading(false)
+    }
+  }
+
+  const onFile = (e) => {
+    const f = e.target.files?.[0]
+    e.target.value = ''
+    if (f) uploadImage(f)
+  }
+  const onDrop = (e) => {
+    e.preventDefault()
+    if (busy) return
+    const f = e.dataTransfer.files?.[0]
+    if (f) uploadImage(f)
+  }
+  const onPaste = (e) => {
+    if (busy) return
+    const item = [...(e.clipboardData?.items || [])].find((i) => i.type.startsWith('image/'))
+    if (item) uploadImage(item.getAsFile())
+  }
+
+  const appendSpeech = (text) =>
+    setPrompt((prev) => (prev.trim() ? `${prev.trim()} ${text}` : text))
+
+  const startText = () => {
     const trimmed = prompt.trim()
     if (!trimmed) return
     submittedRef.current = trimmed
@@ -38,50 +98,105 @@ export default function GeneratePanel({ onModelReady, disabled, onGeneratingChan
       { refine: textured, model: aiModel, prompt: trimmed },
     )
   }
+  const startImage = () => {
+    if (!image) return
+    submittedRef.current = 'image → 3D'
+    start(
+      '/api/generate',
+      { mode: 'image', imageId: image.id, model: aiModel },
+      { refine: textured, model: aiModel, prompt: 'image → 3D' },
+    )
+  }
 
-  // append a spoken phrase to whatever is already in the field
-  const appendSpeech = (text) =>
-    setPrompt((prev) => (prev.trim() ? `${prev.trim()} ${text}` : text))
+  const canGenerate = mode === 'text' ? !!prompt.trim() : !!image
 
   return (
-    <section className="panel">
+    <section className="panel" onPaste={mode === 'image' ? onPaste : undefined}>
       <h2>Generate</h2>
-      <div className="field">
-        <label htmlFor="gen-prompt">Describe a model</label>
-        <div className="input-with-mic">
-          <textarea
-            id="gen-prompt"
-            rows={3}
-            value={prompt}
-            onChange={(e) => setPrompt(e.target.value)}
-            placeholder='e.g. "a small dragon with big wings"'
-            disabled={generating || disabled}
-          />
-          <MicButton onTranscript={appendSpeech} disabled={generating || disabled} />
-        </div>
+
+      <div className="gen-mode">
+        <button
+          type="button"
+          className={`gen-mode-tab ${mode === 'text' ? 'active' : ''}`}
+          onClick={() => setMode('text')}
+          disabled={generating}
+        >
+          Describe
+        </button>
+        <button
+          type="button"
+          className={`gen-mode-tab ${mode === 'image' ? 'active' : ''}`}
+          onClick={() => setMode('image')}
+          disabled={generating}
+        >
+          From image
+        </button>
       </div>
-      {!generating && (
-        <div className="chips">
-          {QUICK_PROMPTS.map((p) => (
-            <button
-              key={p}
-              type="button"
-              className="chip"
-              onClick={() => setPrompt(p)}
-              disabled={disabled}
-            >
-              {p}
+
+      {mode === 'text' ? (
+        <>
+          <div className="field">
+            <label htmlFor="gen-prompt">Describe a model</label>
+            <div className="input-with-mic">
+              <textarea
+                id="gen-prompt"
+                rows={3}
+                value={prompt}
+                onChange={(e) => setPrompt(e.target.value)}
+                placeholder='e.g. "a small dragon with big wings"'
+                disabled={busy}
+              />
+              <MicButton onTranscript={appendSpeech} disabled={busy} />
+            </div>
+          </div>
+          {!generating && (
+            <div className="chips">
+              {QUICK_PROMPTS.map((p) => (
+                <button key={p} type="button" className="chip" onClick={() => setPrompt(p)} disabled={disabled}>
+                  {p}
+                </button>
+              ))}
+            </div>
+          )}
+        </>
+      ) : (
+        <div className="field">
+          <label>Reference image</label>
+          <div
+            className={`image-drop ${preview ? 'has-image' : ''}`}
+            onClick={() => !busy && fileRef.current?.click()}
+            onDrop={onDrop}
+            onDragOver={(e) => e.preventDefault()}
+            role="button"
+            tabIndex={0}
+          >
+            {preview ? (
+              <img className="image-drop-preview" src={preview} alt="reference" />
+            ) : (
+              <div className="image-drop-empty">
+                <strong>Click, drop, or paste an image</strong>
+                <span className="hint">PNG · JPEG · GIF · WEBP</span>
+              </div>
+            )}
+            {uploading && <div className="image-drop-busy">Uploading…</div>}
+          </div>
+          <input ref={fileRef} type="file" accept="image/*" hidden onChange={onFile} />
+          {preview && !busy && (
+            <button className="link-button" onClick={() => fileRef.current?.click()}>
+              Change image
             </button>
-          ))}
+          )}
+          {imgError && <span className="url-error">{imgError}</span>}
         </div>
       )}
+
       <div className="model-select">
         <span className="model-label">Model</span>
         <button
           type="button"
           className={`chip ${aiModel === 'meshy-5' ? 'chip--on' : ''}`}
           onClick={() => setAiModel('meshy-5')}
-          disabled={generating || disabled}
+          disabled={busy}
           title="Meshy-5 — cheaper (5 credits), good for tests"
         >
           M5 · cheap
@@ -90,7 +205,7 @@ export default function GeneratePanel({ onModelReady, disabled, onGeneratingChan
           type="button"
           className={`chip ${aiModel === 'meshy-6' ? 'chip--on' : ''}`}
           onClick={() => setAiModel('meshy-6')}
-          disabled={generating || disabled}
+          disabled={busy}
           title="Meshy-6 — prettier (20 credits), for the demo"
         >
           M6 · pretty
@@ -101,17 +216,21 @@ export default function GeneratePanel({ onModelReady, disabled, onGeneratingChan
           type="checkbox"
           checked={textured}
           onChange={(e) => setTextured(e.target.checked)}
-          disabled={generating || disabled}
+          disabled={busy}
         />
         Add textures (color){' '}
         <span className="hint">({textured ? '+10 credits, colored' : 'off — gray preview'})</span>
       </label>
       <button
         className="submit"
-        onClick={startGeneration}
-        disabled={generating || disabled || !prompt.trim()}
+        onClick={mode === 'text' ? startText : startImage}
+        disabled={generating || disabled || !canGenerate}
       >
-        {generating ? `Generating… ${task.progress}%` : 'Generate 3D model'}
+        {generating
+          ? `Generating… ${task.progress}%`
+          : mode === 'image'
+            ? 'Generate 3D from image'
+            : 'Generate 3D model'}
       </button>
       {generating && (
         <div className="progress" aria-hidden="true">
@@ -119,9 +238,7 @@ export default function GeneratePanel({ onModelReady, disabled, onGeneratingChan
         </div>
       )}
       {generating && task.mock && (
-        <span className="hint">
-          mock mode — set MESHY_API_KEY on the server for real generation
-        </span>
+        <span className="hint">mock mode — set MESHY_API_KEY on the server for real generation</span>
       )}
       {error && <span className="url-error">{error}</span>}
     </section>

@@ -94,6 +94,11 @@ router.post('/', optionalAuth, async (req, res) => {
   const charge = await chargeGeneration(req, { kind: 'preview', aiModel })
   if (!charge.ok) return res.status(charge.status).json(charge.body)
 
+  // cost gating (real mode only — mock stays free): charge up front so
+  // concurrent requests can't race the balance check
+  const charge = await chargeGeneration(req, { kind: 'preview', aiModel })
+  if (!charge.ok) return res.status(charge.status).json(charge.body)
+
   let taskId
   try {
     if (mode === 'image') {
