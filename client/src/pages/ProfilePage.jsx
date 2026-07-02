@@ -4,7 +4,31 @@ import Avatar from '../components/Avatar.jsx'
 import PostCard from '../components/PostCard.jsx'
 import { useAuth } from '../auth/AuthContext.jsx'
 
-/** A user's public profile: avatar, follow stats, and their published models. */
+// deterministic banner gradient per user (dark + one on-brand accent)
+const BANNERS = [
+  ['#3a2a12', '#ff7a1f'],
+  ['#12303a', '#5cc8ff'],
+  ['#2a1238', '#a06bff'],
+  ['#123a2a', '#3fb970'],
+  ['#3a1224', '#ff6b8a'],
+  ['#1a2440', '#4a7bff'],
+]
+const bannerFor = (name = '') => {
+  let h = 0
+  for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) % 997
+  const [base, accent] = BANNERS[h % BANNERS.length]
+  return {
+    backgroundImage: `radial-gradient(600px 200px at 80% -40%, ${accent}55, transparent 70%), linear-gradient(120deg, ${base}, #0b0d12 72%)`,
+  }
+}
+
+const TABS = [
+  { id: 'models', label: 'Models' },
+  { id: 'favorites', label: 'Favorites' },
+  { id: 'badges', label: 'Badges' },
+]
+
+/** A user's profile: banner, avatar, follow stats, share, and tabs. */
 export default function ProfilePage() {
   const { username } = useParams()
   const { user, token } = useAuth()
@@ -12,10 +36,15 @@ export default function ProfilePage() {
   const [profile, setProfile] = useState(null) // { followers, following, isFollowing, isSelf }
   const [error, setError] = useState(null)
   const [busy, setBusy] = useState(false)
+  const [tab, setTab] = useState('models')
+  const [copied, setCopied] = useState(false)
+  const [editOpen, setEditOpen] = useState(false)
 
   useEffect(() => {
     let cancelled = false
     const headers = token ? { Authorization: `Bearer ${token}` } : {}
+    setPosts(null)
+    setTab('models')
     Promise.all([
       fetch(`/api/posts?username=${encodeURIComponent(username)}`).then(async (r) => {
         const d = await r.json()
@@ -54,19 +83,33 @@ export default function ProfilePage() {
     }
   }
 
-  const canFollow = user && profile && !profile.isSelf
+  const share = async () => {
+    try {
+      await navigator.clipboard.writeText(window.location.href)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 1500)
+    } catch {
+      /* clipboard may be blocked */
+    }
+  }
+
+  const isSelf = profile?.isSelf
+  const canFollow = user && profile && !isSelf
 
   return (
     <div className="profile">
+      <div className="profile-banner" style={bannerFor(username)} />
+
       <div className="profile-head">
-        <Avatar username={username} size={64} />
+        <div className="profile-avatar">
+          <Avatar username={username} size={88} />
+        </div>
         <div className="profile-head-main">
           <h1 className="profile-name">@{username}</h1>
           {profile && (
             <div className="profile-stats">
               <span>
-                <strong>{profile.followers}</strong> follower
-                {profile.followers === 1 ? '' : 's'}
+                <strong>{profile.followers}</strong> follower{profile.followers === 1 ? '' : 's'}
               </span>
               <span>
                 <strong>{profile.following}</strong> following
@@ -78,25 +121,72 @@ export default function ProfilePage() {
             </div>
           )}
         </div>
-        {canFollow && (
-          <button
-            className={profile.isFollowing ? 'ghost-button' : 'submit'}
-            onClick={toggleFollow}
-            disabled={busy}
-          >
-            {profile.isFollowing ? 'Following' : 'Follow'}
+        <div className="profile-actions">
+          {canFollow && (
+            <button
+              className={profile.isFollowing ? 'ghost-button' : 'submit'}
+              onClick={toggleFollow}
+              disabled={busy}
+            >
+              {profile.isFollowing ? 'Following' : 'Follow'}
+            </button>
+          )}
+          {isSelf && (
+            <button className="ghost-button" onClick={() => setEditOpen(true)}>
+              Edit profile
+            </button>
+          )}
+          <button className="ghost-button" onClick={share}>
+            {copied ? 'Link copied' : 'Share'}
           </button>
-        )}
+        </div>
       </div>
+
+      <div className="profile-tabs">
+        {TABS.map((t) => (
+          <button
+            key={t.id}
+            className={`profile-tab ${tab === t.id ? 'active' : ''}`}
+            onClick={() => setTab(t.id)}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+
       {error && <span className="url-error">{error}</span>}
-      {posts && posts.length === 0 && (
-        <p className="explore-empty">@{username} hasn’t published anything yet.</p>
+
+      {tab === 'models' &&
+        (posts && posts.length === 0 ? (
+          <p className="explore-empty">@{username} hasn’t published anything yet.</p>
+        ) : posts && posts.length > 0 ? (
+          <div className="explore-grid">
+            {posts.map((p) => (
+              <PostCard key={p.id} post={p} />
+            ))}
+          </div>
+        ) : (
+          <p className="hint">Loading…</p>
+        ))}
+
+      {tab === 'favorites' && (
+        <p className="explore-empty">Favorites are coming soon.</p>
       )}
-      {posts && posts.length > 0 && (
-        <div className="explore-grid">
-          {posts.map((p) => (
-            <PostCard key={p.id} post={p} />
-          ))}
+      {tab === 'badges' && (
+        <p className="explore-empty">Achievements &amp; badges are coming soon.</p>
+      )}
+
+      {editOpen && (
+        <div className="modal-backdrop" onClick={() => setEditOpen(false)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <h3>Edit profile</h3>
+            <p className="hint">
+              Custom avatar, banner and bio are coming soon. Your @username is set at sign-up.
+            </p>
+            <button className="ghost-button modal-close" onClick={() => setEditOpen(false)}>
+              Close
+            </button>
+          </div>
         </div>
       )}
     </div>
