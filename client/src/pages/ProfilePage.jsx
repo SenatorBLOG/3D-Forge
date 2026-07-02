@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import Avatar, { AVATAR_COLORS } from '../components/Avatar.jsx'
 import PostCard from '../components/PostCard.jsx'
+import EmptyState from '../components/EmptyState.jsx'
+import CardSkeleton from '../components/CardSkeleton.jsx'
 import { useAuth } from '../auth/AuthContext.jsx'
 
 // banner presets (dark base + one on-brand accent), index stored per user
@@ -200,7 +202,11 @@ export default function ProfilePage() {
 
       {tab === 'models' &&
         (posts && posts.length === 0 ? (
-          <p className="explore-empty">@{username} hasn’t published anything yet.</p>
+          <EmptyState
+            icon="box"
+            title={isSelf ? 'You haven’t published anything yet' : `@${username} hasn’t published anything yet`}
+            hint={isSelf ? 'Forge a model and hit Publish to see it here.' : undefined}
+          />
         ) : posts && posts.length > 0 ? (
           <div className="explore-grid">
             {posts.map((p) => (
@@ -208,10 +214,14 @@ export default function ProfilePage() {
             ))}
           </div>
         ) : (
-          <p className="hint">Loading…</p>
+          <CardSkeleton count={4} />
         ))}
-      {tab === 'favorites' && <p className="explore-empty">Favorites are coming soon.</p>}
-      {tab === 'badges' && <p className="explore-empty">Achievements &amp; badges are coming soon.</p>}
+      {tab === 'favorites' && (
+        <EmptyState icon="star" title="Favorites are coming soon" hint="Models you like will collect here." />
+      )}
+      {tab === 'badges' && (
+        <EmptyState icon="badge" title="Achievements are coming soon" hint="Earn badges as you create and share." />
+      )}
 
       {editOpen && (
         <div className="modal-backdrop" onClick={() => setEditOpen(false)}>

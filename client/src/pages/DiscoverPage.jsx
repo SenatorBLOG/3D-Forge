@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import PostCard from '../components/PostCard.jsx'
 import Avatar from '../components/Avatar.jsx'
+import EmptyState from '../components/EmptyState.jsx'
+import CardSkeleton from '../components/CardSkeleton.jsx'
 
 /** Discover: browse the community by theme (popular tags) and by creator.
  *  Reuses the public feed + tags endpoints; creators are aggregated client-side. */
@@ -113,7 +115,13 @@ export default function DiscoverPage() {
       )}
 
       <h2 className="discover-grid-title">{theme ? `#${theme}` : 'Latest models'}</h2>
-      {posts && posts.length === 0 && <p className="explore-empty">No models in this theme yet.</p>}
+      {posts && posts.length === 0 && (
+        <EmptyState
+          icon="search"
+          title={theme ? `Nothing tagged #${theme} yet` : 'No models here yet'}
+          hint="Be the first to publish one in this theme."
+        />
+      )}
       {posts && posts.length > 0 && (
         <div className="explore-grid">
           {posts.map((p) => (
@@ -121,7 +129,7 @@ export default function DiscoverPage() {
           ))}
         </div>
       )}
-      {!posts && <p className="hint">Loading…</p>}
+      {!posts && <CardSkeleton count={8} />}
     </div>
   )
 }
