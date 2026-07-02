@@ -8,18 +8,21 @@ import PublishPanel from '../components/PublishPanel.jsx'
 import MicButton from '../components/MicButton.jsx'
 import useGenerationTask from '../hooks/useGenerationTask.js'
 
-const DEFAULT_MODEL_URL = '/models/robotic_hand.glb'
+const SAMPLE_MODEL_URL = '/models/robotic_hand.glb'
 const isLoadableUrl = (u) => typeof u === 'string' && /^(https?:\/\/|\/)/.test(u)
 
 /** The forging tool: generate, click-select regions, edit, history, compare. */
 export default function ForgePage() {
   const [searchParams] = useSearchParams()
-  // deep-link from Explore: /forge?model=<url> opens that model
+  // deep-link from Explore: /forge?model=<url> opens that model. Otherwise the
+  // canvas starts EMPTY — the create surface, not a pre-loaded hand.
   const [modelUrl, setModelUrl] = useState(() => {
     const m = searchParams.get('model')
-    return isLoadableUrl(m) ? m : DEFAULT_MODEL_URL
+    return isLoadableUrl(m) ? m : null
   })
-  const [modelStatus, setModelStatus] = useState('loading') // loading | ready | error
+  const [modelStatus, setModelStatus] = useState(() =>
+    isLoadableUrl(searchParams.get('model')) ? 'loading' : 'idle',
+  ) // idle | loading | ready | error
   const [modelError, setModelError] = useState(null)
   // text description that produced the current model — context for edits
   const [baseModelPrompt, setBaseModelPrompt] = useState(null)
@@ -42,7 +45,6 @@ export default function ForgePage() {
   const [pendingFile, setPendingFile] = useState(null)
   const [saving, setSaving] = useState(false)
   const [historyKey, setHistoryKey] = useState(0)
-  const [sidebarOpen, setSidebarOpen] = useState(true)
   const [compare, setCompare] = useState(null)
 
   const swapModel = (url, { isObjectUrl = false } = {}) => {
@@ -202,52 +204,35 @@ export default function ForgePage() {
     swapModel(url)
   }
 
+  // load the bundled demo model on demand (no longer auto-loaded)
+  const loadSample = () => {
+    setBaseModelPrompt(null)
+    setLastEditPrompt(null)
+    swapModel(SAMPLE_MODEL_URL)
+  }
+
+  // return the canvas to its empty create-first state
+  const clearModel = () => {
+    const stale = objectUrlRef.current
+    if (stale) {
+      setTimeout(() => URL.revokeObjectURL(stale), 0)
+      objectUrlRef.current = null
+    }
+    setPendingFile(null)
+    setPoints([])
+    setSelectedIndex(null)
+    setModelError(null)
+    setBaseModelPrompt(null)
+    setLastEditPrompt(null)
+    setModelStatus('idle')
+    setModelUrl(null)
+    setLoadKey((k) => k + 1)
+  }
+
   return (
-    <main className="app-main">
-      <div className="viewer-wrap">
-        <button
-          className="panel-toggle panel-toggle--float"
-          onClick={() => setSidebarOpen((v) => !v)}
-          aria-expanded={sidebarOpen}
-          title={sidebarOpen ? 'Hide panel' : 'Show panel'}
-          aria-label={sidebarOpen ? 'Hide panel' : 'Show panel'}
-        >
-          <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
-            <rect x="3" y="4" width="18" height="16" rx="2" fill="none" stroke="currentColor" strokeWidth="1.8" />
-            <line x1="15" y1="4" x2="15" y2="20" stroke="currentColor" strokeWidth="1.8" />
-          </svg>
-        </button>
-        {compare ? (
-          <CompareView params={compare} onClose={() => setCompare(null)} />
-        ) : (
-          <>
-            {modelStatus === 'loading' && (
-              <div className="viewer-overlay">Loading model…</div>
-            )}
-            {modelStatus === 'error' && (
-              <div className="viewer-overlay viewer-overlay-error">{modelError}</div>
-            )}
-            <ModelViewer
-              key={`${modelUrl}#${loadKey}`}
-              modelUrl={modelUrl}
-              points={points}
-              onAddPoint={addPoint}
-              selectedIndex={selectedIndex}
-              onSelectPoint={setSelectedIndex}
-              onPromptChange={setPointPrompt}
-              onLoaded={() => setModelStatus('ready')}
-              onError={(message) => {
-                setModelError(message)
-                setModelStatus('error')
-              }}
-            />
-            {modelStatus === 'ready' && points.length === 0 && (
-              <div className="viewer-hint">Click the model to add a point</div>
-            )}
-          </>
-        )}
-      </div>
-      <aside className={`sidebar ${sidebarOpen ? '' : 'sidebar--collapsed'}`}>
+    <main className="app-main forge">
+      {/* LEFT — create input + options */}
+      <aside className="sidebar forge-rail">
         <GeneratePanel
           disabled={editTask.generating}
           initialMode={searchParams.get('mode') === 'image' ? 'image' : 'text'}
@@ -293,20 +278,18 @@ export default function ForgePage() {
             </button>
           </div>
           {urlError && <span className="url-error">{urlError}</span>}
-          {modelUrl !== DEFAULT_MODEL_URL && (
-            <button
-              className="link-button"
-              onClick={() => {
-                setBaseModelPrompt(null)
-                setLastEditPrompt(null)
-                swapModel(DEFAULT_MODEL_URL)
-              }}
-            >
-              ← Back to default model
+          {modelUrl !== SAMPLE_MODEL_URL && (
+            <button className="link-button" onClick={loadSample}>
+              Load a sample model
+            </button>
+          )}
+          {modelUrl && (
+            <button className="link-button" onClick={clearModel}>
+              ✕ Clear canvas
             </button>
           )}
         </section>
-        <PublishPanel modelUrl={modelUrl} description={baseModelPrompt} />
+        {modelUrl && (
         <section className="panel">
           <h2>Spatial prompt</h2>
           <div className="field">
@@ -416,6 +399,66 @@ export default function ForgePage() {
             </div>
           )}
         </section>
+        )}
+      </aside>
+
+      {/* CENTER — canvas, or the create-first surface when empty */}
+      <div className="viewer-wrap">
+        {compare ? (
+          <CompareView params={compare} onClose={() => setCompare(null)} />
+        ) : modelUrl ? (
+          <>
+            {modelStatus === 'loading' && <div className="viewer-overlay">Loading model…</div>}
+            {modelStatus === 'error' && (
+              <div className="viewer-overlay viewer-overlay-error">{modelError}</div>
+            )}
+            <ModelViewer
+              key={`${modelUrl}#${loadKey}`}
+              modelUrl={modelUrl}
+              points={points}
+              onAddPoint={addPoint}
+              selectedIndex={selectedIndex}
+              onSelectPoint={setSelectedIndex}
+              onPromptChange={setPointPrompt}
+              onLoaded={() => setModelStatus('ready')}
+              onError={(message) => {
+                setModelError(message)
+                setModelStatus('error')
+              }}
+            />
+            {modelStatus === 'ready' && points.length === 0 && (
+              <div className="viewer-hint">Click the model to add a point</div>
+            )}
+          </>
+        ) : busy ? (
+          <div className="forge-empty">
+            <div className="forge-empty-spinner" />
+            <h2>Forging your model…</h2>
+            <p>Hang tight — this runs in the panel on the left.</p>
+          </div>
+        ) : (
+          <div className="forge-empty">
+            <div className="forge-empty-glyph">
+              <svg viewBox="0 0 24 24" width="40" height="40" fill="none" stroke="currentColor" strokeWidth="1.3">
+                <path d="M12 2.5 21 7v10l-9 4.5L3 17V7l9-4.5Z" strokeLinejoin="round" />
+                <path d="M3 7l9 4.5L21 7M12 11.5V21.5" strokeLinejoin="round" />
+              </svg>
+            </div>
+            <h2>Your model appears here</h2>
+            <p>
+              Describe it or drop an image in the panel on the left, then hit{' '}
+              <span className="forge-empty-accent">Generate</span>.
+            </p>
+            <button className="ghost-button" onClick={loadSample}>
+              Load a sample model
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* RIGHT — library + publish */}
+      <aside className="sidebar forge-library">
+        {modelUrl && <PublishPanel modelUrl={modelUrl} description={baseModelPrompt} />}
         <HistoryPanel
           refreshKey={historyKey}
           busy={busy}

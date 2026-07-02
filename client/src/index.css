@@ -129,7 +129,7 @@ body::before {
   gap: 22px;
   padding: 12px 22px;
   border-bottom: 1px solid var(--line);
-  background: linear-gradient(180deg, rgba(255, 122, 31, 0.05), transparent);
+  background: linear-gradient(180deg, rgba(34, 211, 238, 0.05), transparent);
 }
 
 .topnav .brand {
@@ -184,7 +184,7 @@ body::before {
   align-items: center;
   padding: 14px 22px;
   border-bottom: 1px solid var(--line);
-  background: linear-gradient(180deg, rgba(255, 122, 31, 0.05), transparent);
+  background: linear-gradient(180deg, rgba(34, 211, 238, 0.05), transparent);
 }
 
 .brand {
@@ -248,7 +248,7 @@ body::before {
 .panel-toggle[aria-expanded='false'] {
   color: var(--forge);
   border-color: var(--forge);
-  background: rgba(255, 122, 31, 0.14);
+  background: rgba(34, 211, 238, 0.14);
 }
 
 .app-main {
@@ -424,7 +424,7 @@ body::before {
 .viewer-toolbar button.on {
   color: var(--forge);
   border-color: var(--forge);
-  background: rgba(255, 122, 31, 0.14);
+  background: rgba(34, 211, 238, 0.14);
 }
 
 .viewer-overlay {
@@ -970,7 +970,7 @@ body::before {
   place-items: center;
   border-radius: 50%;
   border: 1px solid var(--forge);
-  background: rgba(255, 122, 31, 0.14);
+  background: rgba(34, 211, 238, 0.14);
   color: var(--forge);
   font-family: var(--font-mono);
   font-size: 11px;
@@ -1081,7 +1081,7 @@ body::before {
 
 .hcard--edit .hcard-icon {
   color: var(--forge);
-  background: rgba(255, 122, 31, 0.12);
+  background: rgba(34, 211, 238, 0.12);
 }
 
 .hcard-body {
@@ -1119,7 +1119,7 @@ body::before {
 
 .badge-spatial {
   color: var(--forge);
-  border-color: rgba(255, 122, 31, 0.4);
+  border-color: rgba(34, 211, 238, 0.4);
 }
 
 .badge-plain {
@@ -1412,7 +1412,7 @@ body::before {
 .chip:hover:not(:disabled) {
   color: var(--forge);
   border-color: var(--forge);
-  background: rgba(255, 122, 31, 0.1);
+  background: rgba(34, 211, 238, 0.1);
 }
 
 .chip:disabled {
@@ -1725,7 +1725,7 @@ a.ghost-button {
   display: grid;
   place-items: center;
   border-radius: 10px;
-  background: rgba(255, 122, 31, 0.12);
+  background: rgba(34, 211, 238, 0.12);
   color: var(--forge);
   margin-bottom: 4px;
 }
@@ -1809,7 +1809,7 @@ a.ghost-button {
   border: 1px solid var(--line);
   border-radius: var(--radius);
   overflow: hidden;
-  background: radial-gradient(circle at 50% 40%, rgba(255, 122, 31, 0.08), transparent 70%);
+  background: radial-gradient(circle at 50% 40%, rgba(34, 211, 238, 0.08), transparent 70%);
 }
 
 .home-features {
@@ -2207,7 +2207,7 @@ a.ghost-button {
   height: 150px;
   overflow: hidden;
   background:
-    radial-gradient(circle at 50% 40%, rgba(255, 122, 31, 0.12), transparent 70%),
+    radial-gradient(circle at 50% 40%, rgba(34, 211, 238, 0.12), transparent 70%),
     var(--panel-2);
   border-bottom: 1px solid var(--line-soft);
 }
@@ -2339,7 +2339,7 @@ button.tag:hover {
 .tag.active {
   color: var(--forge);
   border-color: var(--forge);
-  background: rgba(255, 122, 31, 0.1);
+  background: rgba(34, 211, 238, 0.1);
 }
 
 .tag-count {
@@ -2424,7 +2424,7 @@ button.tag:hover {
 
 .wallet-chip:hover {
   border-color: var(--forge);
-  background: rgba(255, 122, 31, 0.1);
+  background: rgba(34, 211, 238, 0.1);
 }
 
 .wallet-panel {
@@ -2650,7 +2650,7 @@ button.tag:hover {
 }
 
 .notif-item.unread {
-  background: rgba(255, 122, 31, 0.06);
+  background: rgba(34, 211, 238, 0.06);
   border-left-color: var(--forge);
 }
 
@@ -2757,7 +2757,7 @@ button.tag:hover {
   border: 1px solid var(--line);
   border-radius: var(--radius);
   overflow: hidden;
-  background: radial-gradient(circle at 50% 40%, rgba(255, 122, 31, 0.08), transparent 70%);
+  background: radial-gradient(circle at 50% 40%, rgba(34, 211, 238, 0.08), transparent 70%);
 }
 
 .post-info {
@@ -3393,4 +3393,105 @@ button.tag:hover {
 /* generic modal panel edge */
 .modal {
   box-shadow: 0 0 0 1px rgba(34, 211, 238, 0.08), 0 24px 60px rgba(0, 0, 0, 0.6);
+}
+
+/* ============================================================
+   Forge 3-zone workspace (Phase 3): left options rail · center
+   canvas/create-surface · right library.
+   ============================================================ */
+
+.forge-rail {
+  border-left: none;
+  border-right: 1px solid var(--line);
+}
+
+.forge-library {
+  width: 300px;
+}
+
+/* center create-first / forging state */
+.forge-empty {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  gap: 12px;
+  padding: 32px;
+  color: var(--text-dim);
+}
+
+.forge-empty h2 {
+  font-family: var(--font-display);
+  font-size: 20px;
+  color: var(--text);
+  text-shadow: 0 0 22px rgba(34, 211, 238, 0.28);
+}
+
+.forge-empty p {
+  max-width: 340px;
+  font-size: 13.5px;
+  line-height: 1.55;
+}
+
+.forge-empty-accent {
+  color: var(--forge);
+  font-weight: 600;
+}
+
+.forge-empty-glyph {
+  display: grid;
+  place-items: center;
+  width: 84px;
+  height: 84px;
+  border-radius: 50%;
+  color: var(--forge);
+  background: radial-gradient(circle at 50% 35%, rgba(34, 211, 238, 0.14), transparent 70%),
+    var(--panel);
+  border: 1px solid var(--line);
+  box-shadow: 0 0 30px rgba(34, 211, 238, 0.12);
+  margin-bottom: 6px;
+}
+
+.forge-empty-spinner {
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
+  border: 3px solid var(--line);
+  border-top-color: var(--forge);
+  animation: spin 0.9s linear infinite;
+  box-shadow: 0 0 22px var(--forge-glow);
+  margin-bottom: 6px;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .forge-empty-spinner {
+    animation: none;
+  }
+}
+
+/* stack the workspace on narrow screens */
+@media (max-width: 1080px) {
+  .app-main.forge {
+    flex-direction: column;
+    overflow-y: auto;
+  }
+  .forge-rail,
+  .forge-library {
+    width: 100%;
+    border-right: none;
+    border-left: none;
+    border-bottom: 1px solid var(--line);
+  }
+  .app-main.forge .viewer-wrap {
+    min-height: 60vh;
+  }
 }

@@ -5,7 +5,7 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
 import MicButton from './MicButton.jsx'
 import { toLoadableUrl } from '../lib/modelUrl.js'
 
-const MARKER_COLOR = 0xff7a1f // molten amber — matches the brand action accent
+const MARKER_COLOR = 0xff2d9b // hot magenta — matches the selection accent
 
 /**
  * Browser 3D viewer: loads a GLB/glTF model, orbit controls, and raycast click
@@ -96,7 +96,7 @@ export default function ModelViewer({
     const keyLight = new THREE.DirectionalLight(0xfff1e0, 2.2)
     keyLight.position.set(3, 5, 2)
     scene.add(keyLight)
-    const rimLight = new THREE.DirectionalLight(0x5cc8ff, 0.9)
+    const rimLight = new THREE.DirectionalLight(0x22d3ee, 0.9)
     rimLight.position.set(-3, 2, -4)
     scene.add(rimLight)
 
@@ -180,7 +180,7 @@ export default function ModelViewer({
         markerGeom.dispose()
         markerGeom = new THREE.SphereGeometry(size * 0.006, 16, 16)
 
-        const grid = new THREE.GridHelper(size * 1.6, 22, 0x5cc8ff, 0x2a3242)
+        const grid = new THREE.GridHelper(size * 1.6, 22, 0x22d3ee, 0x1c2740)
         grid.position.y = box.min.y - center.y
         grid.material.transparent = true
         grid.material.opacity = 0.3
