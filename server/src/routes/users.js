@@ -1,10 +1,40 @@
 import { Router } from 'express'
 import { requireAuth, optionalAuth } from '../middleware/auth.js'
-import { getUserByUsername } from '../services/auth.js'
+import { getUserByUsername, updateProfile } from '../services/auth.js'
 import { toggleFollow, isFollowing, followCounts } from '../services/follows.js'
 import { notify } from '../services/notifications.js'
 
 const router = Router()
+
+// avatar colours a user may pick (must match the client palette)
+const AVATAR_COLORS = ['#ff7a1f', '#5cc8ff', '#5fd38a', '#c08bff', '#ff6b9d', '#ffc34d']
+
+// PATCH /api/users/me — edit your own profile (bio / avatar colour / banner)
+router.patch('/me', requireAuth, async (req, res) => {
+  const fields = {}
+  const body = req.body || {}
+  if (typeof body.bio === 'string') fields.bio = body.bio.trim().slice(0, 160)
+  if ('avatarColor' in body) {
+    if (body.avatarColor === null || AVATAR_COLORS.includes(body.avatarColor)) {
+      fields.avatarColor = body.avatarColor
+    } else {
+      return res.status(400).json({ error: 'invalid avatarColor' })
+    }
+  }
+  if ('bannerId' in body) {
+    const b = body.bannerId
+    if (b === null || (Number.isInteger(b) && b >= 0 && b <= 5)) fields.bannerId = b
+    else return res.status(400).json({ error: 'invalid bannerId' })
+  }
+  try {
+    const user = await updateProfile(req.user.id, fields)
+    if (!user) return res.status(404).json({ error: 'User not found' })
+    res.json({ user })
+  } catch (err) {
+    console.error('update profile failed:', err)
+    res.status(500).json({ error: 'Failed to update profile' })
+  }
+})
 
 // GET /api/users/:username — public profile: follower/following counts + whether
 // the current user follows them
@@ -18,6 +48,9 @@ router.get('/:username', optionalAuth, async (req, res) => {
     ])
     res.json({
       username: target.username,
+      bio: target.bio,
+      avatarColor: target.avatarColor,
+      bannerId: target.bannerId,
       followers: counts.followers,
       following: counts.following,
       isFollowing: following,

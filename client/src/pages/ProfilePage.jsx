@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react'
 import { useParams } from 'react-router-dom'
-import Avatar from '../components/Avatar.jsx'
+import Avatar, { AVATAR_COLORS } from '../components/Avatar.jsx'
 import PostCard from '../components/PostCard.jsx'
 import { useAuth } from '../auth/AuthContext.jsx'
 
-// deterministic banner gradient per user (dark + one on-brand accent)
+// banner presets (dark base + one on-brand accent), index stored per user
 const BANNERS = [
   ['#3a2a12', '#ff7a1f'],
   ['#12303a', '#5cc8ff'],
@@ -13,13 +13,16 @@ const BANNERS = [
   ['#3a1224', '#ff6b8a'],
   ['#1a2440', '#4a7bff'],
 ]
-const bannerFor = (name = '') => {
-  let h = 0
-  for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) % 997
-  const [base, accent] = BANNERS[h % BANNERS.length]
+const bannerStyle = (i) => {
+  const [base, accent] = BANNERS[((i % BANNERS.length) + BANNERS.length) % BANNERS.length]
   return {
     backgroundImage: `radial-gradient(600px 200px at 80% -40%, ${accent}55, transparent 70%), linear-gradient(120deg, ${base}, #0b0d12 72%)`,
   }
+}
+const hashIndex = (name = '') => {
+  let h = 0
+  for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) % 997
+  return h % BANNERS.length
 }
 
 const TABS = [
@@ -28,17 +31,23 @@ const TABS = [
   { id: 'badges', label: 'Badges' },
 ]
 
-/** A user's profile: banner, avatar, follow stats, share, and tabs. */
+/** A user's profile: banner, avatar, bio, follow stats, share, editable by the owner. */
 export default function ProfilePage() {
   const { username } = useParams()
   const { user, token } = useAuth()
   const [posts, setPosts] = useState(null)
-  const [profile, setProfile] = useState(null) // { followers, following, isFollowing, isSelf }
+  const [profile, setProfile] = useState(null)
   const [error, setError] = useState(null)
   const [busy, setBusy] = useState(false)
   const [tab, setTab] = useState('models')
   const [copied, setCopied] = useState(false)
+
+  // edit form
   const [editOpen, setEditOpen] = useState(false)
+  const [editBio, setEditBio] = useState('')
+  const [editColor, setEditColor] = useState(null)
+  const [editBanner, setEditBanner] = useState(null)
+  const [saving, setSaving] = useState(false)
 
   useEffect(() => {
     let cancelled = false
@@ -93,16 +102,48 @@ export default function ProfilePage() {
     }
   }
 
+  const openEdit = () => {
+    setEditBio(profile?.bio || '')
+    setEditColor(profile?.avatarColor ?? null)
+    setEditBanner(profile?.bannerId ?? null)
+    setEditOpen(true)
+  }
+
+  const saveProfile = async () => {
+    setSaving(true)
+    try {
+      const res = await fetch('/api/users/me', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ bio: editBio, avatarColor: editColor, bannerId: editBanner }),
+      })
+      const data = await res.json()
+      if (res.ok) {
+        setProfile((pr) => ({
+          ...pr,
+          bio: data.user.bio,
+          avatarColor: data.user.avatarColor,
+          bannerId: data.user.bannerId,
+        }))
+        setEditOpen(false)
+      }
+    } finally {
+      setSaving(false)
+    }
+  }
+
   const isSelf = profile?.isSelf
   const canFollow = user && profile && !isSelf
+  const banner =
+    profile?.bannerId != null ? bannerStyle(profile.bannerId) : bannerStyle(hashIndex(username))
 
   return (
     <div className="profile">
-      <div className="profile-banner" style={bannerFor(username)} />
+      <div className="profile-banner" style={banner} />
 
       <div className="profile-head">
         <div className="profile-avatar">
-          <Avatar username={username} size={88} />
+          <Avatar username={username} size={88} color={profile?.avatarColor} />
         </div>
         <div className="profile-head-main">
           <h1 className="profile-name">@{username}</h1>
@@ -120,6 +161,7 @@ export default function ProfilePage() {
               </span>
             </div>
           )}
+          {profile?.bio && <p className="profile-bio">{profile.bio}</p>}
         </div>
         <div className="profile-actions">
           {canFollow && (
@@ -132,7 +174,7 @@ export default function ProfilePage() {
             </button>
           )}
           {isSelf && (
-            <button className="ghost-button" onClick={() => setEditOpen(true)}>
+            <button className="ghost-button" onClick={openEdit}>
               Edit profile
             </button>
           )}
@@ -168,24 +210,73 @@ export default function ProfilePage() {
         ) : (
           <p className="hint">Loading…</p>
         ))}
-
-      {tab === 'favorites' && (
-        <p className="explore-empty">Favorites are coming soon.</p>
-      )}
-      {tab === 'badges' && (
-        <p className="explore-empty">Achievements &amp; badges are coming soon.</p>
-      )}
+      {tab === 'favorites' && <p className="explore-empty">Favorites are coming soon.</p>}
+      {tab === 'badges' && <p className="explore-empty">Achievements &amp; badges are coming soon.</p>}
 
       {editOpen && (
         <div className="modal-backdrop" onClick={() => setEditOpen(false)}>
           <div className="modal" onClick={(e) => e.stopPropagation()}>
             <h3>Edit profile</h3>
-            <p className="hint">
-              Custom avatar, banner and bio are coming soon. Your @username is set at sign-up.
-            </p>
-            <button className="ghost-button modal-close" onClick={() => setEditOpen(false)}>
-              Close
-            </button>
+
+            <label className="edit-label">Bio</label>
+            <textarea
+              className="edit-bio"
+              value={editBio}
+              onChange={(e) => setEditBio(e.target.value)}
+              placeholder="Tell people what you make…"
+              rows={3}
+              maxLength={160}
+            />
+            <span className="hint">{160 - editBio.length} characters left</span>
+
+            <label className="edit-label">Avatar colour</label>
+            <div className="swatch-row">
+              <button
+                className={`swatch swatch-default ${editColor == null ? 'active' : ''}`}
+                onClick={() => setEditColor(null)}
+                title="Default"
+              >
+                Auto
+              </button>
+              {AVATAR_COLORS.map((c) => (
+                <button
+                  key={c}
+                  className={`swatch ${editColor === c ? 'active' : ''}`}
+                  style={{ background: c }}
+                  onClick={() => setEditColor(c)}
+                  aria-label={`avatar ${c}`}
+                />
+              ))}
+            </div>
+
+            <label className="edit-label">Banner</label>
+            <div className="swatch-row">
+              <button
+                className={`swatch swatch-default ${editBanner == null ? 'active' : ''}`}
+                onClick={() => setEditBanner(null)}
+                title="Default"
+              >
+                Auto
+              </button>
+              {BANNERS.map((_, i) => (
+                <button
+                  key={i}
+                  className={`banner-swatch ${editBanner === i ? 'active' : ''}`}
+                  style={bannerStyle(i)}
+                  onClick={() => setEditBanner(i)}
+                  aria-label={`banner ${i + 1}`}
+                />
+              ))}
+            </div>
+
+            <div className="edit-actions">
+              <button className="submit" onClick={saveProfile} disabled={saving}>
+                {saving ? 'Saving…' : 'Save'}
+              </button>
+              <button className="ghost-button" onClick={() => setEditOpen(false)}>
+                Cancel
+              </button>
+            </div>
           </div>
         </div>
       )}
