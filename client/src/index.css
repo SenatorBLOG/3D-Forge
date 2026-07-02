@@ -1,28 +1,33 @@
-/* 3D Forge — "precision forge" visual identity.
-   Dark technical instrument: molten-amber action accent, cool-steel data accent. */
+/* 3D Forge — "Neon Noir" cyberpunk identity.
+   Near-black instrument surface: electric-cyan action, hot-magenta data accent,
+   violet tertiary. Token *names* are legacy (--forge / --steel) but their values
+   now carry the neon palette, so recolouring flows from this one block. */
 
 :root {
-  --bg: #0b0d12;
-  --panel: #12151d;
-  --panel-2: #171b25;
-  --line: #242a37;
-  --line-soft: #1b202b;
+  --bg: #06070d;
+  --panel: #0c0f18;
+  --panel-2: #141a26;
+  --line: #1c2740;
+  --line-soft: #141a28;
 
-  --text: #eceef4;
-  --text-dim: #8c96ab;
+  --text: #eceff6;
+  --text-dim: #8891a6;
   --text-faint: #5a6276;
 
-  --forge: #ff7a1f; /* molten amber — brand + primary action */
-  --forge-2: #ffab5e;
-  --forge-deep: #d65a0a;
-  --forge-glow: rgba(255, 122, 31, 0.4);
+  --forge: #22d3ee; /* electric cyan — brand + primary action */
+  --forge-2: #67e8f9;
+  --forge-deep: #0891b2;
+  --forge-glow: rgba(34, 211, 238, 0.45);
 
-  --steel: #5cc8ff; /* cool — spatial data, selection, focus */
-  --steel-soft: rgba(92, 200, 255, 0.14);
+  --steel: #ff2d9b; /* hot magenta — data, selection, focus, likes */
+  --steel-soft: rgba(255, 45, 155, 0.14);
+  --steel-glow: rgba(255, 45, 155, 0.45);
 
-  --danger: #ff6b6b;
-  --good: #5fd38a;
-  --star: #ffc34d;
+  --violet: #a855f7; /* tertiary — tags, wireframe accents */
+
+  --danger: #ff5d6c;
+  --good: #35e6a4;
+  --star: #ffd23d;
 
   --font-display: 'Chakra Petch', system-ui, sans-serif;
   --font-ui: 'Hanken Grotesk', system-ui, sans-serif;
@@ -47,15 +52,40 @@ body {
   font-family: var(--font-ui);
   color: var(--text);
   background-color: var(--bg);
-  /* layered atmosphere: forge heat (warm, top-left) + cool depth + blueprint grid */
+  /* layered atmosphere: cyan plasma (top-left) + magenta depth (bottom-right) +
+     faint cyan circuit grid */
   background-image:
-    radial-gradient(900px 500px at 0% -10%, rgba(255, 122, 31, 0.1), transparent 60%),
-    radial-gradient(800px 600px at 100% 110%, rgba(92, 200, 255, 0.07), transparent 55%),
-    linear-gradient(transparent 95%, rgba(140, 160, 190, 0.035) 0),
-    linear-gradient(90deg, transparent 95%, rgba(140, 160, 190, 0.035) 0);
+    radial-gradient(1000px 560px at 0% -10%, rgba(34, 211, 238, 0.12), transparent 60%),
+    radial-gradient(820px 620px at 100% 110%, rgba(255, 45, 155, 0.09), transparent 55%),
+    linear-gradient(transparent 95%, rgba(34, 211, 238, 0.05) 0),
+    linear-gradient(90deg, transparent 95%, rgba(34, 211, 238, 0.05) 0);
   background-size: 100% 100%, 100% 100%, 26px 26px, 26px 26px;
   background-attachment: fixed;
   -webkit-font-smoothing: antialiased;
+}
+
+/* faint scanline sheen over the whole app — pure atmosphere, no interaction */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 9999;
+  background: repeating-linear-gradient(
+    0deg,
+    rgba(0, 0, 0, 0) 0,
+    rgba(0, 0, 0, 0) 2px,
+    rgba(0, 0, 0, 0.08) 3px,
+    rgba(0, 0, 0, 0) 4px
+  );
+  mix-blend-mode: overlay;
+  opacity: 0.5;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body::before {
+    display: none;
+  }
 }
 
 /* consistent keyboard focus ring (mouse clicks don't trigger :focus-visible) */
@@ -763,15 +793,16 @@ body {
   font-size: 13px;
   letter-spacing: 1px;
   text-transform: uppercase;
-  color: #1a0e03;
+  color: #04121a;
   background: linear-gradient(180deg, var(--forge-2), var(--forge));
   cursor: pointer;
+  box-shadow: 0 0 14px var(--forge-glow);
   transition: box-shadow 0.18s, transform 0.05s, filter 0.18s;
 }
 
 .submit:hover:not(:disabled) {
-  box-shadow: 0 0 22px var(--forge-glow);
-  filter: brightness(1.05);
+  box-shadow: 0 0 26px var(--forge-glow), 0 0 6px var(--forge-glow);
+  filter: brightness(1.08);
 }
 
 .submit:active:not(:disabled) {
@@ -3205,4 +3236,50 @@ button.tag:hover {
     margin-left: 0;
     width: 100%;
   }
+}
+
+/* ============================================================
+   Neon Noir treatments (Phase 1) — additive glow/edges layered
+   on top of the token remap. Placed last so they win by order.
+   ============================================================ */
+
+/* page titles get a soft cyan halo */
+.page h1 {
+  text-shadow: 0 0 24px rgba(34, 211, 238, 0.28);
+}
+
+/* section headings pick up a faint magenta edge for the data-terminal feel */
+.account-card-head h2,
+.discover-grid-title {
+  text-shadow: 0 0 18px rgba(255, 45, 155, 0.22);
+}
+
+/* community + account cards: neon edge that ignites on hover */
+.post-card {
+  border-color: var(--line);
+  transition: border-color 0.18s, transform 0.18s, box-shadow 0.18s;
+}
+
+.post-card:hover {
+  border-color: var(--forge);
+  transform: translateY(-3px);
+  box-shadow: 0 0 0 1px var(--forge-glow), 0 10px 32px rgba(0, 0, 0, 0.5),
+    0 0 26px var(--forge-glow);
+}
+
+/* raised panels get a subtle cyan rim */
+.account-card,
+.wallet-panel,
+.user-menu-panel {
+  box-shadow: 0 0 0 1px rgba(34, 211, 238, 0.06), 0 16px 40px rgba(0, 0, 0, 0.5);
+}
+
+/* the ghost button hover already flips to --steel (now magenta) — give it a glow */
+.ghost-button:hover:not(:disabled) {
+  box-shadow: 0 0 14px var(--steel-glow);
+}
+
+/* generic modal panel edge */
+.modal {
+  box-shadow: 0 0 0 1px rgba(34, 211, 238, 0.08), 0 24px 60px rgba(0, 0, 0, 0.6);
 }
