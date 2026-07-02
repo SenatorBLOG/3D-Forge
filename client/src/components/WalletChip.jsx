@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext.jsx'
 
 // a little 3D-token coin
@@ -21,47 +22,12 @@ const reasonLabel = (r) => {
   return r
 }
 
-const PACKS = [
-  { n: 100, price: '$2' },
-  { n: 500, price: '$8' },
-  { n: 1200, price: '$15' },
-]
-
-function BuyModal({ onClose }) {
-  return (
-    <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal" onClick={(e) => e.stopPropagation()}>
-        <h3>Get 3D-tokens</h3>
-        <p className="hint">Tokens power your generations — spend them to make models.</p>
-        <div className="token-packs">
-          {PACKS.map((p) => (
-            <div className="token-pack" key={p.n}>
-              <div className="token-pack-n">
-                <Coin size={18} /> {p.n}
-              </div>
-              <div className="token-pack-price">{p.price}</div>
-              <button className="ghost-button" disabled>
-                Soon
-              </button>
-            </div>
-          ))}
-        </div>
-        <p className="hint">Checkout is coming soon — tokens are simulated for now.</p>
-        <button className="ghost-button modal-close" onClick={onClose}>
-          Close
-        </button>
-      </div>
-    </div>
-  )
-}
-
 /** Nav chip showing the current user's 3D-token balance; opens a dropdown with
- *  recent activity and a "Get tokens" modal. */
+ *  recent activity and a link to the pricing page. */
 export default function WalletChip() {
   const { token } = useAuth()
   const [wallet, setWallet] = useState(null) // { balance, history }
   const [open, setOpen] = useState(false)
-  const [buy, setBuy] = useState(false)
   const ref = useRef(null)
 
   useEffect(() => {
@@ -126,19 +92,11 @@ export default function WalletChip() {
               <p className="hint">No activity yet.</p>
             )}
           </div>
-          <button
-            className="submit wallet-get"
-            onClick={() => {
-              setBuy(true)
-              setOpen(false)
-            }}
-          >
+          <Link className="submit wallet-get" to="/pricing" onClick={() => setOpen(false)}>
             Get tokens
-          </button>
+          </Link>
         </div>
       )}
-
-      {buy && <BuyModal onClose={() => setBuy(false)} />}
     </div>
   )
 }
