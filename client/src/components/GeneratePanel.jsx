@@ -31,7 +31,24 @@ export default function GeneratePanel({
   const [preview, setPreview] = useState(null) // object URL for instant preview
   const [uploading, setUploading] = useState(false)
   const [imgError, setImgError] = useState(null)
+  const [costs, setCosts] = useState(null) // { tiers: {meshy-5,meshy-6}, refine }
   const fileRef = useRef(null)
+
+  // token price list, so the button can show "· N tokens" before generating
+  useEffect(() => {
+    let cancelled = false
+    fetch('/api/generate/costs')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => !cancelled && d && setCosts(d))
+      .catch(() => {})
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  const estCost = costs
+    ? (costs.tiers?.[aiModel] ?? costs.tiers?.['meshy-5'] ?? 0) + (textured ? costs.refine || 0 : 0)
+    : null
 
   const submittedRef = useRef(null)
   const { task, error, generating, start } = useGenerationTask((url) =>
@@ -230,18 +247,18 @@ export default function GeneratePanel({
           className={`chip ${aiModel === 'meshy-5' ? 'chip--on' : ''}`}
           onClick={() => setAiModel('meshy-5')}
           disabled={busy}
-          title="Meshy-5 — cheaper (5 credits), good for tests"
+          title="Meshy-5 — cheaper, good for tests"
         >
-          M5 · cheap
+          M5 · cheap{costs ? ` · ${costs.tiers?.['meshy-5']}` : ''}
         </button>
         <button
           type="button"
           className={`chip ${aiModel === 'meshy-6' ? 'chip--on' : ''}`}
           onClick={() => setAiModel('meshy-6')}
           disabled={busy}
-          title="Meshy-6 — prettier (20 credits), for the demo"
+          title="Meshy-6 — prettier, for the demo"
         >
-          M6 · pretty
+          M6 · pretty{costs ? ` · ${costs.tiers?.['meshy-6']}` : ''}
         </button>
       </div>
       <label className="toggle">
@@ -252,18 +269,23 @@ export default function GeneratePanel({
           disabled={busy}
         />
         Add textures (color){' '}
-        <span className="hint">({textured ? '+10 credits, colored' : 'off — gray preview'})</span>
+        <span className="hint">
+          ({textured ? `+${costs?.refine ?? 20} tokens, colored` : 'off — gray preview'})
+        </span>
       </label>
       <button
-        className="submit"
+        className="submit gen-go"
         onClick={mode === 'text' ? startText : startImage}
         disabled={generating || disabled || !canGenerate}
       >
-        {generating
-          ? `Generating… ${task.progress}%`
-          : mode === 'image'
-            ? 'Generate 3D from image'
-            : 'Generate 3D model'}
+        {generating ? (
+          `Generating… ${task.progress}%`
+        ) : (
+          <>
+            {mode === 'image' ? 'Generate 3D from image' : 'Generate 3D model'}
+            {estCost != null && <span className="gen-cost">{estCost} ⛁</span>}
+          </>
+        )}
       </button>
       {generating && (
         <div className="progress" aria-hidden="true">
