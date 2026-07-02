@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import ModelViewer from '../components/ModelViewer.jsx'
 import PostCard from '../components/PostCard.jsx'
+import CardSkeleton from '../components/CardSkeleton.jsx'
 
 const THEMES = ['Dragon', 'Sci-fi helmet', 'Castle', 'Anime', 'Vehicle', 'Sword']
 const HOME_LIMIT = 8
@@ -121,7 +122,7 @@ export default function HomePage() {
             </Link>
           </div>
         ) : (
-          <p className="hint">Loading the gallery…</p>
+          <CardSkeleton count={HOME_LIMIT} />
         )}
       </section>
     </div>

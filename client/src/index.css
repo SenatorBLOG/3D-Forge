@@ -58,6 +58,13 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
+/* consistent keyboard focus ring (mouse clicks don't trigger :focus-visible) */
+:focus-visible {
+  outline: 2px solid var(--steel);
+  outline-offset: 2px;
+  border-radius: 3px;
+}
+
 .app {
   display: flex;
   flex-direction: column;
@@ -1934,6 +1941,98 @@ a.ghost-button {
 .explore-empty {
   margin-top: 24px;
   color: var(--text-dim);
+}
+
+/* ---- designed empty states ---- */
+
+.empty-state {
+  margin: 48px auto;
+  max-width: 340px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  animation: rise 0.4s ease both;
+}
+
+.empty-state-glyph {
+  display: grid;
+  place-items: center;
+  width: 68px;
+  height: 68px;
+  border-radius: 50%;
+  color: var(--text-faint);
+  background: radial-gradient(circle at 50% 35%, var(--steel-soft), transparent 70%), var(--panel);
+  border: 1px solid var(--line);
+  margin-bottom: 16px;
+}
+
+.empty-state-title {
+  font-family: var(--font-display);
+  font-size: 15px;
+  letter-spacing: 0.3px;
+  color: var(--text);
+}
+
+.empty-state-hint {
+  margin-top: 6px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-dim);
+}
+
+.empty-state-action {
+  margin-top: 18px;
+}
+
+/* ---- skeleton loaders ---- */
+
+.skeleton {
+  background: linear-gradient(100deg, var(--panel) 30%, var(--panel-2) 50%, var(--panel) 70%);
+  background-size: 220% 100%;
+  animation: shimmer 1.3s ease-in-out infinite;
+}
+
+@keyframes shimmer {
+  from {
+    background-position: 180% 0;
+  }
+  to {
+    background-position: -80% 0;
+  }
+}
+
+.skeleton-card {
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius);
+  overflow: hidden;
+  background: var(--panel);
+}
+
+.skeleton-thumb {
+  height: 150px;
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.skeleton-card-body {
+  padding: 12px 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+
+.skeleton-line {
+  height: 11px;
+  border-radius: 5px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skeleton {
+    animation: none;
+  }
+  .empty-state {
+    animation: none;
+  }
 }
 
 .explore-grid {

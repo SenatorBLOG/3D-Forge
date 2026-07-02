@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import PostCard from '../components/PostCard.jsx'
+import EmptyState from '../components/EmptyState.jsx'
+import CardSkeleton from '../components/CardSkeleton.jsx'
 import { useAuth } from '../auth/AuthContext.jsx'
 
 /** The community gallery: models published by everyone, with free-text search,
@@ -160,7 +162,14 @@ export default function ExplorePage() {
       )}
 
       {error && <span className="url-error">{error}</span>}
-      {posts && posts.length === 0 && <p className="explore-empty">{empty}</p>}
+      {!posts && !error && <CardSkeleton count={8} />}
+      {posts && posts.length === 0 && (
+        <EmptyState
+          icon={feed === 'following' ? 'star' : 'search'}
+          title={filtered || feed === 'following' ? 'No matches' : 'Nothing published yet'}
+          hint={empty}
+        />
+      )}
       {posts && posts.length > 0 && (
         <div className="explore-grid">
           {posts.map((p) => (
