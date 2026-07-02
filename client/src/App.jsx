@@ -7,6 +7,7 @@ import DiscoverPage from './pages/DiscoverPage.jsx'
 import PostPage from './pages/PostPage.jsx'
 import ProfilePage from './pages/ProfilePage.jsx'
 import AccountPage from './pages/AccountPage.jsx'
+import PricingPage from './pages/PricingPage.jsx'
 import LoginPage from './pages/LoginPage.jsx'
 import RegisterPage from './pages/RegisterPage.jsx'
 
@@ -23,6 +24,7 @@ export default function App() {
           <Route path="/post/:id" element={<PostPage />} />
           <Route path="/u/:username" element={<ProfilePage />} />
           <Route path="/account" element={<AccountPage />} />
+          <Route path="/pricing" element={<PricingPage />} />
           <Route path="/login" element={<LoginPage />} />
           <Route path="/register" element={<RegisterPage />} />
           <Route path="*" element={<HomePage />} />

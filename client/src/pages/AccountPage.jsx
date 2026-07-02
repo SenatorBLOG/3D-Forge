@@ -31,12 +31,6 @@ const fmtDate = (iso) => {
   }
 }
 
-const PACKS = [
-  { n: 100, price: '$2' },
-  { n: 500, price: '$8' },
-  { n: 1200, price: '$15' },
-]
-
 /** Your private hub: account info, 3D-token balance + full spend history,
  *  your published creations, and account settings. Reads existing endpoints
  *  (GET /api/wallet, GET /api/posts?username=) — no new backend needed. */
@@ -45,7 +39,6 @@ export default function AccountPage() {
   const navigate = useNavigate()
   const [wallet, setWallet] = useState(null)
   const [posts, setPosts] = useState(null)
-  const [buy, setBuy] = useState(false)
 
   // not signed in → send to login
   useEffect(() => {
@@ -95,9 +88,9 @@ export default function AccountPage() {
         <section className="account-card">
           <div className="account-card-head">
             <h2>3D-tokens</h2>
-            <button className="submit account-buy" onClick={() => setBuy(true)}>
+            <Link className="submit account-buy" to="/pricing">
               Get tokens
-            </button>
+            </Link>
           </div>
           <div className="account-balance">
             <Coin size={26} />
@@ -182,32 +175,6 @@ export default function AccountPage() {
           />
         )}
       </section>
-
-      {buy && (
-        <div className="modal-backdrop" onClick={() => setBuy(false)}>
-          <div className="modal" onClick={(e) => e.stopPropagation()}>
-            <h3>Get 3D-tokens</h3>
-            <p className="hint">Tokens power your generations — spend them to make models.</p>
-            <div className="token-packs">
-              {PACKS.map((p) => (
-                <div className="token-pack" key={p.n}>
-                  <div className="token-pack-n">
-                    <Coin size={18} /> {p.n}
-                  </div>
-                  <div className="token-pack-price">{p.price}</div>
-                  <button className="ghost-button" disabled>
-                    Soon
-                  </button>
-                </div>
-              ))}
-            </div>
-            <p className="hint">Checkout is coming soon — tokens are simulated for now.</p>
-            <button className="ghost-button modal-close" onClick={() => setBuy(false)}>
-              Close
-            </button>
-          </div>
-        </div>
-      )}
     </div>
   )
 }

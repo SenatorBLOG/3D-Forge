@@ -37,6 +37,7 @@ export default function TopNav() {
         <NavLink to="/forge">Forge</NavLink>
         <NavLink to="/discover">Discover</NavLink>
         <NavLink to="/explore">Explore</NavLink>
+        <NavLink to="/pricing">Pricing</NavLink>
       </nav>
 
       <div className="topnav-auth">
