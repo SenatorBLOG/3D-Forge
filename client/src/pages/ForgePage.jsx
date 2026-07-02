@@ -290,12 +290,29 @@ export default function ForgePage() {
           )}
         </section>
         {modelUrl && (
-        <section className="panel">
-          <h2>Spatial prompt</h2>
+        <section className="panel spatial-panel">
+          <div className="spatial-head">
+            <span className="spatial-flag">✦ Flagship</span>
+            <h2>Spatial edit</h2>
+          </div>
+          <p className="spatial-blurb">
+            Click any part of the model and describe a local change — region-grounded edits a
+            plain text prompt can’t target. This is what makes 3D&nbsp;Forge different.
+          </p>
           <div className="field">
             <label>Selected points ({points.length})</label>
             {points.length === 0 ? (
-              <code>click the model to add a point, then describe its change</code>
+              <ol className="spatial-steps">
+                <li>
+                  <strong>Click</strong> a spot on the model
+                </li>
+                <li>
+                  <strong>Describe</strong> the change for that point
+                </li>
+                <li>
+                  <strong>Send edit</strong> — or Compare it against a plain prompt
+                </li>
+              </ol>
             ) : (
               <div className="point-list">
                 {points.map((p, i) => (
@@ -427,7 +444,7 @@ export default function ForgePage() {
               }}
             />
             {modelStatus === 'ready' && points.length === 0 && (
-              <div className="viewer-hint">Click the model to add a point</div>
+              <div className="viewer-hint">✦ Spatial edit — click any part to reshape it</div>
             )}
           </>
         ) : busy ? (
