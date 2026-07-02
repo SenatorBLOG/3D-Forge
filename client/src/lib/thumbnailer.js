@@ -10,7 +10,7 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
 
 const WIDTH = 440
 const HEIGHT = 300
-const WIRE_COLOR = 0x5cc8ff // steel — matches the brand data accent
+const WIRE_COLOR = 0x22d3ee // electric cyan — matches the brand action accent
 
 const cache = new Map() // modelUrl -> Promise<{ shaded, wire }>
 let queue = Promise.resolve() // one render at a time
@@ -46,7 +46,7 @@ function renderThumbnail(modelUrl) {
     const key = new THREE.DirectionalLight(0xfff1e0, 2.2)
     key.position.set(3, 5, 2)
     scene.add(key)
-    const rim = new THREE.DirectionalLight(0x5cc8ff, 0.9)
+    const rim = new THREE.DirectionalLight(0x22d3ee, 0.9)
     rim.position.set(-3, 2, -4)
     scene.add(rim)
 
