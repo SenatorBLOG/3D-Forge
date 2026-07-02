@@ -2286,24 +2286,57 @@ a.ghost-button {
 
 .post-card-meta {
   display: flex;
+  align-items: center;
   justify-content: space-between;
+  gap: 8px;
+  margin-top: 2px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line-soft);
   font-family: var(--font-mono);
   font-size: 11px;
   color: var(--text-faint);
 }
 
 .post-author {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
   color: var(--steel);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.post-stats {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  flex: none;
+}
+
+.post-stats .stat {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.post-stats .stat svg {
+  display: block;
+}
+
+.post-stats .stat-like {
+  color: var(--steel);
+}
+
+.post-stats .stat-comment {
+  color: var(--forge);
 }
 
 @media (max-width: 820px) {
   .explore {
     padding: 28px 24px 40px;
   }
-}
-
-.post-stats .heart {
-  color: var(--forge);
 }
 
 /* ---- tags + explore search ---- */

@@ -1,8 +1,21 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import Logo from './Logo.jsx'
+import Avatar from './Avatar.jsx'
 import TagList from './TagList.jsx'
 import { getThumbnail } from '../lib/thumbnailer.js'
+
+const HeartIcon = () => (
+  <svg viewBox="0 0 24 24" width="12" height="12" fill="currentColor" aria-hidden="true">
+    <path d="M12 21s-7.5-4.6-10-9.2C.6 9 1.6 5.7 4.6 5c1.9-.4 3.6.5 4.4 1.9L12 8l3-1.1c.8-1.4 2.5-2.3 4.4-1.9 3 .7 4 4 2.6 6.8C19.5 16.4 12 21 12 21z" />
+  </svg>
+)
+
+const CommentIcon = () => (
+  <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+    <path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.4A8 8 0 1 1 21 12z" strokeLinejoin="round" />
+  </svg>
+)
 
 /** A community feed card. Shows a real model preview rendered once per model URL
  *  (shared cache — no live WebGL viewer per card). On hover the shaded preview
@@ -42,10 +55,17 @@ export default function PostCard({ post }) {
         </h3>
         <TagList tags={post.tags} linkify={false} />
         <div className="post-card-meta">
-          <span className="post-author">@{post.authorUsername}</span>
+          <span className="post-author">
+            <Avatar username={post.authorUsername} size={18} />
+            @{post.authorUsername}
+          </span>
           <span className="post-stats">
-            <span className="heart">♥</span> {post.likes ?? 0} · {post.comments ?? 0}{' '}
-            comments
+            <span className="stat stat-like">
+              <HeartIcon /> {post.likes ?? 0}
+            </span>
+            <span className="stat stat-comment">
+              <CommentIcon /> {post.comments ?? 0}
+            </span>
           </span>
         </div>
       </div>
