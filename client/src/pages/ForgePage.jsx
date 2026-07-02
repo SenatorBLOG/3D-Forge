@@ -251,6 +251,9 @@ export default function ForgePage() {
         <GeneratePanel
           disabled={editTask.generating}
           initialMode={searchParams.get('mode') === 'image' ? 'image' : 'text'}
+          initialPrompt={searchParams.get('prompt') || ''}
+          initialImageId={searchParams.get('imageId') || null}
+          autostart={searchParams.get('autostart') === '1'}
           onGeneratingChange={setGenBusy}
           onModelReady={(url, prompt) => {
             setBaseModelPrompt(prompt)
