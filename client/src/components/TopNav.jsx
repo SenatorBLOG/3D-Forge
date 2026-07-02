@@ -1,3 +1,4 @@
+import { useEffect, useRef, useState } from 'react'
 import { Link, NavLink } from 'react-router-dom'
 import Logo from './Logo.jsx'
 import Avatar from './Avatar.jsx'
@@ -8,6 +9,17 @@ import { useAuth } from '../auth/AuthContext.jsx'
 /** Global navigation: brand, primary links, and the auth area. */
 export default function TopNav() {
   const { user, logout } = useAuth()
+  const [menu, setMenu] = useState(false)
+  const ref = useRef(null)
+
+  useEffect(() => {
+    if (!menu) return
+    const onClick = (e) => {
+      if (ref.current && !ref.current.contains(e.target)) setMenu(false)
+    }
+    document.addEventListener('mousedown', onClick)
+    return () => document.removeEventListener('mousedown', onClick)
+  }, [menu])
 
   return (
     <header className="topnav">
@@ -32,12 +44,35 @@ export default function TopNav() {
           <>
             <WalletChip />
             <NotificationsBell />
-            <Link to={`/u/${user.username}`} className="topnav-user">
-              <Avatar username={user.username} size={26} />@{user.username}
-            </Link>
-            <button className="ghost-button" onClick={logout}>
-              Log out
-            </button>
+            <div className="user-menu" ref={ref}>
+              <button
+                className="topnav-user"
+                onClick={() => setMenu((m) => !m)}
+                aria-haspopup="menu"
+                aria-expanded={menu}
+              >
+                <Avatar username={user.username} size={26} color={user.avatarColor} />@{user.username}
+              </button>
+              {menu && (
+                <div className="user-menu-panel" role="menu">
+                  <Link to={`/u/${user.username}`} role="menuitem" onClick={() => setMenu(false)}>
+                    My profile
+                  </Link>
+                  <Link to="/account" role="menuitem" onClick={() => setMenu(false)}>
+                    Account &amp; tokens
+                  </Link>
+                  <button
+                    role="menuitem"
+                    onClick={() => {
+                      setMenu(false)
+                      logout()
+                    }}
+                  >
+                    Log out
+                  </button>
+                </div>
+              )}
+            </div>
           </>
         ) : (
           <>

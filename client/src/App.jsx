@@ -6,6 +6,7 @@ import ExplorePage from './pages/ExplorePage.jsx'
 import DiscoverPage from './pages/DiscoverPage.jsx'
 import PostPage from './pages/PostPage.jsx'
 import ProfilePage from './pages/ProfilePage.jsx'
+import AccountPage from './pages/AccountPage.jsx'
 import LoginPage from './pages/LoginPage.jsx'
 import RegisterPage from './pages/RegisterPage.jsx'
 
@@ -21,6 +22,7 @@ export default function App() {
           <Route path="/discover" element={<DiscoverPage />} />
           <Route path="/post/:id" element={<PostPage />} />
           <Route path="/u/:username" element={<ProfilePage />} />
+          <Route path="/account" element={<AccountPage />} />
           <Route path="/login" element={<LoginPage />} />
           <Route path="/register" element={<RegisterPage />} />
           <Route path="*" element={<HomePage />} />
