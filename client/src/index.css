@@ -2705,6 +2705,103 @@ button.tag:hover {
   border-bottom-color: var(--forge);
 }
 
+.profile-bio {
+  margin-top: 10px;
+  max-width: 640px;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--text-dim);
+}
+
+/* edit-profile form */
+.edit-label {
+  display: block;
+  margin: 16px 0 8px;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-dim);
+}
+
+.edit-bio {
+  width: 100%;
+  resize: vertical;
+  font-family: var(--font-ui);
+  font-size: 14px;
+  color: var(--text);
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 9px 12px;
+}
+
+.edit-bio:focus {
+  outline: none;
+  border-color: var(--steel);
+  box-shadow: 0 0 0 3px var(--steel-soft);
+}
+
+.swatch-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.swatch {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  cursor: pointer;
+  padding: 0;
+}
+
+.swatch.active {
+  border-color: var(--text);
+  box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--text);
+}
+
+.swatch-default {
+  width: auto;
+  height: 30px;
+  border-radius: 15px;
+  padding: 0 12px;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  color: var(--text-dim);
+  font-size: 12px;
+}
+
+.swatch-default.active {
+  border-color: var(--forge);
+  color: var(--forge);
+  box-shadow: none;
+}
+
+.banner-swatch {
+  width: 52px;
+  height: 30px;
+  border-radius: 6px;
+  border: 2px solid transparent;
+  cursor: pointer;
+  padding: 0;
+}
+
+.banner-swatch.active {
+  border-color: var(--forge);
+}
+
+.edit-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 22px;
+}
+
+.edit-actions .submit {
+  flex: 1;
+}
+
 .profile-head-main {
   flex: 1;
   min-width: 0;

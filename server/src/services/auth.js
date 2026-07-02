@@ -31,7 +31,25 @@ let memSeq = 1
 const saveUsers = () =>
   flush('users', { users: [...memUsers.values()], seq: memSeq })
 
-const publicUser = (u) => ({ id: u.id, username: u.username, createdAt: u.createdAt })
+const publicUser = (u) => ({
+  id: u.id,
+  username: u.username,
+  createdAt: u.createdAt,
+  bio: u.bio || '',
+  avatarColor: u.avatarColor || null,
+  bannerId: u.bannerId ?? null,
+})
+
+// build the public shape from a Mongo doc (carries the profile fields)
+const fromDoc = (doc) =>
+  publicUser({
+    id: String(doc._id),
+    username: doc.username,
+    createdAt: doc.createdAt,
+    bio: doc.bio,
+    avatarColor: doc.avatarColor,
+    bannerId: doc.bannerId,
+  })
 
 const signToken = (u) =>
   jwt.sign({ sub: u.id, username: u.username }, JWT_SECRET, { expiresIn: TOKEN_TTL })
@@ -65,6 +83,9 @@ export async function register(username, password) {
     username,
     passwordHash,
     createdAt: new Date().toISOString(),
+    bio: '',
+    avatarColor: null,
+    bannerId: null,
   }
   memUsers.set(username, u)
   saveUsers()
@@ -106,9 +127,7 @@ export async function getUserById(id) {
     const doc = await User.findById(id)
       .lean()
       .catch(() => null)
-    return doc
-      ? publicUser({ id: String(doc._id), username: doc.username, createdAt: doc.createdAt })
-      : null
+    return doc ? fromDoc(doc) : null
   }
   for (const u of memUsers.values()) if (u.id === id) return publicUser(u)
   return null
@@ -117,10 +136,27 @@ export async function getUserById(id) {
 export async function getUserByUsername(username) {
   if (dbReady()) {
     const doc = await User.findOne({ username }).lean()
-    return doc
-      ? publicUser({ id: String(doc._id), username: doc.username, createdAt: doc.createdAt })
-      : null
+    return doc ? fromDoc(doc) : null
   }
   const u = memUsers.get(username)
   return u ? publicUser(u) : null
+}
+
+// Update the caller's editable profile fields (bio / avatarColor / bannerId).
+// The route validates values before calling this.
+export async function updateProfile(userId, fields) {
+  if (dbReady()) {
+    const doc = await User.findByIdAndUpdate(userId, fields, { new: true })
+      .lean()
+      .catch(() => null)
+    return doc ? fromDoc(doc) : null
+  }
+  for (const u of memUsers.values()) {
+    if (u.id === userId) {
+      Object.assign(u, fields)
+      saveUsers()
+      return publicUser(u)
+    }
+  }
+  return null
 }

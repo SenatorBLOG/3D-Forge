@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { register, login, verifyToken } from '../src/services/auth.js'
+import { register, login, verifyToken, updateProfile, getUserByUsername } from '../src/services/auth.js'
 
 // no MONGODB_URI in tests → the in-memory store is exercised
 
@@ -28,4 +28,15 @@ test('login succeeds with the right password and fails otherwise', async () => {
 
 test('verifyToken rejects garbage', () => {
   assert.equal(verifyToken('not-a-token'), null)
+})
+
+test('updateProfile sets bio / avatarColor / bannerId', async () => {
+  const { user } = await register('profedit_' + Date.now(), 'password123')
+  const up = await updateProfile(user.id, { bio: 'I make robots', avatarColor: '#5cc8ff', bannerId: 2 })
+  assert.equal(up.bio, 'I make robots')
+  assert.equal(up.avatarColor, '#5cc8ff')
+  assert.equal(up.bannerId, 2)
+  const fetched = await getUserByUsername(user.username)
+  assert.equal(fetched.bio, 'I make robots')
+  assert.equal(await updateProfile('nope', { bio: 'x' }), null)
 })
