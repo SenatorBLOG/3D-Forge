@@ -3528,3 +3528,20 @@ button.tag:hover {
     min-height: 60vh;
   }
 }
+
+/* token cost shown on the Generate button (Meshy-style price transparency) */
+.gen-go {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+}
+
+.gen-cost {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.3px;
+  background: rgba(4, 18, 26, 0.22);
+  padding: 2px 8px;
+  border-radius: 999px;
+}

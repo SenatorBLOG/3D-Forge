@@ -35,18 +35,18 @@ const USERS = ['nova', 'mecha_smith', 'voxel_witch', 'orin3d', 'claywell', 'prot
 // One base mesh shared by the whole community is the project's own premise, so
 // these read as different makers' takes / remixes of the same model.
 const POSTS = [
-  { title: 'Articulated Robotic Hand', tags: ['robot', 'hardsurface', 'hand'], description: 'Fully rigged five-finger manipulator — my base for prosthetics work.' },
-  { title: 'Cyber Prosthetic v2', tags: ['prosthetic', 'scifi', 'hand'], description: 'Second pass, cleaner palm topology and tighter knuckles.' },
-  { title: 'Low-poly Gripper', tags: ['lowpoly', 'gripper', 'gamedev'], description: 'Game-ready, under 4k tris. Good for background props.' },
-  { title: 'Battle Mech Claw', tags: ['mech', 'hardsurface', 'concept'], description: 'Scaled up into a heavy-duty mech claw for a concept piece.' },
-  { title: 'Anatomical Study — Hand', tags: ['anatomy', 'sculpt', 'study'], description: 'Studying joint placement and proportions from reference.' },
-  { title: 'Steampunk Manipulator', tags: ['steampunk', 'hardsurface', 'concept'], description: 'Brass-and-rivets reskin idea — sharing the base form.' },
-  { title: 'Exosuit Forearm', tags: ['exosuit', 'scifi', 'mech'], description: 'Forearm + hand assembly for a powered-armor character.' },
-  { title: 'Toon Hand Rig', tags: ['toon', 'rig', 'gamedev'], description: 'Stylized, chunky proportions for a cartoon character.' },
-  { title: 'Hardsurface Gauntlet', tags: ['hardsurface', 'armor', 'concept'], description: 'Plated gauntlet pass — testing the spatial edit tool on the knuckles.' },
-  { title: 'Assistant Bot Hand', tags: ['robot', 'concept', 'hand'], description: 'Friendly service-robot hand. Softer edges, rounded fingertips.' },
-  { title: 'Sculpt Practice #4', tags: ['sculpt', 'study', 'wip'], description: 'Weekly sculpt practice — feedback welcome on the thumb.' },
-  { title: 'Drone Landing Claw', tags: ['drone', 'hardsurface', 'scifi'], description: 'Repurposed the hand into a landing/grab claw for a delivery drone.' },
+  { title: 'Articulated Robotic Hand', model: '/models/robotic_hand.glb', tags: ['robot', 'hardsurface', 'hand'], description: 'Fully rigged five-finger manipulator — my base for prosthetics work.' },
+  { title: 'Prismatic Crystal', model: '/models/crystal_gem.glb', tags: ['crystal', 'stylized', 'gem'], description: 'Faceted gem for an RPG loot drop. Great with an emissive shader.' },
+  { title: 'Torus Knot Study', model: '/models/torus_sculpt.glb', tags: ['sculpt', 'abstract', 'study'], description: 'Topology practice — clean quads around the knot crossings.' },
+  { title: 'Defense Turret Mk II', model: '/models/mech_turret.glb', tags: ['mech', 'hardsurface', 'gamedev'], description: 'Modular base + barrel. Swappable weapon mounts planned.' },
+  { title: 'Low-poly Pine', model: '/models/lowpoly_tree.glb', tags: ['lowpoly', 'nature', 'gamedev'], description: 'Under 500 tris — background foliage for a stylized level.' },
+  { title: 'Runed Broadsword', model: '/models/runed_sword.glb', tags: ['weapon', 'fantasy', 'concept'], description: 'Hero weapon concept. Gold crossguard, etched blade next pass.' },
+  { title: 'Retro Rocket', model: '/models/retro_rocket.glb', tags: ['scifi', 'stylized', 'vehicle'], description: 'Chunky cartoon rocket with fins — testing silhouette reads.' },
+  { title: 'Cyber Helmet', model: '/models/cyber_helmet.glb', tags: ['scifi', 'wearable', 'concept'], description: 'Visor prototype for a courier character. Neon strip is emissive.' },
+  { title: 'Reading Chair', model: '/models/reading_chair.glb', tags: ['furniture', 'archviz', 'prop'], description: 'Simple wooden chair for an interior scene — scale reference.' },
+  { title: 'Signet Ring', model: '/models/signet_ring.glb', tags: ['jewelry', 'prop', 'stylized'], description: 'Chunky signet with a gem face. Good for 3D-print tests.' },
+  { title: 'Companion Bot Head', model: '/models/companion_bot.glb', tags: ['robot', 'character', 'concept'], description: 'Friendly desk-bot head — big eyes, little antenna.' },
+  { title: 'Temple Pyramid', model: '/models/temple_pyramid.glb', tags: ['environment', 'stylized', 'archviz'], description: 'Stepped temple block-in with a gilded capstone.' },
 ]
 
 const COMMENTS = [
@@ -84,7 +84,8 @@ export async function seedDemoData() {
     const author = pick(users, i)
     const post = await createPost(author, {
       title: spec.title,
-      modelUrl: pick(models, i), // cycles through every discovered model
+      // each post names its own model; fall back to cycling if it's missing
+      modelUrl: spec.model && models.includes(spec.model) ? spec.model : pick(models, i),
       description: spec.description,
       tags: spec.tags,
     })
