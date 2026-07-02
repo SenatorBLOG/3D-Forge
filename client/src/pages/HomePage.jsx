@@ -1,108 +1,180 @@
-import { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
-import ModelViewer from '../components/ModelViewer.jsx'
+import { useEffect, useRef, useState } from 'react'
+import { Link, useNavigate } from 'react-router-dom'
 import PostCard from '../components/PostCard.jsx'
 import CardSkeleton from '../components/CardSkeleton.jsx'
 
 const THEMES = ['Dragon', 'Sci-fi helmet', 'Castle', 'Anime', 'Vehicle', 'Sword']
-const HOME_LIMIT = 8
+const QUICK = ['a neon samurai helmet', 'a small dragon', 'a hover bike', 'a rune-etched axe']
+const HOME_LIMIT = 12
 
-const ImageIcon = () => (
-  <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor"
-    strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-    <rect x="3" y="4" width="18" height="16" rx="2.5" />
-    <circle cx="8.5" cy="9.5" r="1.6" />
-    <path d="M21 16l-5-5L5 20" />
-  </svg>
-)
-
-const SparkIcon = () => (
-  <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor"
-    strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-    <path d="M12 3l1.8 4.7L18.5 9.5 13.8 11.3 12 16l-1.8-4.7L5.5 9.5 10.2 7.7z" />
-    <path d="M19 14.5l.7 1.8 1.8.7-1.8.7-.7 1.8-.7-1.8-1.8-.7 1.8-.7z" />
-  </svg>
-)
-
-/** Landing / "Create" home: greeting, two entry modes (image or describe), theme
- *  shortcuts, and a live gallery of the community's latest models. */
+/** Landing = the generator console. Type a prompt or drop an image and it hands
+ *  off to the Forge (which auto-starts the generation). A wall of community
+ *  models sits directly below — no marketing, no spinning placeholder. */
 export default function HomePage() {
+  const navigate = useNavigate()
+  const [mode, setMode] = useState('text') // 'text' | 'image'
+  const [prompt, setPrompt] = useState('')
+  const [image, setImage] = useState(null) // { id }
+  const [preview, setPreview] = useState(null) // object URL
+  const [uploading, setUploading] = useState(false)
+  const [imgError, setImgError] = useState(null)
   const [posts, setPosts] = useState(null)
+  const fileRef = useRef(null)
 
   useEffect(() => {
     let cancelled = false
     fetch('/api/posts')
       .then((r) => (r.ok ? r.json() : { posts: [] }))
-      .then((d) => {
-        if (!cancelled) setPosts((d.posts || []).slice(0, HOME_LIMIT))
-      })
-      .catch(() => {
-        if (!cancelled) setPosts([])
-      })
+      .then((d) => !cancelled && setPosts((d.posts || []).slice(0, HOME_LIMIT)))
+      .catch(() => !cancelled && setPosts([]))
     return () => {
       cancelled = true
     }
   }, [])
 
+  useEffect(() => () => preview && URL.revokeObjectURL(preview), [preview])
+
+  const uploadImage = async (file) => {
+    if (!file || !file.type?.startsWith('image/')) {
+      setImgError('Please choose a PNG, JPEG, GIF or WEBP image')
+      return
+    }
+    setUploading(true)
+    setImgError(null)
+    try {
+      const res = await fetch('/api/images', {
+        method: 'POST',
+        headers: { 'Content-Type': file.type },
+        body: file,
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`)
+      setImage(data.image)
+      setPreview((prev) => {
+        if (prev) URL.revokeObjectURL(prev)
+        return URL.createObjectURL(file)
+      })
+    } catch (e) {
+      setImgError(e.message)
+    } finally {
+      setUploading(false)
+    }
+  }
+
+  const onFile = (e) => {
+    const f = e.target.files?.[0]
+    e.target.value = ''
+    if (f) uploadImage(f)
+  }
+  const onDrop = (e) => {
+    e.preventDefault()
+    const f = e.dataTransfer.files?.[0]
+    if (f) uploadImage(f)
+  }
+  const onPaste = (e) => {
+    const item = [...(e.clipboardData?.items || [])].find((i) => i.type.startsWith('image/'))
+    if (item) uploadImage(item.getAsFile())
+  }
+
+  const canGenerate = mode === 'text' ? !!prompt.trim() : !!image
+  const generate = () => {
+    if (mode === 'text') {
+      const p = prompt.trim()
+      if (!p) return
+      navigate(`/forge?prompt=${encodeURIComponent(p)}&autostart=1`)
+    } else {
+      if (!image) return
+      navigate(`/forge?mode=image&imageId=${encodeURIComponent(image.id)}&autostart=1`)
+    }
+  }
+
   return (
     <div className="home">
-      <section className="home-hero">
-        <div className="home-copy">
-          <span className="home-eyebrow">AI-assisted 3D · in your browser</span>
-          <h1 className="home-title">
-            What do you want to <span className="accent">make today?</span>
-          </h1>
-          <p className="home-sub">
-            Generate a 3D model, then edit it by pointing at the part you want to change.
-          </p>
+      <section className="gen-console">
+        <div className="gen-console-inner" onPaste={mode === 'image' ? onPaste : undefined}>
+          <span className="gen-console-kicker">TEXT · IMAGE → 3D</span>
 
-          <div className="create-cards">
-            <Link className="create-card" to="/forge?mode=image">
-              <span className="create-icon">
-                <ImageIcon />
-              </span>
-              <h3>Start from an image</h3>
-              <p>Upload or paste a reference — get a 3D model.</p>
-              <span className="create-badge">image → 3D</span>
-            </Link>
-            <Link className="create-card" to="/forge?mode=text">
-              <span className="create-icon steel">
-                <SparkIcon />
-              </span>
-              <h3>Describe it</h3>
-              <p>Tell us what to build in plain words.</p>
-              <span className="create-badge steel">text → 3D</span>
-            </Link>
+          <div className="gen-console-tabs">
+            <button
+              className={`gen-console-tab ${mode === 'text' ? 'active' : ''}`}
+              onClick={() => setMode('text')}
+            >
+              Describe
+            </button>
+            <button
+              className={`gen-console-tab ${mode === 'image' ? 'active' : ''}`}
+              onClick={() => setMode('image')}
+            >
+              From image
+            </button>
           </div>
 
-          <div className="home-themes">
-            <span className="home-themes-label">Or jump into a theme</span>
-            <div className="theme-chips">
-              {THEMES.map((t) => (
-                <Link key={t} className="theme-chip" to={`/explore?q=${encodeURIComponent(t)}`}>
-                  {t}
-                </Link>
-              ))}
-            </div>
-          </div>
+          {mode === 'text' ? (
+            <>
+              <textarea
+                className="gen-console-input"
+                rows={3}
+                value={prompt}
+                onChange={(e) => setPrompt(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) generate()
+                }}
+                placeholder="Describe anything to forge in 3D — e.g. “a neon samurai helmet, battle-worn”"
+                autoFocus
+              />
+              <div className="gen-console-quick">
+                {QUICK.map((q) => (
+                  <button key={q} className="chip" onClick={() => setPrompt(q)}>
+                    {q}
+                  </button>
+                ))}
+              </div>
+            </>
+          ) : (
+            <>
+              <div
+                className={`image-drop gen-console-drop ${preview ? 'has-image' : ''}`}
+                onClick={() => fileRef.current?.click()}
+                onDrop={onDrop}
+                onDragOver={(e) => e.preventDefault()}
+                role="button"
+                tabIndex={0}
+              >
+                {preview ? (
+                  <img className="image-drop-preview" src={preview} alt="reference" />
+                ) : (
+                  <div className="image-drop-empty">
+                    <strong>Click, drop, or paste an image</strong>
+                    <span className="hint">PNG · JPEG · GIF · WEBP — we’ll turn it into 3D</span>
+                  </div>
+                )}
+                {uploading && <div className="image-drop-busy">Uploading…</div>}
+              </div>
+              <input ref={fileRef} type="file" accept="image/*" hidden onChange={onFile} />
+              {imgError && <span className="url-error">{imgError}</span>}
+            </>
+          )}
+
+          <button className="submit gen-console-go" onClick={generate} disabled={!canGenerate || uploading}>
+            {uploading ? 'Uploading…' : 'Generate 3D'}
+          </button>
         </div>
 
-        <div className="home-showcase">
-          <ModelViewer
-            modelUrl="/models/robotic_hand.glb"
-            points={[]}
-            onAddPoint={() => {}}
-            showcase
-          />
+        <div className="gen-console-themes">
+          <span className="home-themes-label">Or explore a theme</span>
+          <div className="theme-chips">
+            {THEMES.map((t) => (
+              <Link key={t} className="theme-chip" to={`/explore?q=${encodeURIComponent(t)}`}>
+                {t}
+              </Link>
+            ))}
+          </div>
         </div>
       </section>
 
       <section className="home-community">
         <div className="home-community-head">
-          <div>
-            <h2>Forged by the community</h2>
-            <p className="hint">Real models people have published — spin them, like them, remix them.</p>
-          </div>
+          <h2>Forged by the community</h2>
           <Link className="ghost-button" to="/explore">
             Explore all
           </Link>

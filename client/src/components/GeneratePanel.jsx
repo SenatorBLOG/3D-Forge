@@ -11,15 +11,23 @@ const QUICK_PROMPTS = ['a small dragon', 'a medieval sword', 'a sci-fi helmet', 
  *   image — upload / drop / paste a reference image (image-to-3D)
  * On success hands up (modelUrl, label) so the app can track what produced the model.
  */
-export default function GeneratePanel({ onModelReady, disabled, onGeneratingChange, initialMode = 'text' }) {
+export default function GeneratePanel({
+  onModelReady,
+  disabled,
+  onGeneratingChange,
+  initialMode = 'text',
+  initialPrompt = '',
+  initialImageId = null,
+  autostart = false,
+}) {
   const [mode, setMode] = useState(initialMode === 'image' ? 'image' : 'text')
-  const [prompt, setPrompt] = useState('')
+  const [prompt, setPrompt] = useState(initialPrompt)
   // which Meshy model to generate with: meshy-5 (cheap) or meshy-6 (prettier)
   const [aiModel, setAiModel] = useState('meshy-5')
   // add the refine (texture/color) stage after preview
   const [textured, setTextured] = useState(false)
   // image mode: the uploaded reference (server id) + a local preview URL
-  const [image, setImage] = useState(null) // { id }
+  const [image, setImage] = useState(initialImageId ? { id: initialImageId } : null)
   const [preview, setPreview] = useState(null) // object URL for instant preview
   const [uploading, setUploading] = useState(false)
   const [imgError, setImgError] = useState(null)
@@ -38,6 +46,31 @@ export default function GeneratePanel({ onModelReady, disabled, onGeneratingChan
 
   // revoke the last preview object URL when it changes / on unmount
   useEffect(() => () => preview && URL.revokeObjectURL(preview), [preview])
+
+  // hand-off from the homepage console: kick the generation once on mount using
+  // the deep-linked prompt / imageId (payload built directly so we don't race state)
+  const didAutostart = useRef(false)
+  useEffect(() => {
+    if (didAutostart.current || !autostart) return
+    didAutostart.current = true
+    if (initialMode === 'image' && initialImageId) {
+      submittedRef.current = 'image → 3D'
+      start(
+        '/api/generate',
+        { mode: 'image', imageId: initialImageId, model: aiModel },
+        { refine: textured, model: aiModel, prompt: 'image → 3D' },
+      )
+    } else if (initialPrompt.trim()) {
+      const trimmed = initialPrompt.trim()
+      submittedRef.current = trimmed
+      start(
+        '/api/generate',
+        { prompt: trimmed, model: aiModel },
+        { refine: textured, model: aiModel, prompt: trimmed },
+      )
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autostart])
 
   const busy = generating || disabled
 
