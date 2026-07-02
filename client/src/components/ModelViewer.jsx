@@ -47,6 +47,11 @@ export default function ModelViewer({
   // imperative handles the toolbar + points effect reach into the live scene
   const apiRef = useRef({})
   const [autoRotate, setAutoRotate] = useState(showcase)
+  // display mode + mesh stats for the viewer toolbar/badge
+  const [mode, setMode] = useState('shaded') // shaded | solid | wireframe
+  const [stats, setStats] = useState(null) // { faces, vertices }
+  const modeRef = useRef('shaded')
+  modeRef.current = mode
   // projected screen position of every marker, for the HTML label overlay
   const [labels, setLabels] = useState([]) // [{ x, y, visible }]
   const popupRef = useRef(null)
@@ -107,6 +112,18 @@ export default function ModelViewer({
     const markerMat = new THREE.MeshBasicMaterial({ color: MARKER_COLOR })
     let markerGeom = new THREE.SphereGeometry(0.01, 16, 16)
 
+    // display-mode override materials (Meshy-style solid / wireframe views).
+    // Each mesh keeps its original material in userData.origMat for "shaded".
+    const solidMat = new THREE.MeshStandardMaterial({ color: 0x9aa3b2, metalness: 0.1, roughness: 0.78 })
+    const wireMat = new THREE.MeshBasicMaterial({ color: 0x22d3ee, wireframe: true })
+    const applyDisplayMode = (m) => {
+      if (!model) return
+      model.traverse((o) => {
+        if (!o.isMesh) return
+        o.material = m === 'wireframe' ? wireMat : m === 'solid' ? solidMat : o.userData.origMat
+      })
+    }
+
     const syncMarkers = (pts) => {
       markersGroup.clear() // children share geom+mat, disposed once at teardown
       pts.forEach((p) => {
@@ -154,6 +171,7 @@ export default function ModelViewer({
         controls.target.set(0, 0, 0)
         controls.update()
       },
+      setDisplayMode: applyDisplayMode,
     }
 
     let model = null
@@ -185,6 +203,20 @@ export default function ModelViewer({
         grid.material.transparent = true
         grid.material.opacity = 0.3
         scene.add(grid)
+
+        // remember each mesh's original material + tally topology stats
+        let faces = 0
+        let vertices = 0
+        model.traverse((o) => {
+          if (!o.isMesh || !o.geometry) return
+          o.userData.origMat = o.material
+          const g = o.geometry
+          const vCount = g.attributes.position?.count || 0
+          vertices += vCount
+          faces += g.index ? g.index.count / 3 : vCount / 3
+        })
+        setStats({ faces: Math.round(faces), vertices })
+        applyDisplayMode(modeRef.current)
 
         scene.add(model)
         syncMarkers(pointsRef.current)
@@ -267,6 +299,8 @@ export default function ModelViewer({
       markersGroup.clear()
       markerGeom.dispose()
       markerMat.dispose()
+      solidMat.dispose()
+      wireMat.dispose()
       disposeObject(scene)
       renderer.dispose()
       // release the WebGL context promptly — browsers cap live contexts
@@ -286,6 +320,11 @@ export default function ModelViewer({
     if (apiRef.current.controls) apiRef.current.controls.autoRotate = autoRotate
   }, [autoRotate])
 
+  // swap the display mode (shaded / solid / wireframe) on the live model
+  useEffect(() => {
+    apiRef.current.setDisplayMode?.(mode)
+  }, [mode])
+
   // focus the inline editor when it opens
   useEffect(() => {
     if (selectedIndex != null) popupRef.current?.focus()
@@ -296,6 +335,35 @@ export default function ModelViewer({
 
   return (
     <div className="viewer" ref={containerRef}>
+      {!showcase && stats && (
+        <div className="viewer-stats" title="Mesh topology">
+          <span className="viewer-stats-topo">TRIS</span>
+          <span>
+            <strong>{stats.faces.toLocaleString()}</strong> faces
+          </span>
+          <span>
+            <strong>{stats.vertices.toLocaleString()}</strong> verts
+          </span>
+        </div>
+      )}
+      {!showcase && stats && (
+        <div className="viewer-modes" role="group" aria-label="Display mode">
+          {[
+            ['shaded', 'Shaded'],
+            ['solid', 'Solid'],
+            ['wireframe', 'Wire'],
+          ].map(([m, label]) => (
+            <button
+              key={m}
+              type="button"
+              className={mode === m ? 'on' : ''}
+              onClick={() => setMode(m)}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      )}
       {!showcase && (
         <div className="viewer-labels">
           {labels.map((l, i) =>
