@@ -7,13 +7,14 @@ import CardSkeleton from '../components/CardSkeleton.jsx'
 import { useAuth } from '../auth/AuthContext.jsx'
 
 // banner presets (dark base + one on-brand accent), index stored per user
+// Neon Noir banner presets: [dark base, neon accent]
 const BANNERS = [
-  ['#3a2a12', '#ff7a1f'],
-  ['#12303a', '#5cc8ff'],
-  ['#2a1238', '#a06bff'],
-  ['#123a2a', '#3fb970'],
-  ['#3a1224', '#ff6b8a'],
-  ['#1a2440', '#4a7bff'],
+  ['#0a2630', '#22d3ee'],
+  ['#2a0f24', '#ff2d9b'],
+  ['#1a0f2e', '#a855f7'],
+  ['#0c2a1e', '#35e6a4'],
+  ['#2e260a', '#ffd23d'],
+  ['#101a34', '#5b8cff'],
 ]
 const bannerStyle = (i) => {
   const [base, accent] = BANNERS[((i % BANNERS.length) + BANNERS.length) % BANNERS.length]

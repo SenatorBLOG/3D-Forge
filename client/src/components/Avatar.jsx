@@ -1,6 +1,7 @@
 // Initial-avatar: first letter on a color. Uses the user's chosen `color` when
 // set, otherwise a color deterministically derived from the name.
-export const AVATAR_COLORS = ['#ff7a1f', '#5cc8ff', '#5fd38a', '#c08bff', '#ff6b9d', '#ffc34d']
+// Neon Noir palette — keep in sync with server/src/routes/users.js
+export const AVATAR_COLORS = ['#22d3ee', '#ff2d9b', '#a855f7', '#35e6a4', '#ffd23d', '#5b8cff']
 
 function colorFor(name) {
   let h = 0
