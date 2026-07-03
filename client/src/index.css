@@ -4065,3 +4065,106 @@ button.tag:hover {
 .spatial-steps strong {
   color: var(--text);
 }
+
+/* ============================================================
+   Homepage onboarding (Sprint 4) — how-it-works + honest stats.
+   Sits BELOW the generator + gallery; generator stays first.
+   ============================================================ */
+
+.home-how {
+  max-width: 1000px;
+  width: 100%;
+  margin: 0 auto;
+  padding: 20px 28px 72px;
+  text-align: center;
+}
+
+.home-stats {
+  display: inline-flex;
+  gap: 28px;
+  padding: 12px 26px;
+  margin-bottom: 40px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--panel);
+  font-family: var(--font-mono);
+  font-size: 13px;
+  color: var(--text-dim);
+}
+
+.home-stats strong {
+  color: var(--forge);
+  font-size: 16px;
+  margin-right: 4px;
+  text-shadow: 0 0 12px var(--forge-glow);
+}
+
+.home-how-title {
+  font-family: var(--font-display);
+  font-size: 24px;
+  text-shadow: 0 0 22px rgba(34, 211, 238, 0.25);
+}
+
+.home-steps {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+  margin: 24px 0 30px;
+  text-align: left;
+}
+
+.home-step {
+  padding: 22px 20px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  transition: border-color 0.18s, box-shadow 0.18s;
+}
+
+.home-step:hover {
+  border-color: var(--forge);
+  box-shadow: 0 0 0 1px var(--forge-glow), 0 0 22px rgba(34, 211, 238, 0.08);
+}
+
+.home-step-n {
+  display: inline-grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  font-family: var(--font-display);
+  font-size: 15px;
+  color: #04121a;
+  background: var(--forge);
+  box-shadow: 0 0 16px var(--forge-glow);
+  margin-bottom: 12px;
+}
+
+.home-step h3 {
+  font-family: var(--font-display);
+  font-size: 15px;
+  margin-bottom: 6px;
+}
+
+.home-step p {
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-dim);
+}
+
+.home-how-cta {
+  display: inline-block;
+  padding: 13px 28px;
+  text-decoration: none;
+}
+
+@media (max-width: 760px) {
+  .home-steps {
+    grid-template-columns: 1fr;
+  }
+  .home-stats {
+    gap: 18px;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+}

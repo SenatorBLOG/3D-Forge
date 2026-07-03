@@ -25,7 +25,7 @@ export default function HomePage() {
     let cancelled = false
     fetch('/api/posts')
       .then((r) => (r.ok ? r.json() : { posts: [] }))
-      .then((d) => !cancelled && setPosts((d.posts || []).slice(0, HOME_LIMIT)))
+      .then((d) => !cancelled && setPosts(d.posts || []))
       .catch(() => !cancelled && setPosts([]))
     return () => {
       cancelled = true
@@ -87,6 +87,15 @@ export default function HomePage() {
       navigate(`/forge?mode=image&imageId=${encodeURIComponent(image.id)}&autostart=1`)
     }
   }
+
+  // honest, derived community stats (no fabricated logos/testimonials)
+  const stats = posts
+    ? {
+        models: posts.length,
+        creators: new Set(posts.map((p) => p.authorUsername)).size,
+        themes: new Set(posts.flatMap((p) => p.tags || [])).size,
+      }
+    : null
 
   return (
     <div className="home">
@@ -182,7 +191,7 @@ export default function HomePage() {
 
         {posts && posts.length > 0 ? (
           <div className="explore-grid">
-            {posts.map((p) => (
+            {posts.slice(0, HOME_LIMIT).map((p) => (
               <PostCard key={p.id} post={p} />
             ))}
           </div>
@@ -196,6 +205,40 @@ export default function HomePage() {
         ) : (
           <CardSkeleton count={HOME_LIMIT} />
         )}
+      </section>
+
+      {/* onboarding lives at the BOTTOM — the generator stays the first thing you see */}
+      <section className="home-how">
+        {stats && stats.models > 0 && (
+          <div className="home-stats">
+            <span>
+              <strong>{stats.models}</strong> models
+            </span>
+            <span>
+              <strong>{stats.creators}</strong> creators
+            </span>
+            <span>
+              <strong>{stats.themes}</strong> themes
+            </span>
+          </div>
+        )}
+        <h2 className="home-how-title">How it works</h2>
+        <div className="home-steps">
+          {[
+            ['1', 'Describe or drop an image', 'Type a prompt or paste a reference photo.'],
+            ['2', 'Generate in seconds', 'A textured 3D model lands in the Forge.'],
+            ['3', 'Reshape any part', 'Click a region and describe a local change — Spatial edit.'],
+          ].map(([n, title, body]) => (
+            <div className="home-step" key={n}>
+              <span className="home-step-n">{n}</span>
+              <h3>{title}</h3>
+              <p>{body}</p>
+            </div>
+          ))}
+        </div>
+        <Link className="submit home-how-cta" to="/forge">
+          Start forging →
+        </Link>
       </section>
     </div>
   )
