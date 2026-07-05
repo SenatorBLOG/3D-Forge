@@ -117,13 +117,14 @@ router.post('/', optionalAuth, async (req, res) => {
     return res.status(502).json({ error: 'Model generation service failed' })
   }
 
-  recordTask({ kind: 'generate', taskId, prompt, mock: isMockMode() })
+  const ownerId = req.user?.id ?? null
+  recordTask({ kind: 'generate', taskId, prompt, mock: isMockMode(), ownerId })
 
   // the upstream task exists at this point — a DB hiccup must not turn a
   // successful (credit-spending) creation into an error response
   if (dbReady()) {
     try {
-      await GeneratedModel.create({ prompt, meshyTaskId: taskId, mock: isMockMode() })
+      await GeneratedModel.create({ prompt, meshyTaskId: taskId, mock: isMockMode(), ownerId })
     } catch (err) {
       console.error('failed to persist generation record:', err)
     }
@@ -161,7 +162,7 @@ router.post('/refine', optionalAuth, async (req, res) => {
   }
   // the textured result supersedes the gray preview entry — drop it, keep one card
   removeTask(previewTaskId)
-  recordTask({ kind: 'generate', taskId, prompt, mock: isMockMode() })
+  recordTask({ kind: 'generate', taskId, prompt, mock: isMockMode(), ownerId: req.user?.id ?? null })
   res.status(202).json({
     taskId,
     mock: isMockMode(),

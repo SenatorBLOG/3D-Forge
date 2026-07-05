@@ -2,9 +2,10 @@ import express, { Router } from 'express'
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { join } from 'node:path'
-import { dbReady } from '../db.js'
-import GeneratedModel from '../models/GeneratedModel.js'
 import { recordTask, updateTask } from '../services/history.js'
+import { optionalAuth, requireAuth } from '../middleware/auth.js'
+import { listLibrary } from '../services/library.js'
+import { toggleFavorite } from '../services/favorites.js'
 
 const router = Router()
 
@@ -14,7 +15,7 @@ export const UPLOAD_DIR = fileURLToPath(new URL('../../.devdata/uploads/', impor
 // POST /api/models/upload — store a user-uploaded .glb and record it in history
 // so it persists and reloads via the History "Load" button. Body is the raw
 // file bytes (Content-Type ignored); ?name=<label> sets the history title.
-router.post('/upload', express.raw({ type: '*/*', limit: '60mb' }), (req, res) => {
+router.post('/upload', optionalAuth, express.raw({ type: '*/*', limit: '60mb' }), (req, res) => {
   const body = req.body
   if (!Buffer.isBuffer(body) || body.length === 0) {
     return res.status(400).json({ error: 'send the .glb file as the raw request body' })
@@ -36,7 +37,7 @@ router.post('/upload', express.raw({ type: '*/*', limit: '60mb' }), (req, res) =
   const url = `/uploads/${id}.glb`
   const taskId = `upload-${id}`
   // mirror a finished generation so it shows as a History card with Load/Download
-  recordTask({ kind: 'generate', taskId, prompt: label, mock: true })
+  recordTask({ kind: 'generate', taskId, prompt: label, mock: true, ownerId: req.user?.id ?? null })
   updateTask(taskId, 'SUCCEEDED', url)
   res.status(201).json({ url, taskId })
 })
@@ -70,18 +71,39 @@ router.get('/proxy', async (req, res) => {
   }
 })
 
-// GET /api/models — most recent saved generations (empty without a DB)
-router.get('/', async (req, res) => {
-  if (!dbReady()) return res.json({ models: [], db: false })
+// GET /api/models — the generations library (works in mock mode AND with Mongo).
+// Query: ?owner=me|all (default all) · ?filter=favorites · ?q=<prompt search>
+//        ?limit=<1..100, default 20> · ?offset=<n>
+// owner=me / filter=favorites need a signed-in user (401 otherwise).
+router.get('/', optionalAuth, async (req, res) => {
+  const owner = req.query.owner === 'me' ? 'me' : 'all'
+  const onlyFavorites = req.query.filter === 'favorites'
+  if ((owner === 'me' || onlyFavorites) && !req.user) {
+    return res.status(401).json({ error: 'Sign in to view your library' })
+  }
   try {
-    const models = await GeneratedModel.find()
-      .sort({ createdAt: -1 })
-      .limit(50)
-      .lean()
-    res.json({ models, db: true })
+    const { models, total } = await listLibrary({
+      userId: req.user?.id ?? null,
+      owner,
+      onlyFavorites,
+      q: typeof req.query.q === 'string' ? req.query.q : '',
+      limit: req.query.limit,
+      offset: req.query.offset,
+    })
+    res.json({ models, total })
   } catch (err) {
     console.error('models list failed:', err)
     res.status(500).json({ error: 'Failed to list models' })
+  }
+})
+
+// POST /api/models/:taskId/favorite — star/unstar a library model (auth required)
+router.post('/:taskId/favorite', requireAuth, async (req, res) => {
+  try {
+    res.json(await toggleFavorite(req.user.id, req.params.taskId))
+  } catch (err) {
+    console.error('toggle favorite failed:', err)
+    res.status(500).json({ error: 'Failed to update favorite' })
   }
 })
 

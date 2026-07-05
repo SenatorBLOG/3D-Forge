@@ -173,7 +173,12 @@ Write each endpoint's contract in this doc the day before A needs it.
       for batch status.
 - [ ] **B7. Model metadata** — store per generation: topology (faces/vertices if available), tier,
       license, source mode, prompt. Expose on the model/library objects (for A5/A7).
-- [ ] **B8. Library API** — `GET /api/models?owner=me|all&filter=favorites&q=` with pagination.
+- [x] **B8. Library API** — `GET /api/models?owner=me|all&filter=favorites&q=` with pagination.
+      <br>**Contract (for A5/A7):** `GET /api/models?owner=me|all&filter=favorites&q=<search>&limit=<1..100>&offset=<n>`
+      (optional `Authorization: Bearer`; `owner=me`/`filter=favorites` → `401` when signed out)
+      → `{ "models": [ { taskId, prompt, status, modelUrl, mock, ownerId, favorite, createdAt } ], "total": n }`,
+      newest-first; `q` searches prompts. `POST /api/models/:taskId/favorite` (auth) → `{ "favorite": true|false }`.
+      Generations/uploads now record their `ownerId` (null when anonymous). Works in mock (history) and Mongo.
 
 ### Week 3 — Search, themes, achievements
 - [ ] **B9. Theme/tag taxonomy** — curated themes (game/anime/castle/dragon/sci-fi…) on posts;
