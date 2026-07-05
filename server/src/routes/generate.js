@@ -162,7 +162,23 @@ router.post('/refine', optionalAuth, async (req, res) => {
   }
   // the textured result supersedes the gray preview entry — drop it, keep one card
   removeTask(previewTaskId)
-  recordTask({ kind: 'generate', taskId, prompt, mock: isMockMode(), ownerId: req.user?.id ?? null })
+  const refineOwnerId = req.user?.id ?? null
+  recordTask({ kind: 'generate', taskId, prompt, mock: isMockMode(), ownerId: refineOwnerId })
+  // mirror the history swap in Mongo so the library (B8) shows the refined model
+  // under its new taskId instead of the stale gray preview. Best-effort, like POST /.
+  if (dbReady()) {
+    try {
+      await GeneratedModel.create({
+        prompt,
+        meshyTaskId: taskId,
+        mock: isMockMode(),
+        ownerId: refineOwnerId,
+      })
+      await GeneratedModel.findOneAndDelete({ meshyTaskId: previewTaskId })
+    } catch (err) {
+      console.error('failed to persist refine record:', err)
+    }
+  }
   res.status(202).json({
     taskId,
     mock: isMockMode(),
