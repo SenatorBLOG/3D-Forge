@@ -1,10 +1,11 @@
 import express, { Router } from 'express'
-import { mkdirSync, writeFileSync } from 'node:fs'
+import { mkdirSync, writeFileSync, readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
-import { join } from 'node:path'
+import { join, basename } from 'node:path'
 import { dbReady } from '../db.js'
 import GeneratedModel from '../models/GeneratedModel.js'
 import { recordTask, updateTask } from '../services/history.js'
+import { resolveLocalModel, localModelExists, glbToObj, glbToStl } from '../services/convert.js'
 
 const router = Router()
 
@@ -67,6 +68,53 @@ router.get('/proxy', async (req, res) => {
   } catch (err) {
     console.error('model proxy failed:', err)
     res.status(502).json({ error: 'failed to fetch the model' })
+  }
+})
+
+// GET /api/models/convert?src=<path>&format=<glb|obj|stl> — download a local
+// model in another format. `src` must be a bundled /models/*.glb or a stored
+// /uploads/*.glb — anything else (remote URLs, traversal) is rejected with 400,
+// so this can never be used as an open proxy/SSRF vector. FBX is out of scope
+// (needs external tooling). Pure conversion: no keys, no DB, mock-agnostic.
+const CONVERT_TYPES = {
+  glb: 'model/gltf-binary',
+  obj: 'model/obj',
+  stl: 'model/stl',
+}
+
+router.get('/convert', async (req, res) => {
+  const src = typeof req.query.src === 'string' ? req.query.src : ''
+  const format = typeof req.query.format === 'string' ? req.query.format.toLowerCase() : ''
+  const filePath = resolveLocalModel(src)
+  if (!filePath) {
+    return res.status(400).json({ error: 'src must be a local /models or /uploads .glb path' })
+  }
+  if (!(format in CONVERT_TYPES)) {
+    return res.status(400).json({ error: 'format must be one of: glb, obj, stl' })
+  }
+  if (!localModelExists(filePath)) {
+    return res.status(404).json({ error: 'model file not found' })
+  }
+  const name = basename(filePath, '.glb')
+  let bytes
+  try {
+    bytes = readFileSync(filePath)
+  } catch (err) {
+    console.error('convert read failed:', err)
+    return res.status(500).json({ error: 'failed to read the model' })
+  }
+  res.setHeader('Content-Disposition', `attachment; filename="${name}.${format}"`)
+  if (format === 'glb') {
+    res.setHeader('Content-Type', CONVERT_TYPES.glb)
+    return res.send(bytes)
+  }
+  try {
+    const text = format === 'obj' ? await glbToObj(bytes) : await glbToStl(bytes)
+    res.setHeader('Content-Type', CONVERT_TYPES[format])
+    res.send(text)
+  } catch (err) {
+    console.error('model conversion failed:', err)
+    res.status(422).json({ error: 'could not convert this model (unsupported GLB features)' })
   }
 })
 
