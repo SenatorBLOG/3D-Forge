@@ -175,8 +175,13 @@ Write each endpoint's contract in this doc the day before A needs it.
       Poll `GET /api/generate/:taskId` unchanged → `{ taskId, status, progress, modelUrl }`.
       `POST /api/generate/refine { previewTaskId, tier }` → `202 { taskId, tier, mock, cost }`.
       Costs per tier: `GET /api/generate/costs`. Cost-gating per B2 (mock free; real 401/402).
-- [ ] **B6. Batch image→3D** — accept multiple images → a queue of tasks; `GET /api/generate/batch/:id`
+- [x] **B6. Batch image→3D** — accept multiple images → a queue of tasks; `GET /api/generate/batch/:id`
       for batch status.
+      <br>**Contract (for A6):** `POST /api/generate` body `{ "mode": "batch", "tier": …, "imageIds": ["…", …] }`
+      (1–6 ids from B3) → `202 { batchId, mode:"batch", tier, mock, cost, tasks:[{ taskId, imageId }], failed? }`.
+      Charged up-front for the whole batch (mock free); a task that fails to start is refunded + listed in `failed`.
+      Poll `GET /api/generate/batch/:id` → `{ batchId, tasks:[{ taskId, imageId, status, progress, modelUrl }],
+      progress (0-100 avg), done }`. Unknown batch → `404`. Works key-free (mock stub GLBs).
 - [ ] **B7. Model metadata** — store per generation: topology (faces/vertices if available), tier,
       license, source mode, prompt. Expose on the model/library objects (for A5/A7).
 - [ ] **B8. Library API** — `GET /api/models?owner=me|all&filter=favorites&q=` with pagination.
