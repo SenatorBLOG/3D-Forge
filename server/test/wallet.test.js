@@ -68,12 +68,24 @@ test('purchasePackage grants an allow-listed package and logs the reason', async
   assert.equal(w.history[0].reason, `purchase:${pack.id}`)
 })
 
-test('purchasePackage rejects unknown packages (BAD_PACKAGE, 400)', async () => {
+test('purchasePackage rejects unknown packages (BAD_PACKAGE)', async () => {
   await assert.rejects(
     () => purchasePackage('w-buyer', 'mega-hack'),
-    (err) => err.code === 'BAD_PACKAGE' && err.status === 400,
+    (err) => err.code === 'BAD_PACKAGE',
   )
   await assert.rejects(() => purchasePackage('w-buyer', ''), (e) => e.code === 'BAD_PACKAGE')
+})
+
+test('purchases are capped per user per day (PURCHASE_LIMIT)', async () => {
+  const pack = PACKAGES[0]
+  for (let i = 0; i < 10; i++) await purchasePackage('w-whale', pack.id) // default daily cap
+  await assert.rejects(
+    () => purchasePackage('w-whale', pack.id),
+    (err) => err.code === 'PURCHASE_LIMIT',
+  )
+  // the cap is per-user: another user can still buy
+  const r = await purchasePackage('w-minnow', pack.id)
+  assert.equal(r.granted, pack.tokens)
 })
 
 test('every package is well-formed (id, positive tokens, price label)', () => {

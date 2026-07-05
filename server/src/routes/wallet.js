@@ -27,6 +27,7 @@ router.post('/grant', requireAuth, async (req, res) => {
     res.status(201).json(await purchasePackage(req.user.id, packageId))
   } catch (err) {
     if (err.code === 'BAD_PACKAGE') return res.status(400).json({ error: err.message })
+    if (err.code === 'PURCHASE_LIMIT') return res.status(429).json({ error: err.message })
     console.error('wallet grant failed:', err)
     res.status(500).json({ error: 'Failed to grant tokens' })
   }
