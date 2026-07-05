@@ -133,6 +133,25 @@ export async function getUserById(id) {
   return null
 }
 
+// Case-insensitive substring search over usernames (for the search API).
+export async function searchUsers(q, limit = 10) {
+  const query = typeof q === 'string' ? q.trim().toLowerCase() : ''
+  if (!query) return []
+  if (dbReady()) {
+    const rx = new RegExp(query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i')
+    const docs = await User.find({ username: rx }).limit(limit).lean()
+    return docs.map(fromDoc)
+  }
+  const out = []
+  for (const u of memUsers.values()) {
+    if (u.username.toLowerCase().includes(query)) {
+      out.push(publicUser(u))
+      if (out.length >= limit) break
+    }
+  }
+  return out
+}
+
 export async function getUserByUsername(username) {
   if (dbReady()) {
     const doc = await User.findOne({ username }).lean()

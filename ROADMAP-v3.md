@@ -178,7 +178,10 @@ Write each endpoint's contract in this doc the day before A needs it.
 ### Week 3 — Search, themes, achievements
 - [ ] **B9. Theme/tag taxonomy** — curated themes (game/anime/castle/dragon/sci-fi…) on posts;
       `GET /api/themes` + `?theme=` filtering on the feed.
-- [ ] **B10. Search API** — `GET /api/search?q=` across titles/tags/creators (build on the tag work).
+- [x] **B10. Search API** — `GET /api/search?q=` across titles/tags/creators (build on the tag work).
+      <br>**Contract:** `GET /api/search?q=<text>&limit=<1..50>` (public) →
+      `{ "q", "posts": [ ...post objects (title/tag matches, newest-first) ], "creators": [ { "username", "bio", "avatarColor" } ] }`.
+      Empty/missing `q` → `400`; q capped at 100 chars; creators capped at 10.
 - [ ] **B11. Achievements & profile stats** — `GET /api/users/:username/stats`
       → `{ creations, published, followers, following, badges:[…] }`; award badges on milestones
       (first publish, 10 likes, etc.). Contract for A10/A11.
