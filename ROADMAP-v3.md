@@ -167,8 +167,14 @@ Write each endpoint's contract in this doc the day before A needs it.
       mode calls Meshy image-to-3D, inlining the stored image as a data URI.
 
 ### Week 2 — Unified generation pipeline + model metadata
-- [ ] **B5. Unified generate API** — one `POST /api/generate` taking `{ mode: 'text'|'image'|'batch',
+- [x] **B5. Unified generate API** — one `POST /api/generate` taking `{ mode: 'text'|'image'|'batch',
       tier, options }` → task; the existing polling stays. Document Request/Response for A6.
+      <br>**Contract (for A6):** `POST /api/generate` (optional Bearer) body
+      `{ "mode": "text"|"image", "tier": "meshy-5"|"meshy-6" ("m5"/"m6" shorthands; legacy "model" still accepted), "prompt": "…" (text mode), "imageId": "…" (image mode) }`
+      → `202 { taskId, mode, tier, mock, cost }`. Unknown mode → `400` (`batch` arrives with B6).
+      Poll `GET /api/generate/:taskId` unchanged → `{ taskId, status, progress, modelUrl }`.
+      `POST /api/generate/refine { previewTaskId, tier }` → `202 { taskId, tier, mock, cost }`.
+      Costs per tier: `GET /api/generate/costs`. Cost-gating per B2 (mock free; real 401/402).
 - [ ] **B6. Batch image→3D** — accept multiple images → a queue of tasks; `GET /api/generate/batch/:id`
       for batch status.
 - [ ] **B7. Model metadata** — store per generation: topology (faces/vertices if available), tier,
