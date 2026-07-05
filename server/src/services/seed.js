@@ -34,19 +34,20 @@ const USERS = ['nova', 'mecha_smith', 'voxel_witch', 'orin3d', 'claywell', 'prot
 
 // One base mesh shared by the whole community is the project's own premise, so
 // these read as different makers' takes / remixes of the same model.
+// `kind` drives the Text→3D / Image→3D badge on the cards — roughly half each.
 const POSTS = [
-  { title: 'Articulated Robotic Hand', model: '/models/robotic_hand.glb', tags: ['robot', 'hardsurface', 'hand'], description: 'Fully rigged five-finger manipulator — my base for prosthetics work.' },
-  { title: 'Prismatic Crystal', model: '/models/crystal_gem.glb', tags: ['crystal', 'stylized', 'gem'], description: 'Faceted gem for an RPG loot drop. Great with an emissive shader.' },
-  { title: 'Torus Knot Study', model: '/models/torus_sculpt.glb', tags: ['sculpt', 'abstract', 'study'], description: 'Topology practice — clean quads around the knot crossings.' },
-  { title: 'Defense Turret Mk II', model: '/models/mech_turret.glb', tags: ['mech', 'hardsurface', 'gamedev'], description: 'Modular base + barrel. Swappable weapon mounts planned.' },
-  { title: 'Low-poly Pine', model: '/models/lowpoly_tree.glb', tags: ['lowpoly', 'nature', 'gamedev'], description: 'Under 500 tris — background foliage for a stylized level.' },
-  { title: 'Runed Broadsword', model: '/models/runed_sword.glb', tags: ['weapon', 'fantasy', 'concept'], description: 'Hero weapon concept. Gold crossguard, etched blade next pass.' },
-  { title: 'Retro Rocket', model: '/models/retro_rocket.glb', tags: ['scifi', 'stylized', 'vehicle'], description: 'Chunky cartoon rocket with fins — testing silhouette reads.' },
-  { title: 'Cyber Helmet', model: '/models/cyber_helmet.glb', tags: ['scifi', 'wearable', 'concept'], description: 'Visor prototype for a courier character. Neon strip is emissive.' },
-  { title: 'Reading Chair', model: '/models/reading_chair.glb', tags: ['furniture', 'archviz', 'prop'], description: 'Simple wooden chair for an interior scene — scale reference.' },
-  { title: 'Signet Ring', model: '/models/signet_ring.glb', tags: ['jewelry', 'prop', 'stylized'], description: 'Chunky signet with a gem face. Good for 3D-print tests.' },
-  { title: 'Companion Bot Head', model: '/models/companion_bot.glb', tags: ['robot', 'character', 'concept'], description: 'Friendly desk-bot head — big eyes, little antenna.' },
-  { title: 'Temple Pyramid', model: '/models/temple_pyramid.glb', tags: ['environment', 'stylized', 'archviz'], description: 'Stepped temple block-in with a gilded capstone.' },
+  { title: 'Articulated Robotic Hand', model: '/models/robotic_hand.glb', tags: ['robot', 'hardsurface', 'hand'], description: 'Fully rigged five-finger manipulator — my base for prosthetics work.', kind: 'text' },
+  { title: 'Prismatic Crystal', model: '/models/crystal_gem.glb', tags: ['crystal', 'stylized', 'gem'], description: 'Faceted gem for an RPG loot drop. Great with an emissive shader.', kind: 'image' },
+  { title: 'Torus Knot Study', model: '/models/torus_sculpt.glb', tags: ['sculpt', 'abstract', 'study'], description: 'Topology practice — clean quads around the knot crossings.', kind: 'text' },
+  { title: 'Defense Turret Mk II', model: '/models/mech_turret.glb', tags: ['mech', 'hardsurface', 'gamedev'], description: 'Modular base + barrel. Swappable weapon mounts planned.', kind: 'image' },
+  { title: 'Low-poly Pine', model: '/models/lowpoly_tree.glb', tags: ['lowpoly', 'nature', 'gamedev'], description: 'Under 500 tris — background foliage for a stylized level.', kind: 'text' },
+  { title: 'Runed Broadsword', model: '/models/runed_sword.glb', tags: ['weapon', 'fantasy', 'concept'], description: 'Hero weapon concept. Gold crossguard, etched blade next pass.', kind: 'image' },
+  { title: 'Retro Rocket', model: '/models/retro_rocket.glb', tags: ['scifi', 'stylized', 'vehicle'], description: 'Chunky cartoon rocket with fins — testing silhouette reads.', kind: 'text' },
+  { title: 'Cyber Helmet', model: '/models/cyber_helmet.glb', tags: ['scifi', 'wearable', 'concept'], description: 'Visor prototype for a courier character. Neon strip is emissive.', kind: 'image' },
+  { title: 'Reading Chair', model: '/models/reading_chair.glb', tags: ['furniture', 'archviz', 'prop'], description: 'Simple wooden chair for an interior scene — scale reference.', kind: 'text' },
+  { title: 'Signet Ring', model: '/models/signet_ring.glb', tags: ['jewelry', 'prop', 'stylized'], description: 'Chunky signet with a gem face. Good for 3D-print tests.', kind: 'image' },
+  { title: 'Companion Bot Head', model: '/models/companion_bot.glb', tags: ['robot', 'character', 'concept'], description: 'Friendly desk-bot head — big eyes, little antenna.', kind: 'text' },
+  { title: 'Temple Pyramid', model: '/models/temple_pyramid.glb', tags: ['environment', 'stylized', 'archviz'], description: 'Stepped temple block-in with a gilded capstone.', kind: 'image' },
 ]
 
 const COMMENTS = [
@@ -88,6 +89,7 @@ export async function seedDemoData() {
       modelUrl: spec.model && models.includes(spec.model) ? spec.model : pick(models, i),
       description: spec.description,
       tags: spec.tags,
+      kind: spec.kind,
     })
     created.push(post)
   }
