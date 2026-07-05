@@ -182,8 +182,11 @@ Write each endpoint's contract in this doc the day before A needs it.
 - [ ] **B11. Achievements & profile stats** — `GET /api/users/:username/stats`
       → `{ creations, published, followers, following, badges:[…] }`; award badges on milestones
       (first publish, 10 likes, etc.). Contract for A10/A11.
-- [ ] **B12. Seed expansion** — grow the demo seed to many varied models/creators/themes (our own +
+- [x] **B12. Seed expansion** — grow the demo seed to many varied models/creators/themes (our own +
       CC assets only) so Discover looks alive. **No scraping.**
+      <br>*Shipped:* 24 posts (12 originals + 12 "remix" takes) by 12 creators across our 12 bundled
+      GLBs, themed tags (fantasy/gamedev/cyberpunk/archviz/print/…), kind split 12 text / 12 image,
+      deterministic likes/comments + a seeded follow graph so profiles aren't empty. Mock-only, idempotent.
 
 ### Week 4 — Public Spatial-Prompt API + hardening
 - [ ] **B13. Public API: Spatial Prompt** — `POST /api/v1/spatial-prompt` (our signature feature)
