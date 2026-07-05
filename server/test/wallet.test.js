@@ -5,6 +5,8 @@ import {
   grant,
   spend,
   grantStarter,
+  purchasePackage,
+  PACKAGES,
   STARTER_TOKENS,
 } from '../src/services/wallet.js'
 
@@ -54,6 +56,33 @@ test('spend beyond balance throws INSUFFICIENT and leaves balance untouched', as
     (err) => err.code === 'INSUFFICIENT' && err.status === 402,
   )
   assert.equal((await getWallet('w-poor')).balance, 10)
+})
+
+test('purchasePackage grants an allow-listed package and logs the reason', async () => {
+  const pack = PACKAGES[0]
+  const r = await purchasePackage('w-buyer', pack.id)
+  assert.equal(r.granted, pack.tokens)
+  assert.equal(r.balance, pack.tokens)
+  const w = await getWallet('w-buyer')
+  assert.equal(w.balance, pack.tokens)
+  assert.equal(w.history[0].reason, `purchase:${pack.id}`)
+})
+
+test('purchasePackage rejects unknown packages (BAD_PACKAGE, 400)', async () => {
+  await assert.rejects(
+    () => purchasePackage('w-buyer', 'mega-hack'),
+    (err) => err.code === 'BAD_PACKAGE' && err.status === 400,
+  )
+  await assert.rejects(() => purchasePackage('w-buyer', ''), (e) => e.code === 'BAD_PACKAGE')
+})
+
+test('every package is well-formed (id, positive tokens, price label)', () => {
+  assert.ok(PACKAGES.length >= 2)
+  for (const p of PACKAGES) {
+    assert.ok(p.id && typeof p.id === 'string')
+    assert.ok(Number.isFinite(p.tokens) && p.tokens > 0)
+    assert.ok(typeof p.price === 'string' && p.price.startsWith('$'))
+  }
 })
 
 test('grant and spend reject non-positive amounts', async () => {

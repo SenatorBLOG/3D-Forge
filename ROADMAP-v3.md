@@ -192,8 +192,14 @@ Write each endpoint's contract in this doc the day before A needs it.
 - [ ] **B14. API keys** — issue/list/revoke keys per account (`/api/keys`), for the API nav page.
 - [ ] **B15. API docs page data** — a simple machine-readable spec + examples (A renders the docs page,
       or ship a static docs route).
-- [ ] **B16. Token grant/"buy" endpoint** — `POST /api/wallet/grant` (simulated purchase) for A13;
+- [x] **B16. Token grant/"buy" endpoint** — `POST /api/wallet/grant` (simulated purchase) for A13;
       harden, add tests, finalize.
+      <br>**Contract (for A13):** `GET /api/wallet/packages` (public) →
+      `{ "packages": [ { "id": "spark", "label": "Spark", "tokens": 100, "price": "$4.99" }, … ] }`
+      (ids: `spark`/`forge`/`foundry`; prices display-only — simulated, no real payment).
+      `POST /api/wallet/grant` (auth) body `{ "package": "forge" }` →
+      `201 { "granted": 550, "balance": <new>, "entry": { … ledger entry, reason "purchase:forge" } }`;
+      unknown package → `400`. Clients can never mint arbitrary amounts — packages are allow-listed.
 
 ---
 

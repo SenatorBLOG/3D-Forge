@@ -127,6 +127,28 @@ export async function spend(userId, amount, reason) {
   return memTxn(userId, -amount, reason)
 }
 
+// Simulated "buy tokens" packages (A13). Prices are display-only strings — no
+// real payment ever happens; the allow-list keeps clients from minting
+// arbitrary amounts.
+export const PACKAGES = [
+  { id: 'spark', label: 'Spark', tokens: 100, price: '$4.99' },
+  { id: 'forge', label: 'Forge', tokens: 550, price: '$19.99' },
+  { id: 'foundry', label: 'Foundry', tokens: 1200, price: '$39.99' },
+]
+
+/**
+ * Simulated purchase: grant a known package's tokens. Throws BAD_PACKAGE (400)
+ * for anything not in the allow-list — the client never chooses raw amounts.
+ */
+export async function purchasePackage(userId, packageId) {
+  const pack = PACKAGES.find((p) => p.id === packageId)
+  if (!pack) {
+    throw Object.assign(new Error('Unknown token package'), { code: 'BAD_PACKAGE', status: 400 })
+  }
+  const entry = await grant(userId, pack.tokens, `purchase:${pack.id}`)
+  return { granted: pack.tokens, balance: entry.balanceAfter, entry }
+}
+
 /**
  * Grant the one-time starter balance to a new account. Idempotent: returns null
  * (no double grant) if the user already has a wallet.
