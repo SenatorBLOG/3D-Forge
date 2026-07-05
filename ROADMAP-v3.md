@@ -176,8 +176,13 @@ Write each endpoint's contract in this doc the day before A needs it.
 - [ ] **B8. Library API** — `GET /api/models?owner=me|all&filter=favorites&q=` with pagination.
 
 ### Week 3 — Search, themes, achievements
-- [ ] **B9. Theme/tag taxonomy** — curated themes (game/anime/castle/dragon/sci-fi…) on posts;
+- [x] **B9. Theme/tag taxonomy** — curated themes (game/anime/castle/dragon/sci-fi…) on posts;
       `GET /api/themes` + `?theme=` filtering on the feed.
+      <br>**Contract (for A8):** `GET /api/themes` →
+      `{ "themes": [ { "id": "fantasy", "label": "Fantasy", "tags": [...], "count": 7 }, … ] }`
+      (5 themes: `fantasy`, `sci-fi`, `gamedev`, `architecture`, `art`; `count` is live).
+      Feed filter: `GET /api/posts?theme=<id>` → posts carrying **any** of the theme's tags;
+      unknown theme → `400` listing valid ids. Combinable with `?q=` / `?tag=` as before.
 - [ ] **B10. Search API** — `GET /api/search?q=` across titles/tags/creators (build on the tag work).
 - [ ] **B11. Achievements & profile stats** — `GET /api/users/:username/stats`
       → `{ creations, published, followers, following, badges:[…] }`; award badges on milestones

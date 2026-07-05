@@ -18,6 +18,7 @@ import {
 } from '../services/social.js'
 import { notify, removePostNotifications } from '../services/notifications.js'
 import { followingIds } from '../services/follows.js'
+import { getTheme, THEMES } from '../services/themes.js'
 
 const router = Router()
 
@@ -33,7 +34,7 @@ const withSocial = async (post, userId) => {
 const str = (v) => (typeof v === 'string' ? v : undefined)
 
 // GET /api/posts — public community feed.
-// Filters: ?author / ?username / ?tag / ?q, or ?following=1 for your follows' posts
+// Filters: ?author / ?username / ?tag / ?theme / ?q, or ?following=1 for your follows' posts
 router.get('/', optionalAuth, async (req, res) => {
   try {
     // ?following=1 → only posts by people the signed-in user follows. Anonymous
@@ -42,11 +43,23 @@ router.get('/', optionalAuth, async (req, res) => {
     if (req.query.following === '1') {
       authorIds = req.user ? await followingIds(req.user.id) : []
     }
+    // ?theme=<id> → posts carrying any of the theme's curated tags
+    let anyTags
+    if (req.query.theme !== undefined) {
+      const theme = getTheme(str(req.query.theme))
+      if (!theme) {
+        return res
+          .status(400)
+          .json({ error: `unknown theme — valid ids: ${THEMES.map((t) => t.id).join(', ')}` })
+      }
+      anyTags = theme.tags
+    }
     const posts = await listPosts({
       authorId: str(req.query.author),
       authorIds,
       authorUsername: str(req.query.username),
       tag: str(req.query.tag),
+      anyTags,
       q: str(req.query.q),
     })
     res.json({ posts: await Promise.all(posts.map((p) => withSocial(p, req.user?.id))) })
