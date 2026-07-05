@@ -184,9 +184,15 @@ Write each endpoint's contract in this doc the day before A needs it.
 - [ ] **B9. Theme/tag taxonomy** — curated themes (game/anime/castle/dragon/sci-fi…) on posts;
       `GET /api/themes` + `?theme=` filtering on the feed.
 - [ ] **B10. Search API** — `GET /api/search?q=` across titles/tags/creators (build on the tag work).
-- [ ] **B11. Achievements & profile stats** — `GET /api/users/:username/stats`
+- [x] **B11. Achievements & profile stats** — `GET /api/users/:username/stats`
       → `{ creations, published, followers, following, badges:[…] }`; award badges on milestones
       (first publish, 10 likes, etc.). Contract for A10/A11.
+      <br>**Contract (for A10/A11):** `GET /api/users/:username/stats` (public) →
+      `{ username, creations, published, likesReceived, followers, following,
+      badges: [ { id, label, description, earned } ] }` — all 6 badges always returned
+      (render locked/unlocked from `earned`). Badges: `first-forge`, `maker-5`, `published`,
+      `curator-5`, `liked-10` (10 likes), `popular-3` (3 followers). Derived live — crossing a
+      milestone awards on next read. `404` for unknown users.
 - [ ] **B12. Seed expansion** — grow the demo seed to many varied models/creators/themes (our own +
       CC assets only) so Discover looks alive. **No scraping.**
 
