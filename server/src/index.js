@@ -15,6 +15,7 @@ import usersRouter from './routes/users.js'
 import walletRouter from './routes/wallet.js'
 import imagesRouter, { IMAGE_DIR } from './routes/images.js'
 import searchRouter from './routes/search.js'
+import themesRouter from './routes/themes.js'
 import { seedDemoData } from './services/seed.js'
 
 const app = express()
@@ -41,6 +42,7 @@ app.use('/api/users', usersRouter)
 app.use('/api/wallet', walletRouter)
 app.use('/api/images', imagesRouter)
 app.use('/api/search', searchRouter)
+app.use('/api/themes', themesRouter)
 
 const port = process.env.PORT || 3001
 await connectDb()

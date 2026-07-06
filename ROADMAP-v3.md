@@ -167,32 +167,23 @@ Write each endpoint's contract in this doc the day before A needs it.
       mode calls Meshy image-to-3D, inlining the stored image as a data URI.
 
 ### Week 2 — Unified generation pipeline + model metadata
-- [x] **B5. Unified generate API** — one `POST /api/generate` taking `{ mode: 'text'|'image'|'batch',
+- [ ] **B5. Unified generate API** — one `POST /api/generate` taking `{ mode: 'text'|'image'|'batch',
       tier, options }` → task; the existing polling stays. Document Request/Response for A6.
-      <br>**Contract (for A6):** `POST /api/generate` (optional Bearer) body
-      `{ "mode": "text"|"image", "tier": "meshy-5"|"meshy-6" ("m5"/"m6" shorthands; legacy "model" still accepted), "prompt": "…" (text mode), "imageId": "…" (image mode) }`
-      → `202 { taskId, mode, tier, mock, cost }`. Unknown mode → `400` (`batch` arrives with B6).
-      Poll `GET /api/generate/:taskId` unchanged → `{ taskId, status, progress, modelUrl }`.
-      `POST /api/generate/refine { previewTaskId, tier }` → `202 { taskId, tier, mock, cost }`.
-      Costs per tier: `GET /api/generate/costs`. Cost-gating per B2 (mock free; real 401/402).
 - [ ] **B6. Batch image→3D** — accept multiple images → a queue of tasks; `GET /api/generate/batch/:id`
       for batch status.
 - [ ] **B7. Model metadata** — store per generation: topology (faces/vertices if available), tier,
       license, source mode, prompt. Expose on the model/library objects (for A5/A7).
-- [x] **B8. Library API** — `GET /api/models?owner=me|all&filter=favorites&q=` with pagination.
-      <br>**Contract (for A5/A7):** `GET /api/models?owner=me|all&filter=favorites&q=<search>&limit=<1..100>&offset=<n>`
-      (optional `Authorization: Bearer`; `owner=me`/`filter=favorites` → `401` when signed out)
-      → `{ "models": [ { taskId, prompt, status, modelUrl, mock, ownerId, favorite, createdAt } ], "total": n }`,
-      newest-first; `q` searches prompts. `POST /api/models/:taskId/favorite` (auth) → `{ "favorite": true|false }`.
-      Generations/uploads now record their `ownerId` (null when anonymous). Works in mock (history) and Mongo.
+- [ ] **B8. Library API** — `GET /api/models?owner=me|all&filter=favorites&q=` with pagination.
 
 ### Week 3 — Search, themes, achievements
-- [ ] **B9. Theme/tag taxonomy** — curated themes (game/anime/castle/dragon/sci-fi…) on posts;
+- [x] **B9. Theme/tag taxonomy** — curated themes (game/anime/castle/dragon/sci-fi…) on posts;
       `GET /api/themes` + `?theme=` filtering on the feed.
-- [x] **B10. Search API** — `GET /api/search?q=` across titles/tags/creators (build on the tag work).
-      <br>**Contract:** `GET /api/search?q=<text>&limit=<1..50>` (public) →
-      `{ "q", "posts": [ ...post objects (title/tag matches, newest-first) ], "creators": [ { "username", "bio", "avatarColor" } ] }`.
-      Empty/missing `q` → `400`; q capped at 100 chars; creators capped at 10.
+      <br>**Contract (for A8):** `GET /api/themes` →
+      `{ "themes": [ { "id": "fantasy", "label": "Fantasy", "tags": [...], "count": 7 }, … ] }`
+      (5 themes: `fantasy`, `sci-fi`, `gamedev`, `architecture`, `art`; `count` is live).
+      Feed filter: `GET /api/posts?theme=<id>` → posts carrying **any** of the theme's tags;
+      unknown theme → `400` listing valid ids. Combinable with `?q=` / `?tag=` as before.
+- [ ] **B10. Search API** — `GET /api/search?q=` across titles/tags/creators (build on the tag work).
 - [ ] **B11. Achievements & profile stats** — `GET /api/users/:username/stats`
       → `{ creations, published, followers, following, badges:[…] }`; award badges on milestones
       (first publish, 10 likes, etc.). Contract for A10/A11.
@@ -209,14 +200,8 @@ Write each endpoint's contract in this doc the day before A needs it.
 - [ ] **B14. API keys** — issue/list/revoke keys per account (`/api/keys`), for the API nav page.
 - [ ] **B15. API docs page data** — a simple machine-readable spec + examples (A renders the docs page,
       or ship a static docs route).
-- [x] **B16. Token grant/"buy" endpoint** — `POST /api/wallet/grant` (simulated purchase) for A13;
+- [ ] **B16. Token grant/"buy" endpoint** — `POST /api/wallet/grant` (simulated purchase) for A13;
       harden, add tests, finalize.
-      <br>**Contract (for A13):** `GET /api/wallet/packages` (public) →
-      `{ "packages": [ { "id": "spark", "label": "Spark", "tokens": 100, "price": "$4.99" }, … ] }`
-      (ids: `spark`/`forge`/`foundry`; prices display-only — simulated, no real payment).
-      `POST /api/wallet/grant` (auth) body `{ "package": "forge" }` →
-      `201 { "granted": 550, "balance": <new>, "entry": { … ledger entry, reason "purchase:forge" } }`;
-      unknown package → `400`. Clients can never mint arbitrary amounts — packages are allow-listed.
 
 ---
 
