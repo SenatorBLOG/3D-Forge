@@ -13,6 +13,7 @@ import { recordTask, updateTask, removeTask } from '../services/history.js'
 import { optionalAuth } from '../middleware/auth.js'
 import { getWallet, spend, grant } from '../services/wallet.js'
 import { getImage, imageDataUri } from '../services/images.js'
+import { archiveModelUrl } from '../services/modelArchive.js'
 import { generationCost, priceList } from '../services/costs.js'
 
 const router = Router()
@@ -189,6 +190,11 @@ router.get('/:taskId', async (req, res) => {
     }
 
     if (TERMINAL_STATUSES.includes(task.status)) {
+      // E4: park the finished GLB in our own storage before recording it —
+      // Meshy's signed URLs expire; ours don't. No-op for mock/local results.
+      if (task.status === 'SUCCEEDED') {
+        payload.modelUrl = await archiveModelUrl(payload.taskId, payload.modelUrl)
+      }
       updateTask(payload.taskId, task.status, payload.modelUrl)
       // best-effort, like the POST handler: a DB hiccup must not hide an
       // already-fetched result from the client
