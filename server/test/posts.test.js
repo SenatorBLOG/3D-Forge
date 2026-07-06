@@ -61,6 +61,26 @@ test('deletePost removes the post', async () => {
   assert.equal(await deletePost(p.id), false) // already gone
 })
 
+test('createPost stores a valid kind and returns it on the post', async () => {
+  const p = await createPost(alice, {
+    title: 'From a photo',
+    modelUrl: '/m.glb',
+    kind: 'image',
+  })
+  assert.equal(p.kind, 'image')
+  assert.equal((await getPost(p.id)).kind, 'image')
+})
+
+test('a bogus kind is stored as null (dropped, not rejected)', async () => {
+  const p = await createPost(alice, { title: 'Odd kind', modelUrl: '/m.glb', kind: 'nope' })
+  assert.equal(p.kind, null)
+})
+
+test('a post created without kind has kind null', async () => {
+  const p = await createPost(alice, { title: 'No kind', modelUrl: '/m.glb' })
+  assert.equal(p.kind, null)
+})
+
 test('normalizeTags cleans, hyphenates, dedupes and caps', () => {
   assert.deepEqual(normalizeTags('#Robot, sci fi, robot'), ['robot', 'sci-fi'])
   assert.deepEqual(normalizeTags(['A', 'b!', 'c']), ['a', 'c']) // 'b!' is invalid

@@ -11,6 +11,8 @@ and ships with a **node --test** test. Workflow: branch → `npm --prefix server
 
 ## B-R1 — `kind` on posts (generation-type badge)
 
+**Status: ✅ done (Javid)** — model + service + route + seed + tests shipped; contract below is live.
+
 **Why:** community cards want an "Image → 3D / Text → 3D" pill (Meshy shows this on every
 card). The Post has no generation-type field, so A can't render it truthfully.
 

@@ -55,10 +55,14 @@ const publicPost = (p) => ({
   modelUrl: p.modelUrl,
   description: p.description,
   tags: p.tags || [],
+  kind: p.kind ?? null,
   createdAt: p.createdAt,
 })
 
-export async function createPost(user, { title, modelUrl, description, tags }) {
+// generation type for the card badge; anything but 'text'/'image' stores null
+const normalizeKind = (kind) => (kind === 'text' || kind === 'image' ? kind : null)
+
+export async function createPost(user, { title, modelUrl, description, tags, kind }) {
   const base = {
     authorId: user.id,
     authorUsername: user.username,
@@ -66,6 +70,7 @@ export async function createPost(user, { title, modelUrl, description, tags }) {
     modelUrl,
     description: description || '',
     tags: normalizeTags(tags),
+    kind: normalizeKind(kind),
   }
   if (dbReady()) {
     const doc = await Post.create(base)
