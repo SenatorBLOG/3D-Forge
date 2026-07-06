@@ -16,6 +16,7 @@ import walletRouter from './routes/wallet.js'
 import imagesRouter, { IMAGE_DIR } from './routes/images.js'
 import searchRouter from './routes/search.js'
 import themesRouter from './routes/themes.js'
+import filesRouter from './routes/files.js'
 import { seedDemoData } from './services/seed.js'
 
 const app = express()
@@ -25,6 +26,8 @@ app.use(express.json({ limit: '1mb' }))
 app.use('/uploads', express.static(UPLOAD_DIR))
 // serve reference images (saved by POST /api/images[/generate])
 app.use('/images', express.static(IMAGE_DIR))
+// cloud-stored files (GridFS) — images/models when Mongo is connected
+app.use('/files', filesRouter)
 
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', uptime: process.uptime() })

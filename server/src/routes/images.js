@@ -1,10 +1,11 @@
 import express, { Router } from 'express'
-import { mkdirSync, writeFileSync, readFileSync } from 'node:fs'
-import { join, basename } from 'node:path'
+import { mkdirSync, writeFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { optionalAuth } from '../middleware/auth.js'
-import { createImage, getImage, IMAGE_DIR } from '../services/images.js'
+import { createImage, getImage, readImageBytes, IMAGE_DIR } from '../services/images.js'
 import { detectImage } from '../services/imageType.js'
 import { isImageGenMock, generateImage, editImage } from '../services/imageGen.js'
+import { cloudFilesEnabled, saveCloudFile } from '../services/files.js'
 
 const router = Router()
 
@@ -17,6 +18,14 @@ const newId = () => `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
 const writeImageFile = (name, data) => {
   mkdirSync(IMAGE_DIR, { recursive: true })
   writeFileSync(join(IMAGE_DIR, name), data)
+}
+
+// One write path for image bytes: GridFS (shared, permanent) when Mongo is
+// connected, local disk otherwise. Returns the public URL for the record.
+async function storeImageBytes(name, data, mime) {
+  if (cloudFilesEnabled()) return saveCloudFile(name, data, mime)
+  writeImageFile(name, data)
+  return `/images/${name}`
 }
 
 // POST /api/images — store a user-uploaded reference image. Body is the raw image
@@ -32,13 +41,13 @@ router.post('/', optionalAuth, express.raw({ type: '*/*', limit: '15mb' }), asyn
     return res.status(400).json({ error: 'unsupported image (expected PNG, JPEG, GIF, or WEBP)' })
   }
   const id = newId()
+  let url
   try {
-    writeImageFile(`${id}.${kind.ext}`, body)
+    url = await storeImageBytes(`${id}.${kind.ext}`, body, kind.mime)
   } catch (err) {
     console.error('image upload write failed:', err)
     return res.status(500).json({ error: 'failed to store the image' })
   }
-  const url = `/images/${id}.${kind.ext}`
   try {
     const image = await createImage({
       id,
@@ -78,10 +87,10 @@ const extFor = (bytes, mime) =>
 async function storeResult(res, { bytes, mime, prompt, source, ownerId, parentId = null }) {
   const id = newId()
   const ext = extFor(bytes, mime)
-  writeImageFile(`${id}.${ext}`, bytes)
+  const url = await storeImageBytes(`${id}.${ext}`, bytes, mime || `image/${ext}`)
   const image = await createImage({
     id,
-    url: `/images/${id}.${ext}`,
+    url,
     source,
     prompt,
     mime: mime || `image/${ext}`,
@@ -111,15 +120,17 @@ router.post('/generate', optionalAuth, async (req, res) => {
       return await storeResult(res, { bytes, mime, prompt, source: 'generated', ownerId })
     } catch (err) {
       if (err.code === 'DAILY_LIMIT') return res.status(429).json({ error: err.message })
-      console.error('image generation failed:', err)
-      return res.status(502).json({ error: 'Image generation service failed' })
+      // upstream trouble (e.g. no image quota on this key) must not brick the
+      // pipeline — log it and fall through to the placeholder path below
+      console.error('image generation failed — falling back to stub:', err.message)
     }
   }
 
   // key-free fallback: deterministic SVG placeholder
   const id = newId()
+  let url
   try {
-    writeImageFile(`${id}.svg`, stubImageSvg(prompt))
+    url = await storeImageBytes(`${id}.svg`, stubImageSvg(prompt), 'image/svg+xml')
   } catch (err) {
     console.error('image generate write failed:', err)
     return res.status(500).json({ error: 'failed to store the generated image' })
@@ -127,7 +138,7 @@ router.post('/generate', optionalAuth, async (req, res) => {
   try {
     const image = await createImage({
       id,
-      url: `/images/${id}.svg`,
+      url,
       source: 'generated',
       prompt,
       mime: 'image/svg+xml',
@@ -161,10 +172,10 @@ router.post('/:id/edit', optionalAuth, async (req, res) => {
     // key-free stub: a placeholder that at least shows the instruction
     const id = newId()
     try {
-      writeImageFile(`${id}.svg`, stubImageSvg(instruction))
+      const url = await storeImageBytes(`${id}.svg`, stubImageSvg(instruction), 'image/svg+xml')
       const image = await createImage({
         id,
-        url: `/images/${id}.svg`,
+        url,
         source: 'edited',
         prompt: instruction,
         mime: 'image/svg+xml',
@@ -179,8 +190,9 @@ router.post('/:id/edit', optionalAuth, async (req, res) => {
   }
 
   try {
-    const bytes = readFileSync(join(IMAGE_DIR, basename(source.url)))
-    const result = await editImage(bytes, source.mime || 'image/png', instruction)
+    const file = await readImageBytes(source)
+    if (!file) return res.status(404).json({ error: 'image file not found' })
+    const result = await editImage(file.bytes, file.mime || 'image/png', instruction)
     return await storeResult(res, {
       bytes: result.bytes,
       mime: result.mime,
