@@ -5,6 +5,8 @@ import {
   grant,
   spend,
   grantStarter,
+  purchasePackage,
+  PACKAGES,
   STARTER_TOKENS,
 } from '../src/services/wallet.js'
 
@@ -54,6 +56,45 @@ test('spend beyond balance throws INSUFFICIENT and leaves balance untouched', as
     (err) => err.code === 'INSUFFICIENT' && err.status === 402,
   )
   assert.equal((await getWallet('w-poor')).balance, 10)
+})
+
+test('purchasePackage grants an allow-listed package and logs the reason', async () => {
+  const pack = PACKAGES[0]
+  const r = await purchasePackage('w-buyer', pack.id)
+  assert.equal(r.granted, pack.tokens)
+  assert.equal(r.balance, pack.tokens)
+  const w = await getWallet('w-buyer')
+  assert.equal(w.balance, pack.tokens)
+  assert.equal(w.history[0].reason, `purchase:${pack.id}`)
+})
+
+test('purchasePackage rejects unknown packages (BAD_PACKAGE)', async () => {
+  await assert.rejects(
+    () => purchasePackage('w-buyer', 'mega-hack'),
+    (err) => err.code === 'BAD_PACKAGE',
+  )
+  await assert.rejects(() => purchasePackage('w-buyer', ''), (e) => e.code === 'BAD_PACKAGE')
+})
+
+test('purchases are capped per user per day (PURCHASE_LIMIT)', async () => {
+  const pack = PACKAGES[0]
+  for (let i = 0; i < 10; i++) await purchasePackage('w-whale', pack.id) // default daily cap
+  await assert.rejects(
+    () => purchasePackage('w-whale', pack.id),
+    (err) => err.code === 'PURCHASE_LIMIT',
+  )
+  // the cap is per-user: another user can still buy
+  const r = await purchasePackage('w-minnow', pack.id)
+  assert.equal(r.granted, pack.tokens)
+})
+
+test('every package is well-formed (id, positive tokens, price label)', () => {
+  assert.ok(PACKAGES.length >= 2)
+  for (const p of PACKAGES) {
+    assert.ok(p.id && typeof p.id === 'string')
+    assert.ok(Number.isFinite(p.tokens) && p.tokens > 0)
+    assert.ok(typeof p.price === 'string' && p.price.startsWith('$'))
+  }
 })
 
 test('grant and spend reject non-positive amounts', async () => {
