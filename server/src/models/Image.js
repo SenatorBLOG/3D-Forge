@@ -8,10 +8,12 @@ const imageSchema = new mongoose.Schema(
   {
     imageId: { type: String, required: true, unique: true, index: true },
     url: { type: String, required: true },
-    source: { type: String, enum: ['upload', 'generated'], required: true },
-    prompt: { type: String, default: '' }, // set for generated images
+    source: { type: String, enum: ['upload', 'generated', 'edited'], required: true },
+    prompt: { type: String, default: '' }, // the generation prompt / edit instruction
     mime: { type: String, default: '' },
     ownerId: { type: String, default: null, index: true },
+    // for 'edited' images: the image this one was derived from (version chain)
+    parentId: { type: String, default: null, index: true },
   },
   { timestamps: true },
 )
