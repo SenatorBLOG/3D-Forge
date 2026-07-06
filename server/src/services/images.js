@@ -4,6 +4,7 @@ import { join, basename } from 'node:path'
 import { dbReady } from '../db.js'
 import Image from '../models/Image.js'
 import { load, flush } from './persistence.js'
+import { readCloudFile } from './files.js'
 
 // where reference image bytes live (gitignored, alongside the dev store). The
 // route writes here; this module reads back for the real image→3D path.
@@ -90,20 +91,35 @@ export async function getImage(id) {
 }
 
 /**
+ * Read a stored image's bytes wherever they live: GridFS for `/files/...`
+ * URLs (cloud mode), local disk otherwise. Returns { bytes, mime } or null.
+ */
+export async function readImageBytes(image) {
+  if (!image?.url) return null
+  try {
+    if (image.url.startsWith('/files/')) {
+      const file = await readCloudFile(basename(image.url))
+      return file ? { bytes: file.bytes, mime: image.mime || file.mime } : null
+    }
+    const bytes = readFileSync(join(IMAGE_DIR, basename(image.url)))
+    return { bytes, mime: image.mime || 'application/octet-stream' }
+  } catch (err) {
+    console.error('image read failed:', err)
+    return null
+  }
+}
+
+/**
  * Read a stored image back as a base64 data URI. Meshy's image-to-3D can't
- * reach our localhost `/images` URLs, so the real pipeline inlines the bytes.
+ * reach our localhost URLs, so the real pipeline inlines the bytes.
  * Returns null if the image (record or file) is missing.
  */
 export async function imageDataUri(id) {
   const rec = await getImage(id)
   if (!rec) return null
-  try {
-    const bytes = readFileSync(join(IMAGE_DIR, basename(rec.url)))
-    return `data:${rec.mime || 'application/octet-stream'};base64,${bytes.toString('base64')}`
-  } catch (err) {
-    console.error('image read failed:', err)
-    return null
-  }
+  const file = await readImageBytes(rec)
+  if (!file) return null
+  return `data:${file.mime};base64,${file.bytes.toString('base64')}`
 }
 
 /** A user's images, newest-first (for a future "my references" view). */
