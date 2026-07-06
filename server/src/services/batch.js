@@ -3,6 +3,7 @@ import Batch from '../models/Batch.js'
 import { load, flush } from './persistence.js'
 import { getTask } from './meshy.js'
 import { updateTask } from './history.js'
+import { archiveModelUrl } from './modelArchive.js'
 
 // Batch image→3D: a group of generation tasks created together and polled as
 // one unit. In-memory when no Mongo (keyless dev), Mongo when connected — same
@@ -77,7 +78,12 @@ export async function batchStatus(batchId) {
         progress: task.progress ?? 0,
         modelUrl: task.model_urls?.glb ?? null,
       }
-      if (TERMINAL.includes(entry.status)) updateTask(taskId, entry.status, entry.modelUrl)
+      if (TERMINAL.includes(entry.status)) {
+        if (entry.status === 'SUCCEEDED') {
+          entry.modelUrl = await archiveModelUrl(taskId, entry.modelUrl) // E4: permanent storage
+        }
+        updateTask(taskId, entry.status, entry.modelUrl)
+      }
       return entry
     }),
   )

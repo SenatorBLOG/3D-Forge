@@ -6,6 +6,7 @@ import { recordTask, updateTask } from '../services/history.js'
 import { optionalAuth, requireAuth } from '../middleware/auth.js'
 import { listLibrary } from '../services/library.js'
 import { toggleFavorite } from '../services/favorites.js'
+import { cloudFilesEnabled, saveCloudFile } from '../services/files.js'
 
 const router = Router()
 
@@ -15,7 +16,7 @@ export const UPLOAD_DIR = fileURLToPath(new URL('../../.devdata/uploads/', impor
 // POST /api/models/upload — store a user-uploaded .glb and record it in history
 // so it persists and reloads via the History "Load" button. Body is the raw
 // file bytes (Content-Type ignored); ?name=<label> sets the history title.
-router.post('/upload', optionalAuth, express.raw({ type: '*/*', limit: '60mb' }), (req, res) => {
+router.post('/upload', optionalAuth, express.raw({ type: '*/*', limit: '60mb' }), async (req, res) => {
   const body = req.body
   if (!Buffer.isBuffer(body) || body.length === 0) {
     return res.status(400).json({ error: 'send the .glb file as the raw request body' })
@@ -27,14 +28,20 @@ router.post('/upload', optionalAuth, express.raw({ type: '*/*', limit: '60mb' })
     .replace(/[^\w .-]+/g, '_')
     .slice(0, 60)
   const id = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+  let url
   try {
-    mkdirSync(UPLOAD_DIR, { recursive: true })
-    writeFileSync(join(UPLOAD_DIR, `${id}.glb`), body)
+    if (cloudFilesEnabled()) {
+      // E4: shared, permanent storage — teammates on the same DB see the file
+      url = await saveCloudFile(`upload-${id}.glb`, body, 'model/gltf-binary')
+    } else {
+      mkdirSync(UPLOAD_DIR, { recursive: true })
+      writeFileSync(join(UPLOAD_DIR, `${id}.glb`), body)
+      url = `/uploads/${id}.glb`
+    }
   } catch (err) {
     console.error('model upload write failed:', err)
     return res.status(500).json({ error: 'failed to store the uploaded model' })
   }
-  const url = `/uploads/${id}.glb`
   const taskId = `upload-${id}`
   // mirror a finished generation so it shows as a History card with Load/Download
   recordTask({ kind: 'generate', taskId, prompt: label, mock: true, ownerId: req.user?.id ?? null })
