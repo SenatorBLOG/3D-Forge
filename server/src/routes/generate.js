@@ -117,13 +117,14 @@ router.post('/', optionalAuth, async (req, res) => {
     return res.status(502).json({ error: 'Model generation service failed' })
   }
 
-  recordTask({ kind: 'generate', taskId, prompt, mock: isMockMode() })
+  const ownerId = req.user?.id ?? null
+  recordTask({ kind: 'generate', taskId, prompt, mock: isMockMode(), ownerId })
 
   // the upstream task exists at this point — a DB hiccup must not turn a
   // successful (credit-spending) creation into an error response
   if (dbReady()) {
     try {
-      await GeneratedModel.create({ prompt, meshyTaskId: taskId, mock: isMockMode() })
+      await GeneratedModel.create({ prompt, meshyTaskId: taskId, mock: isMockMode(), ownerId })
     } catch (err) {
       console.error('failed to persist generation record:', err)
     }
@@ -161,7 +162,23 @@ router.post('/refine', optionalAuth, async (req, res) => {
   }
   // the textured result supersedes the gray preview entry — drop it, keep one card
   removeTask(previewTaskId)
-  recordTask({ kind: 'generate', taskId, prompt, mock: isMockMode() })
+  const refineOwnerId = req.user?.id ?? null
+  recordTask({ kind: 'generate', taskId, prompt, mock: isMockMode(), ownerId: refineOwnerId })
+  // mirror the history swap in Mongo so the library (B8) shows the refined model
+  // under its new taskId instead of the stale gray preview. Best-effort, like POST /.
+  if (dbReady()) {
+    try {
+      await GeneratedModel.create({
+        prompt,
+        meshyTaskId: taskId,
+        mock: isMockMode(),
+        ownerId: refineOwnerId,
+      })
+      await GeneratedModel.findOneAndDelete({ meshyTaskId: previewTaskId })
+    } catch (err) {
+      console.error('failed to persist refine record:', err)
+    }
+  }
   res.status(202).json({
     taskId,
     mock: isMockMode(),

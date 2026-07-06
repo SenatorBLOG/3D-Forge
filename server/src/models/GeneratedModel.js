@@ -13,6 +13,8 @@ const generatedModelSchema = new mongoose.Schema(
     },
     modelUrl: { type: String, default: null },
     mock: { type: Boolean, default: false },
+    // who generated it (null for anonymous/mock sessions) — powers the library's owner=me
+    ownerId: { type: String, default: null, index: true },
   },
   { timestamps: true },
 )
