@@ -11,6 +11,8 @@ and ships with a **node --test** test. Workflow: branch → `npm --prefix server
 
 ## B-R1 — `kind` on posts (generation-type badge)
 
+**Status: ✅ done (Javid)** — model + service + route + seed + tests shipped; contract below is live.
+
 **Why:** community cards want an "Image → 3D / Text → 3D" pill (Meshy shows this on every
 card). The Post has no generation-type field, so A can't render it truthfully.
 
@@ -37,6 +39,9 @@ card). The Post has no generation-type field, so A can't render it truthfully.
 ---
 
 ## B-R2 — model export/convert endpoint (download formats)
+
+**Status: ✅ done (Javid)** — `GET /api/models/convert` live (GLB/OBJ/STL, local-only src guard);
+built on `@gltf-transform/core` (Node-first — no DOM shims needed for textured GLBs).
 
 **Why:** the download button only offers GLB. The report wants OBJ / STL (game/print
 pipelines). FBX needs external tooling (Blender/Assimp) and is **out of scope** — do not

@@ -94,8 +94,10 @@ router.post('/', requireAuth, async (req, res) => {
   const tags = Array.isArray(req.body?.tags) || typeof req.body?.tags === 'string'
     ? req.body.tags
     : []
+  // optional generation-type badge; a bad value is dropped (null), never a 400
+  const kind = req.body?.kind === 'text' || req.body?.kind === 'image' ? req.body.kind : null
   try {
-    const post = await createPost(req.user, { title, modelUrl, description, tags })
+    const post = await createPost(req.user, { title, modelUrl, description, tags, kind })
     res.status(201).json({ post: { ...post, likes: 0, likedByMe: false, comments: 0 } })
   } catch (err) {
     console.error('create post failed:', err)

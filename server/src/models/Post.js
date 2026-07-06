@@ -10,6 +10,8 @@ const postSchema = new mongoose.Schema(
     modelUrl: { type: String, required: true },
     description: { type: String, default: '' },
     tags: { type: [String], default: [], index: true },
+    // how the model was generated ('text' | 'image'); null for uploads/unknown
+    kind: { type: String, enum: ['text', 'image', null], default: null },
   },
   { timestamps: true },
 )
