@@ -19,6 +19,16 @@ const router = Router()
 
 const TERMINAL_STATUSES = ['SUCCEEDED', 'FAILED', 'CANCELED']
 
+// Unified tier resolution: the API takes `tier` ('meshy-5' | 'meshy-6', with
+// 'm5'/'m6' shorthands); the legacy `model` body field stays as an alias so
+// older clients keep working. Anything unrecognized falls back to the cheap tier.
+export function resolveTier(body) {
+  const raw = typeof body?.tier === 'string' ? body.tier : body?.model
+  return raw === 'meshy-6' || raw === 'm6' ? 'meshy-6' : 'meshy-5'
+}
+
+const MODES = ['text', 'image'] // 'batch' arrives with B6
+
 // Cost-gate a generation by charging UP FRONT: free + ungated in mock mode; in
 // real (keyed) mode it requires a signed-in user and atomically spends the cost
 // before the upstream task starts. Spending atomically (wallet.spend uses a
@@ -60,12 +70,16 @@ async function refundGeneration(req, { kind, aiModel }) {
   }
 }
 
-// POST /api/generate — start a text-to-3D preview task (Meshy AI, or the
-// built-in mock when no MESHY_API_KEY is configured)
+// POST /api/generate — the unified generation entry point (B5).
+// Body: { mode: 'text'|'image', tier: 'meshy-5'|'meshy-6', prompt?, imageId? }.
+// Meshy AI when keyed, the built-in mock otherwise; poll GET /:taskId as before.
 router.post('/', optionalAuth, async (req, res) => {
   // meshy-5 (cheap) by default; meshy-6 is prettier but costs more credits
-  const aiModel = req.body?.model === 'meshy-6' ? 'meshy-6' : 'meshy-5'
-  const mode = req.body?.mode === 'image' ? 'image' : 'text'
+  const aiModel = resolveTier(req.body)
+  const mode = req.body?.mode == null ? 'text' : req.body.mode
+  if (!MODES.includes(mode)) {
+    return res.status(400).json({ error: `mode must be one of: ${MODES.join(', ')}` })
+  }
 
   // resolve the input per mode: a text prompt, or a stored reference image
   let prompt = ''
@@ -133,6 +147,7 @@ router.post('/', optionalAuth, async (req, res) => {
   res.status(202).json({
     taskId,
     mode,
+    tier: aiModel,
     mock: isMockMode(),
     cost: generationCost({ kind: 'preview', aiModel, mock: isMockMode() }),
   })
@@ -144,7 +159,7 @@ router.post('/refine', optionalAuth, async (req, res) => {
   if (!previewTaskId) {
     return res.status(400).json({ error: 'previewTaskId is required' })
   }
-  const aiModel = req.body?.model === 'meshy-6' ? 'meshy-6' : 'meshy-5'
+  const aiModel = resolveTier(req.body)
   const prompt = typeof req.body?.prompt === 'string' ? req.body.prompt : 'textured model'
 
   // charge up front (real mode only — mock stays free)
@@ -181,6 +196,7 @@ router.post('/refine', optionalAuth, async (req, res) => {
   }
   res.status(202).json({
     taskId,
+    tier: aiModel,
     mock: isMockMode(),
     cost: generationCost({ kind: 'refine', aiModel, mock: isMockMode() }),
   })
