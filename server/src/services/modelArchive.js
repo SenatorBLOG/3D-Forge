@@ -6,11 +6,14 @@ import { cloudFilesEnabled, saveCloudFile, openCloudFile } from './files.js'
 // the rest of our data; records then point at our permanent /files URL.
 // Key-free/mock results (bundled local GLBs) and disk-only mode are untouched.
 
-// same host allow-list as the /proxy route — we only ever fetch Meshy assets
-const isMeshyUrl = (url) => {
+// host allow-list — we only ever fetch our generation providers' assets
+const isProviderUrl = (url) => {
   try {
     const u = new URL(url)
-    return u.protocol === 'https:' && /(^|\.)meshy\.ai$/i.test(u.hostname)
+    return (
+      u.protocol === 'https:' &&
+      /(^|\.)(meshy\.ai|tripo3d\.(ai|com))$/i.test(u.hostname)
+    )
   } catch {
     return false
   }
@@ -30,7 +33,7 @@ const inFlight = new Map() // taskId -> Promise<string archived url>
  * original URL still works for now, so never break the response over this).
  */
 export async function archiveModelUrl(taskId, modelUrl) {
-  if (!modelUrl || !cloudFilesEnabled() || !isMeshyUrl(modelUrl)) return modelUrl
+  if (!modelUrl || !cloudFilesEnabled() || !isProviderUrl(modelUrl)) return modelUrl
   const name = fileNameFor(taskId)
 
   if (inFlight.has(taskId)) return inFlight.get(taskId)

@@ -1,0 +1,126 @@
+// Client for the Tripo3D generation API (https://platform.tripo3d.ai/docs).
+// Second generation engine alongside Meshy: users pick the engine per
+// generation. Without TRIPO_API_KEY (or =mock) it reuses the same built-in
+// mock task lifecycle as Meshy, so the pipeline stays key-free for the demo.
+//
+// NOTE: written against the public docs/SDK; not yet exercised against the
+// live API (no key on this machine) — statuses/shapes mapped per docs.
+
+import { createMockTask, getMockTask } from './meshy.js'
+
+const BASE_URL = 'https://api.tripo3d.ai/v2/openapi'
+
+const apiKey = () => process.env.TRIPO_API_KEY
+
+export const isTripoMock = () => !apiKey() || apiKey() === 'mock'
+
+// --- cost guard: cap real (credit-spending) generations per day ----------
+// Same pragmatic pattern as MESHY_DAILY_LIMIT / IMAGE_DAILY_LIMIT.
+const DAILY_LIMIT = () => Number(process.env.TRIPO_DAILY_LIMIT || 10)
+let limitDay = ''
+let usedToday = 0
+
+function enforceDailyLimit() {
+  const today = new Date().toISOString().slice(0, 10)
+  if (today !== limitDay) {
+    limitDay = today
+    usedToday = 0
+  }
+  if (usedToday >= DAILY_LIMIT()) {
+    const err = new Error(
+      `Daily Tripo generation limit reached (${DAILY_LIMIT()}). ` +
+        'Raise TRIPO_DAILY_LIMIT in server/.env or restart the server.',
+    )
+    err.code = 'DAILY_LIMIT'
+    err.status = 429
+    throw err
+  }
+  usedToday += 1
+}
+
+async function tripoFetch(path, options = {}) {
+  const res = await fetch(`${BASE_URL}${path}`, {
+    ...options,
+    headers: {
+      Authorization: `Bearer ${apiKey()}`,
+      ...(options.body && typeof options.body === 'string'
+        ? { 'Content-Type': 'application/json' }
+        : {}),
+      ...options.headers,
+    },
+  })
+  if (!res.ok) {
+    const body = await res.text().catch(() => '')
+    const err = new Error(`Tripo API ${res.status}: ${body.slice(0, 300)}`)
+    err.status = res.status
+    throw err
+  }
+  const data = await res.json()
+  if (data.code !== 0) {
+    throw new Error(`Tripo API error code ${data.code}: ${JSON.stringify(data).slice(0, 200)}`)
+  }
+  return data.data
+}
+
+/** Start a text→3D task; resolves to the Tripo task id. */
+export async function createTripoTextTask(prompt) {
+  if (isTripoMock()) return createMockTask(prompt)
+  enforceDailyLimit()
+  const data = await tripoFetch('/task', {
+    method: 'POST',
+    body: JSON.stringify({ type: 'text_to_model', prompt }),
+  })
+  return data.task_id
+}
+
+/**
+ * Start an image→3D task from raw image bytes. Tripo can't fetch our localhost
+ * URLs, so the bytes are uploaded first (multipart → file token).
+ */
+export async function createTripoImageTask(imageBytes, mime = 'image/png') {
+  if (isTripoMock()) return createMockTask('image-to-3d')
+  enforceDailyLimit()
+  const form = new FormData()
+  const ext = mime.includes('jpeg') ? 'jpg' : mime.includes('webp') ? 'webp' : 'png'
+  form.append('file', new Blob([imageBytes], { type: mime }), `reference.${ext}`)
+  const uploaded = await tripoFetch('/upload', { method: 'POST', body: form })
+  const data = await tripoFetch('/task', {
+    method: 'POST',
+    body: JSON.stringify({
+      type: 'image_to_model',
+      file: { type: ext, file_token: uploaded.image_token },
+    }),
+  })
+  return data.task_id
+}
+
+// Tripo → our unified (Meshy-shaped) task object, so the existing polling
+// route and History flow work unchanged regardless of engine.
+const STATUS_MAP = {
+  queued: 'PENDING',
+  running: 'IN_PROGRESS',
+  success: 'SUCCEEDED',
+  failed: 'FAILED',
+  cancelled: 'CANCELED',
+  banned: 'FAILED',
+}
+
+/** Fetch a Tripo task in the unified shape, or null when unknown. */
+export async function getTripoTask(id) {
+  if (isTripoMock()) return getMockTask(id)
+  let data
+  try {
+    data = await tripoFetch(`/task/${encodeURIComponent(id)}`)
+  } catch (err) {
+    if (err.status === 404 || err.status === 400) return null
+    throw err
+  }
+  const status = STATUS_MAP[data.status] ?? 'IN_PROGRESS'
+  const glb = data.output?.pbr_model || data.output?.model || data.output?.base_model || null
+  return {
+    id,
+    status,
+    progress: status === 'SUCCEEDED' ? 100 : (data.progress ?? 0),
+    model_urls: glb ? { glb } : {},
+  }
+}

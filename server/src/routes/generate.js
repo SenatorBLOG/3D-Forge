@@ -1,18 +1,13 @@
 import { Router } from 'express'
-import {
-  createPreviewTask,
-  createRefineTask,
-  createImageTask,
-  getTask,
-  isMockMode,
-} from '../services/meshy.js'
+import { createRefineTask, isMockMode } from '../services/meshy.js'
+import { resolveEngine, engineIsMock, startGeneration, getAnyTask } from '../services/engines.js'
 import { dbReady } from '../db.js'
 import GeneratedModel from '../models/GeneratedModel.js'
 import SpatialPromptRecord from '../models/SpatialPromptRecord.js'
 import { recordTask, updateTask, removeTask } from '../services/history.js'
 import { optionalAuth } from '../middleware/auth.js'
 import { getWallet, spend, grant } from '../services/wallet.js'
-import { getImage, imageDataUri } from '../services/images.js'
+import { getImage, imageDataUri, readImageBytes } from '../services/images.js'
 import { archiveModelUrl } from '../services/modelArchive.js'
 import { generationCost, priceList } from '../services/costs.js'
 
@@ -27,8 +22,8 @@ const TERMINAL_STATUSES = ['SUCCEEDED', 'FAILED', 'CANCELED']
 // pass on the same balance. Returns { ok:true, cost } to proceed, or
 // { ok:false, status, body } (401 / 402) to reject. If the task then fails to
 // start, the caller must refundGeneration() so a failed generation costs nothing.
-async function chargeGeneration(req, { kind, aiModel }) {
-  const cost = generationCost({ kind, aiModel, mock: isMockMode() })
+async function chargeGeneration(req, { kind, aiModel, mock = isMockMode() }) {
+  const cost = generationCost({ kind, aiModel, mock })
   if (cost === 0) return { ok: true, cost } // mock mode — never gated/charged
   if (!req.user) {
     return {
@@ -51,8 +46,8 @@ async function chargeGeneration(req, { kind, aiModel }) {
 
 // Give the tokens back when an already-charged generation fails to start.
 // Best-effort: a failed refund only logs (the user can be made whole manually).
-async function refundGeneration(req, { kind, aiModel }) {
-  const cost = generationCost({ kind, aiModel, mock: isMockMode() })
+async function refundGeneration(req, { kind, aiModel, mock = isMockMode() }) {
+  const cost = generationCost({ kind, aiModel, mock })
   if (cost === 0 || !req.user) return
   try {
     await grant(req.user.id, cost, `refund:${kind}:${aiModel}`)
@@ -61,12 +56,15 @@ async function refundGeneration(req, { kind, aiModel }) {
   }
 }
 
-// POST /api/generate — start a text-to-3D preview task (Meshy AI, or the
-// built-in mock when no MESHY_API_KEY is configured)
+// POST /api/generate — start a generation task on the chosen engine.
+// Engines: 'meshy' (default; tiers meshy-5/meshy-6) or 'tripo'. Each engine
+// falls back to the built-in mock when its API key is absent.
 router.post('/', optionalAuth, async (req, res) => {
   // meshy-5 (cheap) by default; meshy-6 is prettier but costs more credits
   const aiModel = req.body?.model === 'meshy-6' ? 'meshy-6' : 'meshy-5'
   const mode = req.body?.mode === 'image' ? 'image' : 'text'
+  const engine = resolveEngine(req.body?.engine)
+  const mock = engineIsMock(engine)
 
   // resolve the input per mode: a text prompt, or a stored reference image
   let prompt = ''
@@ -92,39 +90,42 @@ router.post('/', optionalAuth, async (req, res) => {
 
   // cost gating (real mode only — mock stays free): charge up front so
   // concurrent requests can't race the balance check
-  const charge = await chargeGeneration(req, { kind: 'preview', aiModel })
+  const charge = await chargeGeneration(req, { kind: 'preview', aiModel, mock })
   if (!charge.ok) return res.status(charge.status).json(charge.body)
 
   let taskId
   try {
-    if (mode === 'image') {
-      // Meshy can't reach our localhost /images URL, so inline the bytes as a
-      // data URI in real mode; the mock ignores the input entirely.
-      let imageInput = image.url
-      if (!isMockMode()) {
-        imageInput = await imageDataUri(image.id)
-        if (!imageInput) {
-          return res.status(500).json({ error: 'failed to read the reference image' })
-        }
+    let imageInput
+    if (mode === 'image' && !mock) {
+      // providers can't reach our localhost URLs — hand them the bytes:
+      // Meshy takes a data URI, Tripo a multipart upload (raw bytes).
+      if (engine === 'tripo') {
+        const file = await readImageBytes(image)
+        if (!file) return res.status(500).json({ error: 'failed to read the reference image' })
+        imageInput = { bytes: file.bytes, mime: file.mime }
+      } else {
+        const dataUri = await imageDataUri(image.id)
+        if (!dataUri) return res.status(500).json({ error: 'failed to read the reference image' })
+        imageInput = { dataUri }
       }
-      taskId = await createImageTask(imageInput, { aiModel })
-    } else {
-      taskId = await createPreviewTask(prompt, aiModel)
+    } else if (mode === 'image') {
+      imageInput = { url: image.url } // mock ignores the input entirely
     }
+    taskId = await startGeneration({ engine, mode, prompt, imageInput, aiModel })
   } catch (err) {
-    await refundGeneration(req, { kind: 'preview', aiModel }) // task never started — give it back
+    await refundGeneration(req, { kind: 'preview', aiModel, mock }) // task never started — give it back
     if (err.code === 'DAILY_LIMIT') return res.status(429).json({ error: err.message })
     console.error('generate failed:', err)
     return res.status(502).json({ error: 'Model generation service failed' })
   }
 
-  recordTask({ kind: 'generate', taskId, prompt, mock: isMockMode() })
+  recordTask({ kind: 'generate', taskId, prompt, mock, engine })
 
   // the upstream task exists at this point — a DB hiccup must not turn a
   // successful (credit-spending) creation into an error response
   if (dbReady()) {
     try {
-      await GeneratedModel.create({ prompt, meshyTaskId: taskId, mock: isMockMode() })
+      await GeneratedModel.create({ prompt, meshyTaskId: taskId, mock })
     } catch (err) {
       console.error('failed to persist generation record:', err)
     }
@@ -133,8 +134,9 @@ router.post('/', optionalAuth, async (req, res) => {
   res.status(202).json({
     taskId,
     mode,
-    mock: isMockMode(),
-    cost: generationCost({ kind: 'preview', aiModel, mock: isMockMode() }),
+    engine,
+    mock,
+    cost: generationCost({ kind: 'preview', aiModel, mock }),
   })
 })
 
@@ -143,6 +145,9 @@ router.post('/refine', optionalAuth, async (req, res) => {
   const previewTaskId = typeof req.body?.previewTaskId === 'string' ? req.body.previewTaskId : ''
   if (!previewTaskId) {
     return res.status(400).json({ error: 'previewTaskId is required' })
+  }
+  if (req.body?.engine === 'tripo' || previewTaskId.startsWith('tripo-')) {
+    return res.status(400).json({ error: 'refine (texturing) is Meshy-only for now' })
   }
   const aiModel = req.body?.model === 'meshy-6' ? 'meshy-6' : 'meshy-5'
   const prompt = typeof req.body?.prompt === 'string' ? req.body.prompt : 'textured model'
@@ -179,7 +184,7 @@ router.get('/costs', (_req, res) => {
 // GET /api/generate/:taskId — poll task status/progress/result
 router.get('/:taskId', async (req, res) => {
   try {
-    const task = await getTask(req.params.taskId)
+    const task = await getAnyTask(req.params.taskId)
     if (!task) return res.status(404).json({ error: 'Unknown task id' })
 
     const payload = {
