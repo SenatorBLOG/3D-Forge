@@ -26,6 +26,8 @@ export default function ForgePage() {
   const [modelError, setModelError] = useState(null)
   // text description that produced the current model — context for edits
   const [baseModelPrompt, setBaseModelPrompt] = useState(null)
+  // how the current model was generated ('text' | 'image' | null) — published as `kind`
+  const [modelKind, setModelKind] = useState(null)
   // selected points on the mesh: [{ point: {x,y,z}, meshName, prompt }]
   const [points, setPoints] = useState([])
   // which point's inline editor is open (index, or null) — shared by the model
@@ -163,6 +165,7 @@ export default function ForgePage() {
     e.target.value = '' // allow re-choosing the same file
     if (!file) return
     setBaseModelPrompt(null)
+    setModelKind(null)
     setLastEditPrompt(null)
     swapModel(URL.createObjectURL(file), { isObjectUrl: true }) // clears pendingFile
     setPendingFile(file) // mark as previewed-but-unsaved
@@ -200,6 +203,7 @@ export default function ForgePage() {
     }
     setUrlError(null)
     setBaseModelPrompt(null)
+    setModelKind(null)
     setLastEditPrompt(null)
     swapModel(url)
   }
@@ -207,6 +211,7 @@ export default function ForgePage() {
   // load the bundled demo model on demand (no longer auto-loaded)
   const loadSample = () => {
     setBaseModelPrompt(null)
+    setModelKind(null)
     setLastEditPrompt(null)
     swapModel(SAMPLE_MODEL_URL)
   }
@@ -223,6 +228,7 @@ export default function ForgePage() {
     setSelectedIndex(null)
     setModelError(null)
     setBaseModelPrompt(null)
+    setModelKind(null)
     setLastEditPrompt(null)
     setModelStatus('idle')
     setModelUrl(null)
@@ -240,8 +246,9 @@ export default function ForgePage() {
           initialImageId={searchParams.get('imageId') || null}
           autostart={searchParams.get('autostart') === '1'}
           onGeneratingChange={setGenBusy}
-          onModelReady={(url, prompt) => {
+          onModelReady={(url, prompt, kind) => {
             setBaseModelPrompt(prompt)
+            setModelKind(kind || null)
             setLastEditPrompt(null)
             swapModel(url)
           }}
@@ -475,12 +482,16 @@ export default function ForgePage() {
 
       {/* RIGHT — library + publish */}
       <aside className="sidebar forge-library">
-        {modelUrl && <PublishPanel modelUrl={modelUrl} description={baseModelPrompt} />}
+        {modelUrl && (
+          <PublishPanel modelUrl={modelUrl} description={baseModelPrompt} kind={modelKind} />
+        )}
         <HistoryPanel
           refreshKey={historyKey}
           busy={busy}
           onLoad={(entry) => {
             setBaseModelPrompt(entry.prompt ?? null)
+            // history entries label image runs as "image → 3D" — recover the kind
+            setModelKind(entry.prompt === 'image → 3D' ? 'image' : entry.prompt ? 'text' : null)
             setLastEditPrompt(null)
             swapModel(entry.modelUrl)
           }}

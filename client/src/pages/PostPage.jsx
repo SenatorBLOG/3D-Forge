@@ -206,6 +206,21 @@ export default function PostPage() {
           <Link className="ghost-button" to={`/forge?model=${encodeURIComponent(post.modelUrl)}`}>
             Open in Forge
           </Link>
+          {post.modelUrl?.startsWith('/') && (
+            <span className="download-group">
+              <span className="download-label">Download</span>
+              {['glb', 'obj', 'stl'].map((fmt) => (
+                <a
+                  key={fmt}
+                  className="ghost-button download-fmt"
+                  href={`/api/models/convert?src=${encodeURIComponent(post.modelUrl)}&format=${fmt}`}
+                  download
+                >
+                  {fmt.toUpperCase()}
+                </a>
+              ))}
+            </span>
+          )}
           <button className="ghost-button" onClick={share}>
             {copied ? 'Link copied' : 'Share'}
           </button>

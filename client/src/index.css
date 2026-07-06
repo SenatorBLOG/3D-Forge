@@ -4168,3 +4168,51 @@ button.tag:hover {
     justify-content: center;
   }
 }
+
+/* generation-type pill on cards (B-R1) — Meshy-style "Text → 3D / Image → 3D" */
+.kind-pill {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  z-index: 1;
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  padding: 2px 7px;
+  border-radius: 5px;
+  background: rgba(11, 13, 18, 0.75);
+  backdrop-filter: blur(4px);
+}
+
+.kind-pill.kind-text {
+  color: var(--forge);
+  border: 1px solid rgba(34, 211, 238, 0.4);
+}
+
+.kind-pill.kind-image {
+  color: var(--steel);
+  border: 1px solid rgba(255, 45, 155, 0.4);
+}
+
+/* download format group on the post page (B-R2) */
+.download-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.download-label {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+
+.download-fmt {
+  padding: 7px 10px;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  text-decoration: none;
+}
