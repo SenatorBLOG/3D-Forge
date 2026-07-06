@@ -1,9 +1,10 @@
 import express, { Router } from 'express'
-import { mkdirSync, writeFileSync } from 'node:fs'
-import { join } from 'node:path'
+import { mkdirSync, writeFileSync, readFileSync } from 'node:fs'
+import { join, basename } from 'node:path'
 import { optionalAuth } from '../middleware/auth.js'
 import { createImage, getImage, IMAGE_DIR } from '../services/images.js'
 import { detectImage } from '../services/imageType.js'
+import { isImageGenMock, generateImage, editImage } from '../services/imageGen.js'
 
 const router = Router()
 
@@ -69,9 +70,31 @@ const stubImageSvg = (prompt) => `<svg xmlns="http://www.w3.org/2000/svg" width=
   <text x="256" y="460" fill="#7a808c" font-family="monospace" font-size="13" text-anchor="middle">stub reference image</text>
 </svg>`
 
-// POST /api/images/generate — stubbed text→image generator. Takes { prompt },
-// "renders" a placeholder reference image, stores it, and returns the same record
-// shape as an upload so the Model step treats both identically.
+// file extension for Gemini output: trust the magic bytes, fall back to mime
+const extFor = (bytes, mime) =>
+  detectImage(bytes)?.ext || (mime?.includes('jpeg') ? 'jpg' : mime?.includes('webp') ? 'webp' : 'png')
+
+// Store freshly generated/edited image bytes + metadata; answers the request.
+async function storeResult(res, { bytes, mime, prompt, source, ownerId, parentId = null }) {
+  const id = newId()
+  const ext = extFor(bytes, mime)
+  writeImageFile(`${id}.${ext}`, bytes)
+  const image = await createImage({
+    id,
+    url: `/images/${id}.${ext}`,
+    source,
+    prompt,
+    mime: mime || `image/${ext}`,
+    ownerId,
+    parentId,
+  })
+  res.status(201).json({ image, stub: false })
+}
+
+// POST /api/images/generate — text→image. With GEMINI_API_KEY set this is a
+// real generation; key-free it falls back to the SVG placeholder so the whole
+// pipeline still demos without credentials. Takes { prompt }; returns the same
+// record shape as an upload so the Model step treats all images identically.
 router.post('/generate', optionalAuth, async (req, res) => {
   const prompt = typeof req.body?.prompt === 'string' ? req.body.prompt.trim() : ''
   if (!prompt) {
@@ -80,6 +103,20 @@ router.post('/generate', optionalAuth, async (req, res) => {
   if (prompt.length > 600) {
     return res.status(400).json({ error: 'prompt must be 600 characters or fewer' })
   }
+  const ownerId = req.user?.id ?? null
+
+  if (!isImageGenMock()) {
+    try {
+      const { bytes, mime } = await generateImage(prompt)
+      return await storeResult(res, { bytes, mime, prompt, source: 'generated', ownerId })
+    } catch (err) {
+      if (err.code === 'DAILY_LIMIT') return res.status(429).json({ error: err.message })
+      console.error('image generation failed:', err)
+      return res.status(502).json({ error: 'Image generation service failed' })
+    }
+  }
+
+  // key-free fallback: deterministic SVG placeholder
   const id = newId()
   try {
     writeImageFile(`${id}.svg`, stubImageSvg(prompt))
@@ -94,12 +131,69 @@ router.post('/generate', optionalAuth, async (req, res) => {
       source: 'generated',
       prompt,
       mime: 'image/svg+xml',
-      ownerId: req.user?.id ?? null,
+      ownerId,
     })
     res.status(201).json({ image, stub: true })
   } catch (err) {
     console.error('generated image record failed:', err)
     res.status(500).json({ error: 'failed to record the generated image' })
+  }
+})
+
+// POST /api/images/:id/edit — iterate on ONE image: { instruction } is applied
+// to the CURRENT picture ("make the windows wider"), producing a new version
+// linked to its parent via parentId. Key-free mode returns a labeled SVG stub
+// so the loop is still demoable. The 3D step consumes any version's id as usual.
+router.post('/:id/edit', optionalAuth, async (req, res) => {
+  const instruction =
+    typeof req.body?.instruction === 'string' ? req.body.instruction.trim() : ''
+  if (!instruction) {
+    return res.status(400).json({ error: 'instruction (non-empty string) is required' })
+  }
+  if (instruction.length > 600) {
+    return res.status(400).json({ error: 'instruction must be 600 characters or fewer' })
+  }
+  const source = await getImage(req.params.id)
+  if (!source) return res.status(404).json({ error: 'Unknown image id' })
+  const ownerId = req.user?.id ?? null
+
+  if (isImageGenMock()) {
+    // key-free stub: a placeholder that at least shows the instruction
+    const id = newId()
+    try {
+      writeImageFile(`${id}.svg`, stubImageSvg(instruction))
+      const image = await createImage({
+        id,
+        url: `/images/${id}.svg`,
+        source: 'edited',
+        prompt: instruction,
+        mime: 'image/svg+xml',
+        ownerId,
+        parentId: source.id,
+      })
+      return res.status(201).json({ image, stub: true })
+    } catch (err) {
+      console.error('stub image edit failed:', err)
+      return res.status(500).json({ error: 'failed to store the edited image' })
+    }
+  }
+
+  try {
+    const bytes = readFileSync(join(IMAGE_DIR, basename(source.url)))
+    const result = await editImage(bytes, source.mime || 'image/png', instruction)
+    return await storeResult(res, {
+      bytes: result.bytes,
+      mime: result.mime,
+      prompt: instruction,
+      source: 'edited',
+      ownerId,
+      parentId: source.id,
+    })
+  } catch (err) {
+    if (err.code === 'DAILY_LIMIT') return res.status(429).json({ error: err.message })
+    if (err.code === 'ENOENT') return res.status(404).json({ error: 'image file not found' })
+    console.error('image edit failed:', err)
+    res.status(502).json({ error: 'Image edit service failed' })
   }
 })
 

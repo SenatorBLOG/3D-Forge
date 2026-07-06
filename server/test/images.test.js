@@ -74,3 +74,18 @@ test('imageDataUri inlines a stored image as a base64 data URI', async () => {
 test('imageDataUri returns null for an unknown id', async () => {
   assert.equal(await imageDataUri('does-not-exist'), null)
 })
+
+test('edited images keep their parentId (version chain)', async () => {
+  await createImage({ id: 'img-v1', url: '/images/img-v1.png', source: 'generated', prompt: 'a car' })
+  const v2 = await createImage({
+    id: 'img-v2',
+    url: '/images/img-v2.png',
+    source: 'edited',
+    prompt: 'make the windows wider',
+    parentId: 'img-v1',
+  })
+  assert.equal(v2.source, 'edited')
+  assert.equal(v2.parentId, 'img-v1')
+  assert.equal((await getImage('img-v2')).parentId, 'img-v1')
+  assert.equal((await getImage('img-v1')).parentId, null)
+})

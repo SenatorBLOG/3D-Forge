@@ -40,12 +40,21 @@ const publicImage = (r) => ({
   prompt: r.prompt || '',
   mime: r.mime || '',
   ownerId: r.ownerId ?? null,
+  parentId: r.parentId ?? null,
   createdAt: r.createdAt,
 })
 
 /** Persist an image's metadata. `id` is the caller-chosen filename stem. */
-export async function createImage({ id, url, source, prompt = '', mime = '', ownerId = null }) {
-  const base = { imageId: id, url, source, prompt, mime, ownerId }
+export async function createImage({
+  id,
+  url,
+  source,
+  prompt = '',
+  mime = '',
+  ownerId = null,
+  parentId = null,
+}) {
+  const base = { imageId: id, url, source, prompt, mime, ownerId, parentId }
   if (dbReady()) {
     const doc = await Image.create(base)
     return publicImage({ ...base, createdAt: doc.createdAt })
