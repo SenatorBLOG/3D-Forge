@@ -7,6 +7,8 @@ export default defineConfig({
     proxy: {
       '/api': 'http://localhost:3001',
       '/uploads': 'http://localhost:3001',
+      '/files': 'http://localhost:3001', // cloud-stored models/images (GridFS)
+      '/images': 'http://localhost:3001', // reference images (disk mode)
     },
   },
 })

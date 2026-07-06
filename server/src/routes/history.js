@@ -16,7 +16,15 @@ router.get('/', async (req, res) => {
     return res.json({ entries: listMemory().slice(0, MAX_ENTRIES), source: 'memory' })
   }
   try {
-    res.json({ entries: await listDb(MAX_ENTRIES), source: 'db' })
+    // merge persisted records with this session's memory (uploads and other
+    // entries that don't create DB documents), newest first, deduped by taskId
+    const mem = listMemory()
+    const seen = new Set(mem.map((e) => e.taskId))
+    const db = (await listDb(MAX_ENTRIES)).filter((e) => !seen.has(e.taskId))
+    const entries = [...mem, ...db]
+      .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+      .slice(0, MAX_ENTRIES)
+    res.json({ entries, source: 'db+session' })
   } catch (err) {
     console.error('history list failed:', err)
     res.status(500).json({ error: 'Failed to list history' })
