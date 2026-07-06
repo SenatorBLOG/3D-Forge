@@ -43,7 +43,8 @@ const MOCK_DURATION_MS = 8000
 const MOCK_RETENTION_MS = 10 * 60 * 1000
 const mockTasks = new Map()
 
-function createMockTask(label) {
+// exported so other engines (services/tripo.js) reuse the same key-free mock
+export function createMockTask(label) {
   // sweep stale entries so a long-lived dev server doesn't grow forever,
   // while finished tasks stay pollable for a while
   const cutoff = Date.now() - MOCK_RETENTION_MS
@@ -55,7 +56,7 @@ function createMockTask(label) {
   return id
 }
 
-function getMockTask(id) {
+export function getMockTask(id) {
   const task = mockTasks.get(id)
   if (!task) return null
   const elapsed = Date.now() - task.startedAt

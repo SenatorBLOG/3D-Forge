@@ -3,6 +3,7 @@ import { requireAuth, optionalAuth } from '../middleware/auth.js'
 import { getUserByUsername, updateProfile } from '../services/auth.js'
 import { toggleFollow, isFollowing, followCounts } from '../services/follows.js'
 import { notify } from '../services/notifications.js'
+import { userStats } from '../services/stats.js'
 
 const router = Router()
 
@@ -59,6 +60,18 @@ router.get('/:username', optionalAuth, async (req, res) => {
   } catch (err) {
     console.error('get user failed:', err)
     res.status(500).json({ error: 'Failed to load user' })
+  }
+})
+
+// GET /api/users/:username/stats — public profile stats + achievements (A10/A11)
+router.get('/:username/stats', async (req, res) => {
+  try {
+    const target = await getUserByUsername(req.params.username)
+    if (!target) return res.status(404).json({ error: 'User not found' })
+    res.json({ username: target.username, ...(await userStats(target)) })
+  } catch (err) {
+    console.error('user stats failed:', err)
+    res.status(500).json({ error: 'Failed to load stats' })
   }
 })
 

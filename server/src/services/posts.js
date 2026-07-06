@@ -88,11 +88,13 @@ export async function listPosts({
   authorIds,
   authorUsername,
   tag,
+  anyTags, // match posts carrying ANY of these tags (theme filtering, B9)
   q,
   limit = 50,
 } = {}) {
   const query = typeof q === 'string' ? q.trim().toLowerCase() : ''
   const wantTag = tag ? normalizeTags(tag)[0] : undefined
+  const wantAny = Array.isArray(anyTags) && anyTags.length ? normalizeTags(anyTags) : undefined
   // an empty authorIds list means "follows nobody" → no posts (not "all posts")
   if (authorIds && authorIds.length === 0) return []
   if (dbReady()) {
@@ -101,6 +103,7 @@ export async function listPosts({
     if (authorIds) filter.authorId = { $in: authorIds }
     if (authorUsername) filter.authorUsername = authorUsername
     if (wantTag) filter.tags = wantTag
+    if (wantAny) filter.tags = { ...(wantTag ? { $eq: wantTag } : {}), $in: wantAny }
     if (query) {
       const rx = new RegExp(escapeRegex(query), 'i')
       filter.$or = [{ title: rx }, { tags: rx }]
@@ -114,6 +117,7 @@ export async function listPosts({
     if (idSet && !idSet.has(p.authorId)) return false
     if (authorUsername && p.authorUsername !== authorUsername) return false
     if (wantTag && !(p.tags || []).includes(wantTag)) return false
+    if (wantAny && !(p.tags || []).some((t) => wantAny.includes(t))) return false
     if (query) {
       // mirror the Mongo $or: match within the title OR within a single tag,
       // never across the title/tag seam

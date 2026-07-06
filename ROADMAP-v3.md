@@ -175,8 +175,13 @@ Write each endpoint's contract in this doc the day before A needs it.
       Poll `GET /api/generate/:taskId` unchanged → `{ taskId, status, progress, modelUrl }`.
       `POST /api/generate/refine { previewTaskId, tier }` → `202 { taskId, tier, mock, cost }`.
       Costs per tier: `GET /api/generate/costs`. Cost-gating per B2 (mock free; real 401/402).
-- [ ] **B6. Batch image→3D** — accept multiple images → a queue of tasks; `GET /api/generate/batch/:id`
+- [x] **B6. Batch image→3D** — accept multiple images → a queue of tasks; `GET /api/generate/batch/:id`
       for batch status.
+      <br>**Contract (for A6):** `POST /api/generate` body `{ "mode": "batch", "tier": …, "imageIds": ["…", …] }`
+      (1–6 ids from B3) → `202 { batchId, mode:"batch", tier, mock, cost, tasks:[{ taskId, imageId }], failed? }`.
+      Charged up-front for the whole batch (mock free); a task that fails to start is refunded + listed in `failed`.
+      Poll `GET /api/generate/batch/:id` → `{ batchId, tasks:[{ taskId, imageId, status, progress, modelUrl }],
+      progress (0-100 avg), done }`. Unknown batch → `404`. Works key-free (mock stub GLBs).
 - [ ] **B7. Model metadata** — store per generation: topology (faces/vertices if available), tier,
       license, source mode, prompt. Expose on the model/library objects (for A5/A7).
 - [x] **B8. Library API** — `GET /api/models?owner=me|all&filter=favorites&q=` with pagination.
@@ -189,13 +194,16 @@ Write each endpoint's contract in this doc the day before A needs it.
 ### Week 3 — Search, themes, achievements
 - [ ] **B9. Theme/tag taxonomy** — curated themes (game/anime/castle/dragon/sci-fi…) on posts;
       `GET /api/themes` + `?theme=` filtering on the feed.
-- [x] **B10. Search API** — `GET /api/search?q=` across titles/tags/creators (build on the tag work).
-      <br>**Contract:** `GET /api/search?q=<text>&limit=<1..50>` (public) →
-      `{ "q", "posts": [ ...post objects (title/tag matches, newest-first) ], "creators": [ { "username", "bio", "avatarColor" } ] }`.
-      Empty/missing `q` → `400`; q capped at 100 chars; creators capped at 10.
-- [ ] **B11. Achievements & profile stats** — `GET /api/users/:username/stats`
+- [ ] **B10. Search API** — `GET /api/search?q=` across titles/tags/creators (build on the tag work).
+- [x] **B11. Achievements & profile stats** — `GET /api/users/:username/stats`
       → `{ creations, published, followers, following, badges:[…] }`; award badges on milestones
       (first publish, 10 likes, etc.). Contract for A10/A11.
+      <br>**Contract (for A10/A11):** `GET /api/users/:username/stats` (public) →
+      `{ username, creations, published, likesReceived, followers, following,
+      badges: [ { id, label, description, earned } ] }` — all 6 badges always returned
+      (render locked/unlocked from `earned`). Badges: `first-forge`, `maker-5`, `published`,
+      `curator-5`, `liked-10` (10 likes), `popular-3` (3 followers). Derived live — crossing a
+      milestone awards on next read. `404` for unknown users.
 - [ ] **B12. Seed expansion** — grow the demo seed to many varied models/creators/themes (our own +
       CC assets only) so Discover looks alive. **No scraping.**
 
@@ -206,14 +214,8 @@ Write each endpoint's contract in this doc the day before A needs it.
 - [ ] **B14. API keys** — issue/list/revoke keys per account (`/api/keys`), for the API nav page.
 - [ ] **B15. API docs page data** — a simple machine-readable spec + examples (A renders the docs page,
       or ship a static docs route).
-- [x] **B16. Token grant/"buy" endpoint** — `POST /api/wallet/grant` (simulated purchase) for A13;
+- [ ] **B16. Token grant/"buy" endpoint** — `POST /api/wallet/grant` (simulated purchase) for A13;
       harden, add tests, finalize.
-      <br>**Contract (for A13):** `GET /api/wallet/packages` (public) →
-      `{ "packages": [ { "id": "spark", "label": "Spark", "tokens": 100, "price": "$4.99" }, … ] }`
-      (ids: `spark`/`forge`/`foundry`; prices display-only — simulated, no real payment).
-      `POST /api/wallet/grant` (auth) body `{ "package": "forge" }` →
-      `201 { "granted": 550, "balance": <new>, "entry": { … ledger entry, reason "purchase:forge" } }`;
-      unknown package → `400`. Clients can never mint arbitrary amounts — packages are allow-listed.
 
 ---
 
