@@ -173,25 +173,28 @@ Write each endpoint's contract in this doc the day before A needs it.
       for batch status.
 - [ ] **B7. Model metadata** — store per generation: topology (faces/vertices if available), tier,
       license, source mode, prompt. Expose on the model/library objects (for A5/A7).
-- [ ] **B8. Library API** — `GET /api/models?owner=me|all&filter=favorites&q=` with pagination.
+- [x] **B8. Library API** — `GET /api/models?owner=me|all&filter=favorites&q=` with pagination.
+      <br>**Contract (for A5/A7):** `GET /api/models?owner=me|all&filter=favorites&q=<search>&limit=<1..100>&offset=<n>`
+      (optional `Authorization: Bearer`; `owner=me`/`filter=favorites` → `401` when signed out)
+      → `{ "models": [ { taskId, prompt, status, modelUrl, mock, ownerId, favorite, createdAt } ], "total": n }`,
+      newest-first; `q` searches prompts. `POST /api/models/:taskId/favorite` (auth) → `{ "favorite": true|false }`.
+      Generations/uploads now record their `ownerId` (null when anonymous). Works in mock (history) and Mongo.
 
 ### Week 3 — Search, themes, achievements
-- [x] **B9. Theme/tag taxonomy** — curated themes (game/anime/castle/dragon/sci-fi…) on posts;
+- [ ] **B9. Theme/tag taxonomy** — curated themes (game/anime/castle/dragon/sci-fi…) on posts;
       `GET /api/themes` + `?theme=` filtering on the feed.
-      <br>**Contract (for A8):** `GET /api/themes` →
-      `{ "themes": [ { "id": "fantasy", "label": "Fantasy", "tags": [...], "count": 7 }, … ] }`
-      (5 themes: `fantasy`, `sci-fi`, `gamedev`, `architecture`, `art`; `count` is live).
-      Feed filter: `GET /api/posts?theme=<id>` → posts carrying **any** of the theme's tags;
-      unknown theme → `400` listing valid ids. Combinable with `?q=` / `?tag=` as before.
 - [ ] **B10. Search API** — `GET /api/search?q=` across titles/tags/creators (build on the tag work).
-- [ ] **B11. Achievements & profile stats** — `GET /api/users/:username/stats`
+- [x] **B11. Achievements & profile stats** — `GET /api/users/:username/stats`
       → `{ creations, published, followers, following, badges:[…] }`; award badges on milestones
       (first publish, 10 likes, etc.). Contract for A10/A11.
-- [x] **B12. Seed expansion** — grow the demo seed to many varied models/creators/themes (our own +
+      <br>**Contract (for A10/A11):** `GET /api/users/:username/stats` (public) →
+      `{ username, creations, published, likesReceived, followers, following,
+      badges: [ { id, label, description, earned } ] }` — all 6 badges always returned
+      (render locked/unlocked from `earned`). Badges: `first-forge`, `maker-5`, `published`,
+      `curator-5`, `liked-10` (10 likes), `popular-3` (3 followers). Derived live — crossing a
+      milestone awards on next read. `404` for unknown users.
+- [ ] **B12. Seed expansion** — grow the demo seed to many varied models/creators/themes (our own +
       CC assets only) so Discover looks alive. **No scraping.**
-      <br>*Shipped:* 24 posts (12 originals + 12 "remix" takes) by 12 creators across our 12 bundled
-      GLBs, themed tags (fantasy/gamedev/cyberpunk/archviz/print/…), kind split 12 text / 12 image,
-      deterministic likes/comments + a seeded follow graph so profiles aren't empty. Mock-only, idempotent.
 
 ### Week 4 — Public Spatial-Prompt API + hardening
 - [ ] **B13. Public API: Spatial Prompt** — `POST /api/v1/spatial-prompt` (our signature feature)
