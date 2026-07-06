@@ -5,6 +5,7 @@ import { dbReady } from '../db.js'
 import { register } from './auth.js'
 import { createPost, listPosts } from './posts.js'
 import { toggleLike, addComment } from './social.js'
+import { toggleFollow } from './follows.js'
 
 // Demo seed: fills the community gallery so the landing page + Explore look
 // alive for a presentation. Runs only in mock mode (no Mongo) and only when the
@@ -30,7 +31,10 @@ function discoverModels() {
 
 const DEMO_PASSWORD = 'demo-password'
 
-const USERS = ['nova', 'mecha_smith', 'voxel_witch', 'orin3d', 'claywell', 'protostudio']
+const USERS = [
+  'nova', 'mecha_smith', 'voxel_witch', 'orin3d', 'claywell', 'protostudio',
+  'ember_forge', 'polypaws', 'stellarch', 'gritbyte', 'lumen_lab', 'drift_koi',
+]
 
 // One base mesh shared by the whole community is the project's own premise, so
 // these read as different makers' takes / remixes of the same model.
@@ -48,6 +52,20 @@ const POSTS = [
   { title: 'Signet Ring', model: '/models/signet_ring.glb', tags: ['jewelry', 'prop', 'stylized'], description: 'Chunky signet with a gem face. Good for 3D-print tests.', kind: 'image' },
   { title: 'Companion Bot Head', model: '/models/companion_bot.glb', tags: ['robot', 'character', 'concept'], description: 'Friendly desk-bot head — big eyes, little antenna.', kind: 'text' },
   { title: 'Temple Pyramid', model: '/models/temple_pyramid.glb', tags: ['environment', 'stylized', 'archviz'], description: 'Stepped temple block-in with a gilded capstone.', kind: 'image' },
+  // second wave: remixes/re-takes of the same base meshes by other makers, so
+  // Discover reads as a real community (our own GLBs only — no external assets)
+  { title: 'Prosthetic Hand — Game Rig', model: '/models/robotic_hand.glb', tags: ['gamedev', 'robot', 'rigging'], description: 'Re-rigged the community hand for a shooter protagonist.', kind: 'image' },
+  { title: 'Mana Shard', model: '/models/crystal_gem.glb', tags: ['fantasy', 'gem', 'gamedev'], description: 'Recolored the crystal as a mana pickup — sub-100 tris.', kind: 'text' },
+  { title: 'Infinity Pretzel', model: '/models/torus_sculpt.glb', tags: ['abstract', 'sculpt', 'print'], description: 'Print-ready knot; solid base and no overhangs.', kind: 'image' },
+  { title: 'Sentry Cannon — Desert Skin', model: '/models/mech_turret.glb', tags: ['mech', 'gamedev', 'scifi'], description: 'Turret remix for a desert map. Sand-blasted look next.', kind: 'text' },
+  { title: 'Winter Pine', model: '/models/lowpoly_tree.glb', tags: ['nature', 'lowpoly', 'environment'], description: 'Snow-dusted variant of the pine for the winter biome.', kind: 'image' },
+  { title: 'Dragonsteel Claymore', model: '/models/runed_sword.glb', tags: ['weapon', 'fantasy', 'dragon'], description: 'Re-hilted the broadsword with dragon-bone motifs.', kind: 'text' },
+  { title: 'Tin Toy Rocket', model: '/models/retro_rocket.glb', tags: ['toy', 'stylized', 'retro'], description: 'Toy-ified the rocket — enamel paint + decal pass planned.', kind: 'image' },
+  { title: 'Street Racer Visor', model: '/models/cyber_helmet.glb', tags: ['cyberpunk', 'wearable', 'gamedev'], description: 'Helmet remix with a lower profile for a racing game.', kind: 'text' },
+  { title: 'Study Nook Chair', model: '/models/reading_chair.glb', tags: ['archviz', 'furniture', 'interior'], description: 'Same chair, warmer wood — testing PBR material swaps.', kind: 'image' },
+  { title: 'Guild Master Ring', model: '/models/signet_ring.glb', tags: ['jewelry', 'fantasy', 'prop'], description: 'Engraved the signet with a guild crest for our RPG.', kind: 'text' },
+  { title: 'Scout Drone Head', model: '/models/companion_bot.glb', tags: ['robot', 'scifi', 'concept'], description: 'Bot head remixed into a recon drone — antenna became a sensor.', kind: 'image' },
+  { title: 'Sunken Ziggurat', model: '/models/temple_pyramid.glb', tags: ['environment', 'fantasy', 'gamedev'], description: 'The pyramid, half-buried — set dressing for a ruins level.', kind: 'text' },
 ]
 
 const COMMENTS = [
@@ -105,6 +123,13 @@ export async function seedDemoData() {
       const commenter = pick(users, i + 1)
       await addComment(commenter, post.id, pick(COMMENTS, i))
     }
+  }
+
+  // a deterministic follow graph so creator profiles don't look empty
+  // (toggleFollow already no-ops self-follows)
+  for (let i = 0; i < users.length; i++) {
+    await toggleFollow(users[i].id, users[(i + 1) % users.length].id)
+    await toggleFollow(users[i].id, users[(i + 3) % users.length].id)
   }
 
   console.log(
