@@ -40,6 +40,9 @@ card). The Post has no generation-type field, so A can't render it truthfully.
 
 ## B-R2 — model export/convert endpoint (download formats)
 
+**Status: ✅ done (Javid)** — `GET /api/models/convert` live (GLB/OBJ/STL, local-only src guard);
+built on `@gltf-transform/core` (Node-first — no DOM shims needed for textured GLBs).
+
 **Why:** the download button only offers GLB. The report wants OBJ / STL (game/print
 pipelines). FBX needs external tooling (Blender/Assimp) and is **out of scope** — do not
 attempt it; the endpoint just won't list it.
