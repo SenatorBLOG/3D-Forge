@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext.jsx'
 
 /** Publish the currently loaded model to the community gallery (auth required). */
-export default function PublishPanel({ modelUrl, description }) {
+export default function PublishPanel({ modelUrl, description, kind = null }) {
   const { user, token } = useAuth()
   const [title, setTitle] = useState('')
   const [tags, setTags] = useState('')
@@ -37,6 +37,7 @@ export default function PublishPanel({ modelUrl, description }) {
           modelUrl,
           description: description || '',
           tags,
+          kind, // 'text' | 'image' | null — powers the gen-type badge on cards
         }),
       })
       const data = await res.json()

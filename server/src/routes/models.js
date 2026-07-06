@@ -1,12 +1,13 @@
 import express, { Router } from 'express'
 import { mkdirSync, writeFileSync, readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
-import { join } from 'node:path'
+import { join, basename } from 'node:path'
 import { recordTask, updateTask } from '../services/history.js'
 import { optionalAuth, requireAuth } from '../middleware/auth.js'
 import { listLibrary } from '../services/library.js'
 import { toggleFavorite } from '../services/favorites.js'
 import { cloudFilesEnabled, saveCloudFile } from '../services/files.js'
+import { resolveLocalModel, localModelExists, glbToObj, glbToStl } from '../services/convert.js'
 
 const router = Router()
 
@@ -88,6 +89,22 @@ router.get('/', optionalAuth, async (req, res) => {
   if ((owner === 'me' || onlyFavorites) && !req.user) {
     return res.status(401).json({ error: 'Sign in to view your library' })
   }
+  try {
+    const { models, total } = await listLibrary({
+      userId: req.user?.id ?? null,
+      owner,
+      onlyFavorites,
+      q: typeof req.query.q === 'string' ? req.query.q : '',
+      limit: req.query.limit,
+      offset: req.query.offset,
+    })
+    res.json({ models, total })
+  } catch (err) {
+    console.error('models list failed:', err)
+    res.status(500).json({ error: 'Failed to list models' })
+  }
+})
+
 // GET /api/models/convert?src=<path>&format=<glb|obj|stl> — download a local
 // model in another format. `src` must be a bundled /models/*.glb or a stored
 // /uploads/*.glb — anything else (remote URLs, traversal) is rejected with 400,
@@ -132,25 +149,6 @@ router.get('/convert', async (req, res) => {
   } catch (err) {
     console.error('model conversion failed:', err)
     res.status(422).json({ error: 'could not convert this model (unsupported GLB features)' })
-  }
-})
-
-// GET /api/models — most recent saved generations (empty without a DB)
-router.get('/', async (req, res) => {
-  if (!dbReady()) return res.json({ models: [], db: false })
-  try {
-    const { models, total } = await listLibrary({
-      userId: req.user?.id ?? null,
-      owner,
-      onlyFavorites,
-      q: typeof req.query.q === 'string' ? req.query.q : '',
-      limit: req.query.limit,
-      offset: req.query.offset,
-    })
-    res.json({ models, total })
-  } catch (err) {
-    console.error('models list failed:', err)
-    res.status(500).json({ error: 'Failed to list models' })
   }
 })
 

@@ -51,8 +51,9 @@ export default function GeneratePanel({
     : null
 
   const submittedRef = useRef(null)
+  const kindRef = useRef(null) // 'text' | 'image' — how the current task was made
   const { task, error, generating, start } = useGenerationTask((url) =>
-    onModelReady(url, submittedRef.current),
+    onModelReady(url, submittedRef.current, kindRef.current),
   )
 
   const onGeneratingChangeRef = useRef(onGeneratingChange)
@@ -72,6 +73,7 @@ export default function GeneratePanel({
     didAutostart.current = true
     if (initialMode === 'image' && initialImageId) {
       submittedRef.current = 'image → 3D'
+      kindRef.current = 'image'
       start(
         '/api/generate',
         { mode: 'image', imageId: initialImageId, model: aiModel },
@@ -80,6 +82,7 @@ export default function GeneratePanel({
     } else if (initialPrompt.trim()) {
       const trimmed = initialPrompt.trim()
       submittedRef.current = trimmed
+      kindRef.current = 'text'
       start(
         '/api/generate',
         { prompt: trimmed, model: aiModel },
@@ -142,6 +145,7 @@ export default function GeneratePanel({
     const trimmed = prompt.trim()
     if (!trimmed) return
     submittedRef.current = trimmed
+    kindRef.current = 'text'
     start(
       '/api/generate',
       { prompt: trimmed, model: aiModel },
@@ -151,6 +155,7 @@ export default function GeneratePanel({
   const startImage = () => {
     if (!image) return
     submittedRef.current = 'image → 3D'
+    kindRef.current = 'image'
     start(
       '/api/generate',
       { mode: 'image', imageId: image.id, model: aiModel },

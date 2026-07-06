@@ -36,9 +36,13 @@ export default function PostCard({ post }) {
     }
   }, [post.modelUrl])
 
+  const kindLabel =
+    post.kind === 'image' ? 'Image → 3D' : post.kind === 'text' ? 'Text → 3D' : null
+
   return (
     <Link className="post-card" to={`/post/${post.id}`}>
       <div className="post-thumb">
+        {kindLabel && <span className={`kind-pill kind-${post.kind}`}>{kindLabel}</span>}
         {thumb ? (
           <>
             <img className="post-thumb-img shaded" src={thumb.shaded} alt={post.title} loading="lazy" />
