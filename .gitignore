@@ -27,3 +27,6 @@ Thumbs.db
 
 # claude local overrides (personal, not shared)
 .claude/settings.local.json
+
+# VS Code Local History extension — snapshots real files incl. .env (nearly leaked keys once)
+.history/

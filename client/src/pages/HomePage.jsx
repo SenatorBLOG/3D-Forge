@@ -3,7 +3,6 @@ import { Link, useNavigate } from 'react-router-dom'
 import PostCard from '../components/PostCard.jsx'
 import CardSkeleton from '../components/CardSkeleton.jsx'
 
-const THEMES = ['Dragon', 'Sci-fi helmet', 'Castle', 'Anime', 'Vehicle', 'Sword']
 const QUICK = ['a neon samurai helmet', 'a small dragon', 'a hover bike', 'a rune-etched axe']
 const HOME_LIMIT = 12
 
@@ -169,16 +168,6 @@ export default function HomePage() {
           </button>
         </div>
 
-        <div className="gen-console-themes">
-          <span className="home-themes-label">Or explore a theme</span>
-          <div className="theme-chips">
-            {THEMES.map((t) => (
-              <Link key={t} className="theme-chip" to={`/explore?q=${encodeURIComponent(t)}`}>
-                {t}
-              </Link>
-            ))}
-          </div>
-        </div>
       </section>
 
       <section className="home-community">
@@ -207,8 +196,9 @@ export default function HomePage() {
         )}
       </section>
 
-      {/* onboarding lives at the BOTTOM — the generator stays the first thing you see */}
-      <section className="home-how">
+      {/* compact footer: honest stats + a collapsed how-it-works (the design
+          should explain itself — this stays out of the way) */}
+      <footer className="home-foot">
         {stats && stats.models > 0 && (
           <div className="home-stats">
             <span>
@@ -222,24 +212,15 @@ export default function HomePage() {
             </span>
           </div>
         )}
-        <h2 className="home-how-title">How it works</h2>
-        <div className="home-steps">
-          {[
-            ['1', 'Describe or drop an image', 'Type a prompt or paste a reference photo.'],
-            ['2', 'Generate in seconds', 'A textured 3D model lands in the Forge.'],
-            ['3', 'Reshape any part', 'Click a region and describe a local change — Spatial edit.'],
-          ].map(([n, title, body]) => (
-            <div className="home-step" key={n}>
-              <span className="home-step-n">{n}</span>
-              <h3>{title}</h3>
-              <p>{body}</p>
-            </div>
-          ))}
-        </div>
-        <Link className="submit home-how-cta" to="/forge">
-          Start forging →
-        </Link>
-      </section>
+        <details className="home-how-details">
+          <summary>How it works</summary>
+          <ol className="home-how-list">
+            <li>Describe it or drop an image.</li>
+            <li>Generate — the model lands in the Forge.</li>
+            <li>Click any part and describe a local change (Spatial edit).</li>
+          </ol>
+        </details>
+      </footer>
     </div>
   )
 }

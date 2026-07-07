@@ -4216,3 +4216,292 @@ button.tag:hover {
   font-size: 11.5px;
   text-decoration: none;
 }
+
+/* ============================================================
+   Final-day batch: compact home footer, A7 library, A11 badges,
+   A13 real packs, B10 search creators.
+   ============================================================ */
+
+/* compact home footer (replaces the big how-it-works section) */
+.home-foot {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  padding: 8px 24px 48px;
+}
+
+.home-how-details {
+  max-width: 520px;
+  width: 100%;
+  text-align: center;
+}
+
+.home-how-details summary {
+  cursor: pointer;
+  list-style: none;
+  display: inline-block;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 7px 16px;
+  transition: color 0.15s, border-color 0.15s;
+}
+
+.home-how-details summary::-webkit-details-marker {
+  display: none;
+}
+
+.home-how-details summary:hover,
+.home-how-details[open] summary {
+  color: var(--forge);
+  border-color: var(--forge);
+}
+
+.home-how-list {
+  margin: 14px auto 0;
+  padding-left: 0;
+  list-style-position: inside;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--text-dim);
+}
+
+.home-how-list li::marker {
+  color: var(--forge);
+  font-family: var(--font-mono);
+}
+
+/* A7 — Forge library grid */
+.library-panel .lib-tabs {
+  display: flex;
+  gap: 4px;
+}
+
+.lib-tab {
+  flex: 1;
+  padding: 7px 0;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--panel-2);
+  color: var(--text-dim);
+  font-family: var(--font-display);
+  font-size: 12px;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s, background 0.15s;
+}
+
+.lib-tab.active {
+  color: var(--forge);
+  border-color: var(--forge);
+  background: rgba(34, 211, 238, 0.08);
+}
+
+.lib-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.lib-card {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--line-soft);
+  border-radius: 9px;
+  overflow: hidden;
+  background: var(--panel-2);
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.lib-card:hover {
+  border-color: var(--forge);
+  box-shadow: 0 0 14px rgba(34, 211, 238, 0.12);
+}
+
+.lib-thumb {
+  display: block;
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  padding: 0;
+  border: none;
+  background: radial-gradient(circle at 50% 40%, rgba(34, 211, 238, 0.1), transparent 70%), var(--bg);
+  cursor: pointer;
+}
+
+.lib-thumb:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+.lib-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+}
+
+.lib-thumb-ph {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.lib-card-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  padding: 6px 8px;
+}
+
+.lib-prompt {
+  font-size: 11px;
+  color: var(--text-dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lib-star {
+  flex: none;
+  border: none;
+  background: none;
+  color: var(--text-faint);
+  font-size: 14px;
+  cursor: pointer;
+  padding: 0 2px;
+  transition: color 0.15s, text-shadow 0.15s;
+}
+
+.lib-star:hover {
+  color: var(--star);
+}
+
+.lib-star.on {
+  color: var(--star);
+  text-shadow: 0 0 10px rgba(255, 210, 61, 0.6);
+}
+
+.lib-more {
+  width: 100%;
+}
+
+/* A11 — profile badges */
+.badge-stats {
+  display: inline-flex;
+  gap: 22px;
+  margin: 20px 0 4px;
+  padding: 10px 20px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--panel);
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  color: var(--text-dim);
+}
+
+.badge-stats strong {
+  color: var(--forge);
+  margin-right: 4px;
+}
+
+.badge-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+  gap: 14px;
+  margin-top: 18px;
+}
+
+.badge-tile {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 18px 16px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: var(--panel);
+}
+
+.badge-tile.earned {
+  border-color: rgba(255, 210, 61, 0.45);
+  box-shadow: 0 0 0 1px rgba(255, 210, 61, 0.12), 0 0 22px rgba(255, 210, 61, 0.08);
+}
+
+.badge-tile.locked {
+  opacity: 0.55;
+}
+
+.badge-medal {
+  font-size: 22px;
+}
+
+.badge-tile strong {
+  font-family: var(--font-display);
+  font-size: 14px;
+}
+
+.badge-tile p {
+  font-size: 12px;
+  color: var(--text-dim);
+  line-height: 1.45;
+}
+
+/* A13 — token pack extras */
+.token-pack-label {
+  font-family: var(--font-display);
+  font-size: 13px;
+  color: var(--text);
+}
+
+.token-pack-buy {
+  padding: 8px 14px;
+  font-size: 11.5px;
+}
+
+.plan-current {
+  display: inline-block;
+  width: 100%;
+  text-align: center;
+  margin: 4px 0 6px;
+  padding: 10px;
+  border-radius: 7px;
+  border: 1px dashed var(--line);
+  color: var(--good);
+  font-family: var(--font-display);
+  font-size: 13px;
+}
+
+/* B10 — creators matching a search on Explore */
+.search-creators {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 14px 0 4px;
+}
+
+.search-creator {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 12px 6px 7px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--panel);
+  color: var(--steel);
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  text-decoration: none;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.search-creator:hover {
+  border-color: var(--steel);
+  box-shadow: 0 0 12px var(--steel-glow);
+}

@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
+import { Link } from 'react-router-dom'
 import PostCard from '../components/PostCard.jsx'
+import Avatar from '../components/Avatar.jsx'
 import EmptyState from '../components/EmptyState.jsx'
 import CardSkeleton from '../components/CardSkeleton.jsx'
 import { useAuth } from '../auth/AuthContext.jsx'
@@ -18,6 +20,7 @@ export default function ExplorePage() {
 
   const [posts, setPosts] = useState(null)
   const [tags, setTags] = useState([])
+  const [creators, setCreators] = useState([]) // B10: creators matching q
   const [error, setError] = useState(null)
   const [draft, setDraft] = useState(q) // controlled search box
 
@@ -59,6 +62,22 @@ export default function ExplorePage() {
       cancelled = true
     }
   }, [tag, q, feed, token])
+
+  // B10 unified search: when a text query is active, also surface matching creators
+  useEffect(() => {
+    if (!q) {
+      setCreators([])
+      return undefined
+    }
+    let cancelled = false
+    fetch(`/api/search?q=${encodeURIComponent(q)}`)
+      .then((r) => (r.ok ? r.json() : { creators: [] }))
+      .then((d) => !cancelled && setCreators(d.creators || []))
+      .catch(() => {})
+    return () => {
+      cancelled = true
+    }
+  }, [q])
 
   // popular tags for the filter row (once)
   useEffect(() => {
@@ -158,6 +177,17 @@ export default function ExplorePage() {
           <button className="link-button" onClick={() => update({ tag: '', q: '' })}>
             Clear
           </button>
+        </div>
+      )}
+
+      {q && creators.length > 0 && (
+        <div className="search-creators">
+          <span className="home-themes-label">Creators</span>
+          {creators.map((c) => (
+            <Link key={c.username} className="search-creator" to={`/u/${c.username}`}>
+              <Avatar username={c.username} size={22} color={c.avatarColor} />@{c.username}
+            </Link>
+          ))}
         </div>
       )}
 

@@ -81,7 +81,9 @@ const COMMENTS = [
 const pick = (arr, n) => arr[n % arr.length]
 
 export async function seedDemoData() {
-  if (dbReady()) return // never seed a real database
+  // A real database is never touched implicitly. SEED_DEMO=force opts the
+  // shared class-demo Atlas DB in (still only when the gallery is empty).
+  if (dbReady() && process.env.SEED_DEMO !== 'force') return
   if (process.env.SEED_DEMO === 'false') return
   if ((await listPosts({ limit: 1 })).length > 0) return // already populated
 

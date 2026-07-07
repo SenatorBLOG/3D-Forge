@@ -8,6 +8,8 @@ import { listLibrary } from '../services/library.js'
 import { toggleFavorite } from '../services/favorites.js'
 import { cloudFilesEnabled, saveCloudFile } from '../services/files.js'
 import { resolveLocalModel, localModelExists, glbToObj, glbToStl } from '../services/convert.js'
+import { dbReady } from '../db.js'
+import GeneratedModel from '../models/GeneratedModel.js'
 
 const router = Router()
 
@@ -47,6 +49,22 @@ router.post('/upload', optionalAuth, express.raw({ type: '*/*', limit: '60mb' })
   // mirror a finished generation so it shows as a History card with Load/Download
   recordTask({ kind: 'generate', taskId, prompt: label, mock: true, ownerId: req.user?.id ?? null })
   updateTask(taskId, 'SUCCEEDED', url)
+  // with Mongo the library reads GeneratedModel — record the upload there too,
+  // otherwise uploads never appear in the library (only in-memory history)
+  if (dbReady()) {
+    try {
+      await GeneratedModel.create({
+        prompt: label,
+        meshyTaskId: taskId,
+        status: 'SUCCEEDED',
+        modelUrl: url,
+        mock: true,
+        ownerId: req.user?.id ?? null,
+      })
+    } catch (err) {
+      console.error('upload library record failed:', err)
+    }
+  }
   res.status(201).json({ url, taskId })
 })
 

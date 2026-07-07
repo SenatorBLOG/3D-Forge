@@ -252,18 +252,18 @@ export default function GeneratePanel({
           className={`chip ${aiModel === 'meshy-5' ? 'chip--on' : ''}`}
           onClick={() => setAiModel('meshy-5')}
           disabled={busy}
-          title="Meshy-5 — cheaper, good for tests"
+          title="Meshy-5 — faster, lower token cost"
         >
-          M5 · cheap{costs ? ` · ${costs.tiers?.['meshy-5']}` : ''}
+          M5 · Fast{costs ? ` · ${costs.tiers?.['meshy-5']}` : ''}
         </button>
         <button
           type="button"
           className={`chip ${aiModel === 'meshy-6' ? 'chip--on' : ''}`}
           onClick={() => setAiModel('meshy-6')}
           disabled={busy}
-          title="Meshy-6 — prettier, for the demo"
+          title="Meshy-6 — highest quality"
         >
-          M6 · pretty{costs ? ` · ${costs.tiers?.['meshy-6']}` : ''}
+          M6 · Quality{costs ? ` · ${costs.tiers?.['meshy-6']}` : ''}
         </button>
       </div>
       <label className="toggle">

@@ -40,6 +40,7 @@ export default function ProfilePage() {
   const { user, token } = useAuth()
   const [posts, setPosts] = useState(null)
   const [profile, setProfile] = useState(null)
+  const [stats, setStats] = useState(null) // B11: { creations, published, …, badges }
   const [error, setError] = useState(null)
   const [busy, setBusy] = useState(false)
   const [tab, setTab] = useState('models')
@@ -73,6 +74,12 @@ export default function ProfilePage() {
       .catch((e) => {
         if (!cancelled) setError(e.message)
       })
+    // B11: public stats + achievements (independent fetch — non-fatal)
+    setStats(null)
+    fetch(`/api/users/${encodeURIComponent(username)}/stats`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => !cancelled && d && setStats(d))
+      .catch(() => {})
     return () => {
       cancelled = true
     }
@@ -220,9 +227,33 @@ export default function ProfilePage() {
       {tab === 'favorites' && (
         <EmptyState icon="star" title="Favorites are coming soon" hint="Models you like will collect here." />
       )}
-      {tab === 'badges' && (
-        <EmptyState icon="badge" title="Achievements are coming soon" hint="Earn badges as you create and share." />
-      )}
+      {tab === 'badges' &&
+        (stats ? (
+          <>
+            <div className="badge-stats">
+              <span>
+                <strong>{stats.creations}</strong> creations
+              </span>
+              <span>
+                <strong>{stats.published}</strong> published
+              </span>
+              <span>
+                <strong>{stats.likesReceived}</strong> likes received
+              </span>
+            </div>
+            <div className="badge-grid">
+              {stats.badges.map((b) => (
+                <div key={b.id} className={`badge-tile ${b.earned ? 'earned' : 'locked'}`}>
+                  <span className="badge-medal">{b.earned ? '🏅' : '🔒'}</span>
+                  <strong>{b.label}</strong>
+                  <p>{b.description}</p>
+                </div>
+              ))}
+            </div>
+          </>
+        ) : (
+          <p className="hint">Loading…</p>
+        ))}
 
       {editOpen && (
         <div className="modal-backdrop" onClick={() => setEditOpen(false)}>

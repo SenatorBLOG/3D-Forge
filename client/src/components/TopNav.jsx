@@ -31,9 +31,6 @@ export default function TopNav() {
       </Link>
 
       <nav className="topnav-links">
-        <NavLink to="/" end>
-          Create
-        </NavLink>
         <NavLink to="/forge">Forge</NavLink>
         <NavLink to="/discover">Discover</NavLink>
         <NavLink to="/explore">Explore</NavLink>
