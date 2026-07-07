@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import ModelViewer from '../components/ModelViewer.jsx'
 import GeneratePanel from '../components/GeneratePanel.jsx'
-import HistoryPanel from '../components/HistoryPanel.jsx'
+import LibraryPanel from '../components/LibraryPanel.jsx'
 import CompareView from '../components/CompareView.jsx'
 import PublishPanel from '../components/PublishPanel.jsx'
 import MicButton from '../components/MicButton.jsx'
@@ -485,12 +485,12 @@ export default function ForgePage() {
         {modelUrl && (
           <PublishPanel modelUrl={modelUrl} description={baseModelPrompt} kind={modelKind} />
         )}
-        <HistoryPanel
+        <LibraryPanel
           refreshKey={historyKey}
           busy={busy}
           onLoad={(entry) => {
             setBaseModelPrompt(entry.prompt ?? null)
-            // history entries label image runs as "image → 3D" — recover the kind
+            // library entries label image runs as "image → 3D" — recover the kind
             setModelKind(entry.prompt === 'image → 3D' ? 'image' : entry.prompt ? 'text' : null)
             setLastEditPrompt(null)
             swapModel(entry.modelUrl)

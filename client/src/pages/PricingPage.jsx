@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
+import { useAuth } from '../auth/AuthContext.jsx'
 
 // Plans + token packs are SIMULATED — this is a course project with no real
 // payment. The numbers mirror a Meshy-style structure so the page reads real.
@@ -41,12 +42,6 @@ const PLANS = [
   },
 ]
 
-const PACKS = [
-  { n: 100, price: '$2' },
-  { n: 500, price: '$8' },
-  { n: 1200, price: '$15' },
-]
-
 const FAQ = [
   {
     q: 'What is a 3D-token?',
@@ -73,11 +68,18 @@ const Coin = ({ size = 15 }) => (
   </svg>
 )
 
-/** Plans & token packs. Everything is simulated (no real payment). */
+/** Plans & token packs. Plans are simulated; token packs REALLY grant tokens
+ *  to your wallet via Javid's B16 endpoint (still no real payment). */
 export default function PricingPage() {
+  const { user, token } = useAuth()
+  const navigate = useNavigate()
   const [yearly, setYearly] = useState(true)
   const [costs, setCosts] = useState(null)
+  const [packs, setPacks] = useState([]) // from GET /api/wallet/packages
   const [chosen, setChosen] = useState(null)
+  const [buying, setBuying] = useState(null) // package id in flight
+  const [bought, setBought] = useState(null) // { label, tokens, balance }
+  const [buyError, setBuyError] = useState(null)
 
   useEffect(() => {
     let cancelled = false
@@ -85,10 +87,38 @@ export default function PricingPage() {
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => !cancelled && d && setCosts(d))
       .catch(() => {})
+    fetch('/api/wallet/packages')
+      .then((r) => (r.ok ? r.json() : { packages: [] }))
+      .then((d) => !cancelled && setPacks(d.packages || []))
+      .catch(() => {})
     return () => {
       cancelled = true
     }
   }, [])
+
+  const buyPack = async (pk) => {
+    if (!user) {
+      navigate('/login')
+      return
+    }
+    setBuying(pk.id)
+    setBuyError(null)
+    setBought(null)
+    try {
+      const res = await fetch('/api/wallet/grant', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ package: pk.id }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`)
+      setBought({ label: pk.label, tokens: pk.tokens, balance: data.balance })
+    } catch (e) {
+      setBuyError(e.message)
+    } finally {
+      setBuying(null)
+    }
+  }
 
   return (
     <div className="pricing">
@@ -131,13 +161,16 @@ export default function PricingPage() {
               <div className="plan-tokens">
                 <Coin size={16} /> {p.tokens.toLocaleString()} tokens / mo
               </div>
-              <button
-                className={p.featured ? 'submit plan-cta' : 'ghost-button plan-cta'}
-                onClick={() => (price === 0 ? null : setChosen(p.name))}
-                disabled={price === 0}
-              >
-                {p.cta}
-              </button>
+              {price === 0 ? (
+                <span className="plan-current">✓ Your plan</span>
+              ) : (
+                <button
+                  className={p.featured ? 'submit plan-cta' : 'ghost-button plan-cta'}
+                  onClick={() => setChosen(p.name)}
+                >
+                  {p.cta}
+                </button>
+              )}
               <ul className="plan-features">
                 {p.features.map((f) => (
                   <li key={f}>{f}</li>
@@ -151,18 +184,33 @@ export default function PricingPage() {
       <section className="pricing-packs">
         <h2 className="discover-section-title">Or top up tokens (one-off)</h2>
         <p className="hint">
-          No subscription — token packs never expire.
+          Packs land in your wallet instantly (simulated checkout — nothing is charged).
           {costs && ` A Meshy-6 model costs ${costs.tiers?.['meshy-6']} tokens.`}
         </p>
+        {bought && (
+          <div className="pricing-banner">
+            ✓ {bought.label} pack added — <strong>+{bought.tokens}</strong> tokens, balance{' '}
+            <strong>{bought.balance}</strong>.
+            <button className="link-button" onClick={() => setBought(null)}>
+              dismiss
+            </button>
+          </div>
+        )}
+        {buyError && <span className="url-error">{buyError}</span>}
         <div className="token-packs">
-          {PACKS.map((pk) => (
-            <div className="token-pack" key={pk.n}>
+          {packs.map((pk) => (
+            <div className="token-pack" key={pk.id}>
+              <div className="token-pack-label">{pk.label}</div>
               <div className="token-pack-n">
-                <Coin size={18} /> {pk.n}
+                <Coin size={18} /> {pk.tokens.toLocaleString()}
               </div>
               <div className="token-pack-price">{pk.price}</div>
-              <button className="ghost-button" onClick={() => setChosen(`${pk.n}-token pack`)}>
-                Buy
+              <button
+                className="submit token-pack-buy"
+                onClick={() => buyPack(pk)}
+                disabled={buying === pk.id}
+              >
+                {buying === pk.id ? 'Adding…' : user ? 'Buy' : 'Log in to buy'}
               </button>
             </div>
           ))}
