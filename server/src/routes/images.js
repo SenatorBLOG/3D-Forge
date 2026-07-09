@@ -2,7 +2,7 @@ import express, { Router } from 'express'
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { optionalAuth } from '../middleware/auth.js'
-import { createImage, getImage, readImageBytes, IMAGE_DIR } from '../services/images.js'
+import { createImage, getImage, listVersions, readImageBytes, IMAGE_DIR } from '../services/images.js'
 import { detectImage } from '../services/imageType.js'
 import { isImageGenMock, generateImage, editImage } from '../services/imageGen.js'
 import { cloudFilesEnabled, saveCloudFile } from '../services/files.js'
@@ -206,6 +206,20 @@ router.post('/:id/edit', optionalAuth, async (req, res) => {
     if (err.code === 'ENOENT') return res.status(404).json({ error: 'image file not found' })
     console.error('image edit failed:', err)
     res.status(502).json({ error: 'Image edit service failed' })
+  }
+})
+
+// GET /api/images/:id/versions — the whole edit family (root + all branches),
+// oldest-first with 1-based `version` numbers. Feeds the Image Lab version cards
+// so the client renders the loop with a single request.
+router.get('/:id/versions', async (req, res) => {
+  try {
+    const result = await listVersions(req.params.id)
+    if (!result) return res.status(404).json({ error: 'Unknown image id' })
+    res.json(result)
+  } catch (err) {
+    console.error('list versions failed:', err)
+    res.status(500).json({ error: 'failed to load image versions' })
   }
 })
 

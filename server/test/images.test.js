@@ -6,6 +6,7 @@ import {
   createImage,
   getImage,
   listImages,
+  listVersions,
   imageDataUri,
   IMAGE_DIR,
 } from '../src/services/images.js'
@@ -73,6 +74,31 @@ test('imageDataUri inlines a stored image as a base64 data URI', async () => {
 
 test('imageDataUri returns null for an unknown id', async () => {
   assert.equal(await imageDataUri('does-not-exist'), null)
+})
+
+test('listVersions returns the whole family from any member, oldest-first', async () => {
+  // v1 → v2 → v3, plus v4 branched off v1 (like clicking an older card and editing)
+  await createImage({ id: 'ver-1', url: '/images/ver-1.png', source: 'generated', prompt: 'a car' })
+  await createImage({ id: 'ver-2', url: '/images/ver-2.png', source: 'edited', prompt: 'make it red', parentId: 'ver-1' })
+  await createImage({ id: 'ver-3', url: '/images/ver-3.png', source: 'edited', prompt: 'add a spoiler', parentId: 'ver-2' })
+  await createImage({ id: 'ver-4', url: '/images/ver-4.png', source: 'edited', prompt: 'make it blue', parentId: 'ver-1' })
+
+  // asking from a leaf still yields the full family, rooted at v1
+  const { rootId, versions } = await listVersions('ver-3')
+  assert.equal(rootId, 'ver-1')
+  assert.equal(versions.length, 4)
+  assert.deepEqual(new Set(versions.map((v) => v.id)), new Set(['ver-1', 'ver-2', 'ver-3', 'ver-4']))
+  assert.equal(versions[0].id, 'ver-1') // root is oldest
+  assert.equal(versions[0].version, 1) // 1-based numbering
+  assert.equal(versions[versions.length - 1].version, 4)
+
+  // asking from the root gives the same family
+  const fromRoot = await listVersions('ver-1')
+  assert.equal(fromRoot.versions.length, 4)
+})
+
+test('listVersions returns null for an unknown id', async () => {
+  assert.equal(await listVersions('no-such-image'), null)
 })
 
 test('edited images keep their parentId (version chain)', async () => {
