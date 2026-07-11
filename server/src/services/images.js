@@ -90,6 +90,53 @@ export async function getImage(id) {
   return rec ? publicImage(rec) : null
 }
 
+/** Images directly derived from `parentId` (its immediate children). */
+async function getChildren(parentId) {
+  if (dbReady()) {
+    const docs = await Image.find({ parentId }).lean()
+    return docs.map(publicImage)
+  }
+  return [...memImages.values()].filter((r) => r.parentId === parentId).map(publicImage)
+}
+
+/**
+ * The whole version family an image belongs to: walk up `parentId` to the root,
+ * then collect every descendant (edits branch, so this is a tree, not a line).
+ * Returns { rootId, versions: [...] } oldest-first, each tagged with a 1-based
+ * `version` number — exactly what the Image Lab version cards render. Null if
+ * the id is unknown.
+ */
+export async function listVersions(id) {
+  const start = await getImage(id)
+  if (!start) return null
+
+  // climb to the root (a chain is short and acyclic — parents precede children)
+  let root = start
+  const seen = new Set([start.id])
+  while (root.parentId) {
+    const parent = await getImage(root.parentId)
+    if (!parent || seen.has(parent.id)) break
+    seen.add(parent.id)
+    root = parent
+  }
+
+  // gather the family breadth-first from the root
+  const family = []
+  const queue = [root]
+  const visited = new Set()
+  while (queue.length) {
+    const node = queue.shift()
+    if (visited.has(node.id)) continue
+    visited.add(node.id)
+    family.push(node)
+    for (const child of await getChildren(node.id)) queue.push(child)
+  }
+
+  family.sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt))
+  const versions = family.map((img, i) => ({ ...img, version: i + 1 }))
+  return { rootId: root.id, versions }
+}
+
 /**
  * Read a stored image's bytes wherever they live: GridFS for `/files/...`
  * URLs (cloud mode), local disk otherwise. Returns { bytes, mime } or null.
