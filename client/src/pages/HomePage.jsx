@@ -2,9 +2,46 @@ import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import PostCard from '../components/PostCard.jsx'
 import CardSkeleton from '../components/CardSkeleton.jsx'
+import { getThumbnail } from '../lib/thumbnailer.js'
 
 const QUICK = ['a neon samurai helmet', 'a small dragon', 'a hover bike', 'a rune-etched axe']
 const HOME_LIMIT = 12
+
+// the prompt box "suggests ideas" by cycling its placeholder (Meshy-style)
+const PLACEHOLDERS = [
+  'a neon samurai helmet, battle-worn',
+  'a cozy reading chair, walnut wood',
+  'a low-poly dragon hatchling',
+  'a sci-fi delivery drone',
+  'an ancient rune-etched axe',
+  'a chibi robot barista',
+]
+
+/** One pill in the auto-drifting community marquee. */
+function MarqueeCard({ post, hidden }) {
+  const [thumb, setThumb] = useState(null)
+  useEffect(() => {
+    let cancelled = false
+    getThumbnail(post.modelUrl)
+      .then((u) => !cancelled && setThumb(u.shaded))
+      .catch(() => {})
+    return () => {
+      cancelled = true
+    }
+  }, [post.modelUrl])
+
+  return (
+    <Link
+      className="marquee-card"
+      to={`/post/${post.id}`}
+      tabIndex={hidden ? -1 : 0}
+      aria-hidden={hidden || undefined}
+    >
+      {thumb ? <img src={thumb} alt="" loading="lazy" /> : <span className="marquee-ph" />}
+      <span className="marquee-name">{post.title}</span>
+    </Link>
+  )
+}
 
 /** Landing = the generator console. Type a prompt or drop an image and it hands
  *  off to the Forge (which auto-starts the generation). A wall of community
@@ -20,7 +57,14 @@ export default function HomePage() {
   const [uploading, setUploading] = useState(false)
   const [imgError, setImgError] = useState(null)
   const [posts, setPosts] = useState(null)
+  const [phIdx, setPhIdx] = useState(0)
   const fileRef = useRef(null)
+
+  // rotate the prompt suggestion every few seconds
+  useEffect(() => {
+    const t = setInterval(() => setPhIdx((i) => (i + 1) % PLACEHOLDERS.length), 3500)
+    return () => clearInterval(t)
+  }, [])
 
   useEffect(() => {
     let cancelled = false
@@ -140,7 +184,7 @@ export default function HomePage() {
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) generate()
                 }}
-                placeholder="Describe anything to forge in 3D — e.g. “a neon samurai helmet, battle-worn”"
+                placeholder={`Describe anything to forge in 3D — e.g. “${PLACEHOLDERS[phIdx]}”`}
                 autoFocus
               />
               <div className="gen-console-quick">
@@ -216,6 +260,20 @@ export default function HomePage() {
         </div>
 
       </section>
+
+      {/* auto-drifting community marquee (pauses on hover, click opens the post) */}
+      {posts && posts.length >= 4 && (
+        <div className="home-marquee">
+          <div className="home-marquee-track">
+            {posts.slice(0, 10).map((p) => (
+              <MarqueeCard key={p.id} post={p} />
+            ))}
+            {posts.slice(0, 10).map((p) => (
+              <MarqueeCard key={`dup-${p.id}`} post={p} hidden />
+            ))}
+          </div>
+        </div>
+      )}
 
       <section className="home-community">
         <div className="home-community-head">
