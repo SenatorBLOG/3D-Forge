@@ -533,6 +533,8 @@ export default function GeneratePanel({
       )}
       </>
       )}
+      </>
+      )}
       {error && <span className="url-error">{error}</span>}
     </section>
   )

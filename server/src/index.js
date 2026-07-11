@@ -6,6 +6,7 @@ import { setActive } from './services/persistence.js'
 import modelsRouter, { UPLOAD_DIR } from './routes/models.js'
 import generateRouter from './routes/generate.js'
 import editRouter from './routes/edit.js'
+import regionEditRouter from './routes/regionEdit.js'
 import historyRouter from './routes/history.js'
 import datasetRouter from './routes/dataset.js'
 import authRouter from './routes/auth.js'
@@ -36,6 +37,7 @@ app.get('/api/health', (req, res) => {
 app.use('/api/models', modelsRouter)
 app.use('/api/generate', generateRouter)
 app.use('/api/edit', editRouter)
+app.use('/api/edit', regionEditRouter) // region segmentation / hit-test / part-swap (B-H)
 app.use('/api/history', historyRouter)
 app.use('/api/dataset', datasetRouter)
 app.use('/api/auth', authRouter)
