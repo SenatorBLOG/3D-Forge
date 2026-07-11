@@ -33,6 +33,13 @@ export default function GeneratePanel({
   const [imgError, setImgError] = useState(null)
   const [costs, setCosts] = useState(null) // { tiers: {meshy-5,meshy-6}, refine }
   const fileRef = useRef(null)
+  // "Imagine" mode: a reference photo generated from the prompt (text→image),
+  // which the user can then hand to the image→3D flow. Version cards + edit loop
+  // land in the next step; this step is just prompt → photo → use it for 3D.
+  const [genImage, setGenImage] = useState(null) // { id, url, prompt, ... }
+  const [genImgLoading, setGenImgLoading] = useState(false)
+  const [genImgError, setGenImgError] = useState(null)
+  const [genImgStub, setGenImgStub] = useState(false)
 
   // token price list, so the button can show "· N tokens" before generating
   useEffect(() => {
@@ -163,6 +170,40 @@ export default function GeneratePanel({
     )
   }
 
+  // Imagine: text → reference photo (real Gemini when GEMINI_API_KEY is set,
+  // SVG placeholder otherwise — same response shape either way).
+  const generatePhoto = async () => {
+    const trimmed = prompt.trim()
+    if (!trimmed) return
+    setGenImgLoading(true)
+    setGenImgError(null)
+    try {
+      const res = await fetch('/api/images/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt: trimmed }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`)
+      setGenImage(data.image)
+      setGenImgStub(!!data.stub)
+    } catch (e) {
+      setGenImgError(e.message)
+    } finally {
+      setGenImgLoading(false)
+    }
+  }
+
+  // hand a generated photo to the image→3D flow: pick an engine, then Generate.
+  const useImageForModel = () => {
+    if (!genImage) return
+    setImage(genImage)
+    setPreview(null) // no object URL — the image mode falls back to genImage.url
+    setImgError(null)
+    setMode('image')
+  }
+
+  const previewSrc = preview || image?.url
   const canGenerate = mode === 'text' ? !!prompt.trim() : !!image
 
   return (
@@ -186,9 +227,18 @@ export default function GeneratePanel({
         >
           From image
         </button>
+        <button
+          type="button"
+          className={`gen-mode-tab ${mode === 'imagine' ? 'active' : ''}`}
+          onClick={() => setMode('imagine')}
+          disabled={generating}
+          title="Generate a reference photo from a prompt, then turn it into 3D"
+        >
+          Imagine
+        </button>
       </div>
 
-      {mode === 'text' ? (
+      {mode === 'text' && (
         <>
           <div className="field">
             <label htmlFor="gen-prompt">Describe a model</label>
@@ -214,19 +264,64 @@ export default function GeneratePanel({
             </div>
           )}
         </>
-      ) : (
+      )}
+
+      {mode === 'imagine' && (
+        <>
+          <div className="field">
+            <label htmlFor="gen-imagine">Describe the image</label>
+            <div className="input-with-mic">
+              <textarea
+                id="gen-imagine"
+                rows={3}
+                value={prompt}
+                onChange={(e) => setPrompt(e.target.value)}
+                placeholder='e.g. "a red sports car, studio lighting"'
+                disabled={genImgLoading || disabled}
+              />
+              <MicButton onTranscript={appendSpeech} disabled={genImgLoading || disabled} />
+            </div>
+          </div>
+          <button
+            className="submit gen-go"
+            onClick={generatePhoto}
+            disabled={genImgLoading || disabled || !prompt.trim()}
+          >
+            {genImgLoading ? 'Generating image…' : genImage ? 'Regenerate image' : 'Generate image'}
+          </button>
+          {genImgError && <span className="url-error">{genImgError}</span>}
+          {genImage && (
+            <div className="field">
+              <label>Generated image</label>
+              <div className="image-drop has-image">
+                <img className="image-drop-preview" src={genImage.url} alt={genImage.prompt || 'generated reference'} />
+              </div>
+              {genImgStub && (
+                <span className="hint">
+                  preview placeholder — set GEMINI_API_KEY on the server for real images
+                </span>
+              )}
+              <button className="submit" onClick={useImageForModel} disabled={disabled}>
+                Use this image → 3D
+              </button>
+            </div>
+          )}
+        </>
+      )}
+
+      {mode === 'image' && (
         <div className="field">
           <label>Reference image</label>
           <div
-            className={`image-drop ${preview ? 'has-image' : ''}`}
+            className={`image-drop ${previewSrc ? 'has-image' : ''}`}
             onClick={() => !busy && fileRef.current?.click()}
             onDrop={onDrop}
             onDragOver={(e) => e.preventDefault()}
             role="button"
             tabIndex={0}
           >
-            {preview ? (
-              <img className="image-drop-preview" src={preview} alt="reference" />
+            {previewSrc ? (
+              <img className="image-drop-preview" src={previewSrc} alt="reference" />
             ) : (
               <div className="image-drop-empty">
                 <strong>Click, drop, or paste an image</strong>
@@ -236,7 +331,7 @@ export default function GeneratePanel({
             {uploading && <div className="image-drop-busy">Uploading…</div>}
           </div>
           <input ref={fileRef} type="file" accept="image/*" hidden onChange={onFile} />
-          {preview && !busy && (
+          {previewSrc && !busy && (
             <button className="link-button" onClick={() => fileRef.current?.click()}>
               Change image
             </button>
@@ -245,6 +340,8 @@ export default function GeneratePanel({
         </div>
       )}
 
+      {mode !== 'imagine' && (
+      <>
       <div className="model-select">
         <span className="model-label">Model</span>
         <button
@@ -299,6 +396,8 @@ export default function GeneratePanel({
       )}
       {generating && task.mock && (
         <span className="hint">mock mode — set MESHY_API_KEY on the server for real generation</span>
+      )}
+      </>
       )}
       {error && <span className="url-error">{error}</span>}
     </section>
