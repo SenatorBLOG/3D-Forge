@@ -11,8 +11,8 @@
   --line-soft: #141a28;
 
   --text: #eceff6;
-  --text-dim: #8891a6;
-  --text-faint: #5a6276;
+  --text-dim: #98a2b8;
+  --text-faint: #6f7890;
 
   --forge: #22d3ee; /* electric cyan — brand + primary action */
   --forge-2: #67e8f9;
@@ -40,6 +40,13 @@
   box-sizing: border-box;
   margin: 0;
   padding: 0;
+}
+
+/* anchors inherit the theme text ramp — never the browser's default
+   link-blue/visited-purple, which is unreadable on the near-black surfaces
+   (this was exactly the "dark blue text on dark blue cards" bug) */
+a {
+  color: inherit;
 }
 
 html,
@@ -124,12 +131,19 @@ body::before {
 /* ---- top navigation ---- */
 
 .topnav {
+  position: sticky;
+  top: 0;
+  z-index: 100;
   display: flex;
   align-items: center;
   gap: 22px;
   padding: 12px 22px;
   border-bottom: 1px solid var(--line);
-  background: linear-gradient(180deg, rgba(34, 211, 238, 0.05), transparent);
+  /* glassmorphism: frosted translucent bar that content scrolls under */
+  background: linear-gradient(180deg, rgba(34, 211, 238, 0.05), transparent),
+    rgba(6, 7, 13, 0.72);
+  backdrop-filter: blur(14px) saturate(1.3);
+  -webkit-backdrop-filter: blur(14px) saturate(1.3);
 }
 
 .topnav .brand {
@@ -142,17 +156,38 @@ body::before {
 }
 
 .topnav-links a {
+  position: relative;
   padding: 7px 12px;
   border-radius: 7px;
   color: var(--text-dim);
   text-decoration: none;
   font-size: 14px;
-  transition: color 0.15s, background 0.15s;
+  transition: color 0.18s, background 0.18s, text-shadow 0.18s;
+}
+
+/* neon underline that slides in on hover */
+.topnav-links a::after {
+  content: '';
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  bottom: 3px;
+  height: 2px;
+  border-radius: 2px;
+  background: linear-gradient(90deg, var(--forge), var(--steel));
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: transform 0.22s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .topnav-links a:hover {
   color: var(--text);
   background: var(--panel-2);
+  text-shadow: 0 0 14px rgba(34, 211, 238, 0.45);
+}
+
+.topnav-links a:hover::after {
+  transform: scaleX(1);
 }
 
 .topnav-links a.active {
@@ -1692,23 +1727,136 @@ a.ghost-button {
   flex-direction: column;
 }
 
-/* ---- homepage generator console (Phase 2) ---- */
+/* ---- homepage generator console (Phase 2 + glow-up) ---- */
 .gen-console {
+  position: relative;
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: 56px 24px 36px;
+  padding: 52px 24px 36px;
+  overflow: hidden;
+}
+
+/* aurora: soft colour blobs drifting behind the console (Meshy-style ambience) */
+.gen-aurora {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.gen-blob {
+  position: absolute;
+  width: 420px;
+  height: 420px;
+  border-radius: 50%;
+  filter: blur(95px);
+  opacity: 0.5;
+  will-change: transform;
+}
+
+.gen-blob-a {
+  left: 8%;
+  top: -30%;
+  background: radial-gradient(circle, rgba(34, 211, 238, 0.55), transparent 65%);
+  animation: blob-drift 19s ease-in-out infinite alternate;
+}
+
+.gen-blob-b {
+  right: 4%;
+  top: -10%;
+  background: radial-gradient(circle, rgba(255, 45, 155, 0.4), transparent 65%);
+  animation: blob-drift 24s ease-in-out infinite alternate-reverse;
+}
+
+.gen-blob-c {
+  left: 40%;
+  bottom: -55%;
+  background: radial-gradient(circle, rgba(168, 85, 247, 0.35), transparent 65%);
+  animation: blob-drift 28s ease-in-out infinite alternate;
+}
+
+@keyframes blob-drift {
+  from {
+    transform: translate3d(-40px, 0, 0) scale(1);
+  }
+  to {
+    transform: translate3d(50px, 34px, 0) scale(1.18);
+  }
+}
+
+/* big gradient headline above the console */
+.gen-title {
+  position: relative;
+  z-index: 1;
+  font-family: var(--font-display);
+  font-size: clamp(28px, 4.6vw, 46px);
+  letter-spacing: 0.5px;
+  margin-bottom: 22px;
+  text-align: center;
+  text-shadow: 0 0 34px rgba(34, 211, 238, 0.25);
+}
+
+.gen-title-grad {
+  background: linear-gradient(92deg, var(--forge) 10%, var(--steel) 55%, var(--violet) 95%);
+  background-size: 200% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
+  animation: grad-slide 6s ease-in-out infinite alternate;
+}
+
+@keyframes grad-slide {
+  from {
+    background-position: 0% 0;
+  }
+  to {
+    background-position: 100% 0;
+  }
 }
 
 .gen-console-inner {
+  position: relative;
+  z-index: 1;
   width: 100%;
   max-width: 660px;
   background: linear-gradient(180deg, rgba(34, 211, 238, 0.05), transparent 60%), var(--panel);
-  border: 1px solid var(--line);
+  border: 1px solid transparent;
   border-radius: 16px;
   padding: 24px 24px 22px;
-  box-shadow: 0 0 0 1px rgba(34, 211, 238, 0.08), 0 24px 60px rgba(0, 0, 0, 0.5),
-    0 0 44px rgba(34, 211, 238, 0.07);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.5), 0 0 44px rgba(34, 211, 238, 0.07);
+}
+
+/* spinning gradient ring around the console (Meshy's border-spin) */
+.gen-console-inner::before {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  z-index: -1;
+  border-radius: 17px;
+  background: conic-gradient(
+    from var(--ring-angle, 0deg),
+    rgba(34, 211, 238, 0.9),
+    rgba(28, 39, 64, 0.35) 22%,
+    rgba(255, 45, 155, 0.8) 42%,
+    rgba(28, 39, 64, 0.35) 62%,
+    rgba(168, 85, 247, 0.8) 82%,
+    rgba(34, 211, 238, 0.9)
+  );
+  animation: ring-spin 9s linear infinite;
+}
+
+@property --ring-angle {
+  syntax: '<angle>';
+  initial-value: 0deg;
+  inherits: false;
+}
+
+@keyframes ring-spin {
+  to {
+    --ring-angle: 360deg;
+  }
 }
 
 .gen-console-kicker {
@@ -1778,10 +1926,40 @@ a.ghost-button {
 }
 
 .gen-console-go {
+  position: relative;
+  overflow: hidden;
   width: 100%;
   margin-top: 16px;
   padding: 14px;
   font-size: 14px;
+  transition: box-shadow 0.18s, transform 0.15s, filter 0.18s;
+}
+
+/* light streak sweeping across the CTA (Meshy's cta-flow shimmer) */
+.gen-console-go:not(:disabled)::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -60%;
+  width: 45%;
+  background: linear-gradient(105deg, transparent, rgba(255, 255, 255, 0.35), transparent);
+  transform: skewX(-18deg);
+  animation: cta-shimmer 2.8s ease-in-out infinite;
+}
+
+@keyframes cta-shimmer {
+  0% {
+    left: -60%;
+  }
+  55%,
+  100% {
+    left: 130%;
+  }
+}
+
+.gen-console-go:hover:not(:disabled) {
+  transform: translateY(-1px);
 }
 
 .gen-console-themes {
@@ -2346,6 +2524,7 @@ a.ghost-button {
   border: 1px solid var(--line-soft);
   border-radius: var(--radius);
   overflow: hidden;
+  text-decoration: none;
   transition: border-color 0.15s, transform 0.15s;
 }
 
@@ -2376,7 +2555,20 @@ a.ghost-button {
   height: 100%;
   object-fit: contain;
   display: block;
-  transition: opacity 0.3s ease;
+  transition: opacity 0.3s ease, transform 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* zoom the artwork slightly while the wireframe reveal plays */
+.post-card:hover .post-thumb-img {
+  transform: scale(1.06);
+}
+
+.post-card-title {
+  transition: color 0.18s;
+}
+
+.post-card:hover .post-card-title {
+  color: var(--forge);
 }
 
 /* shaded preview by default; on hover it fades out and the wireframe fades in */
@@ -4590,4 +4782,17 @@ button.tag:hover {
 .search-creator:hover {
   border-color: var(--steel);
   box-shadow: 0 0 12px var(--steel-glow);
+}
+
+/* motion is decoration — switch all landing animation off for reduced-motion */
+@media (prefers-reduced-motion: reduce) {
+  .gen-blob,
+  .gen-title-grad,
+  .gen-console-inner::before,
+  .gen-console-go:not(:disabled)::after {
+    animation: none;
+  }
+  .post-card:hover .post-thumb-img {
+    transform: none;
+  }
 }

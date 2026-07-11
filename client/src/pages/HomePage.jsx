@@ -103,6 +103,15 @@ export default function HomePage() {
   return (
     <div className="home">
       <section className="gen-console">
+        {/* aurora glow blobs drifting behind the console */}
+        <div className="gen-aurora" aria-hidden="true">
+          <span className="gen-blob gen-blob-a" />
+          <span className="gen-blob gen-blob-b" />
+          <span className="gen-blob gen-blob-c" />
+        </div>
+        <h1 className="gen-title">
+          Forge <span className="gen-title-grad">anything</span> in 3D
+        </h1>
         <div className="gen-console-inner" onPaste={mode === 'image' ? onPaste : undefined}>
           <span className="gen-console-kicker">TEXT · IMAGE → 3D</span>
 
