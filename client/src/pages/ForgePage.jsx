@@ -244,6 +244,8 @@ export default function ForgePage() {
           initialMode={searchParams.get('mode') === 'image' ? 'image' : 'text'}
           initialPrompt={searchParams.get('prompt') || ''}
           initialImageId={searchParams.get('imageId') || null}
+          initialEngine={searchParams.get('engine') === 'tripo' ? 'tripo' : 'meshy'}
+          initialTextured={searchParams.get('textured') === '1'}
           autostart={searchParams.get('autostart') === '1'}
           onGeneratingChange={setGenBusy}
           onModelReady={(url, prompt, kind) => {

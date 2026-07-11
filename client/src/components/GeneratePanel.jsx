@@ -18,14 +18,19 @@ export default function GeneratePanel({
   initialMode = 'text',
   initialPrompt = '',
   initialImageId = null,
+  initialEngine = 'meshy',
+  initialTextured = false,
   autostart = false,
 }) {
   const [mode, setMode] = useState(initialMode === 'image' ? 'image' : 'text')
   const [prompt, setPrompt] = useState(initialPrompt)
+  // 3D engine: 'meshy' (tiered previews + optional texturing) | 'tripo' (builds
+  // a finished, already-textured model in one step — so no separate refine)
+  const [engine, setEngine] = useState(initialEngine === 'tripo' ? 'tripo' : 'meshy')
   // which Meshy model to generate with: meshy-5 (cheap) or meshy-6 (prettier)
   const [aiModel, setAiModel] = useState('meshy-5')
   // add the refine (texture/color) stage after preview
-  const [textured, setTextured] = useState(false)
+  const [textured, setTextured] = useState(!!initialTextured)
   // image mode: the uploaded reference (server id) + a local preview URL
   const [image, setImage] = useState(initialImageId ? { id: initialImageId } : null)
   const [preview, setPreview] = useState(null) // object URL for instant preview
@@ -33,13 +38,20 @@ export default function GeneratePanel({
   const [imgError, setImgError] = useState(null)
   const [costs, setCosts] = useState(null) // { tiers: {meshy-5,meshy-6}, refine }
   const fileRef = useRef(null)
-  // "Imagine" mode: a reference photo generated from the prompt (text→image),
-  // which the user can then hand to the image→3D flow. Version cards + edit loop
-  // land in the next step; this step is just prompt → photo → use it for 3D.
-  const [genImage, setGenImage] = useState(null) // { id, url, prompt, ... }
+  // "Imagine" mode: generate a reference photo from a prompt, then iterate on it.
+  // Each edit appends a new VERSION (parentId chain); editing an older version
+  // branches instead of overwriting. `versions` is the whole family (from the
+  // /versions endpoint), `currentId` the one on screen / being edited from.
+  const [versions, setVersions] = useState([]) // [{ id, url, prompt, version, mime }]
+  const [currentId, setCurrentId] = useState(null)
   const [genImgLoading, setGenImgLoading] = useState(false)
   const [genImgError, setGenImgError] = useState(null)
   const [genImgStub, setGenImgStub] = useState(false)
+  const [editInstruction, setEditInstruction] = useState('')
+  const [editing, setEditing] = useState(false)
+  const [editError, setEditError] = useState(null)
+
+  const currentImage = versions.find((v) => v.id === currentId) || null
 
   // token price list, so the button can show "· N tokens" before generating
   useEffect(() => {
@@ -53,9 +65,12 @@ export default function GeneratePanel({
     }
   }, [])
 
-  const estCost = costs
-    ? (costs.tiers?.[aiModel] ?? costs.tiers?.['meshy-5'] ?? 0) + (textured ? costs.refine || 0 : 0)
-    : null
+  // token estimate shown on the button — Meshy only (Tripo has no key yet, so it
+  // runs in mock mode and is free; the server stays the source of truth on cost)
+  const estCost =
+    engine === 'meshy' && costs
+      ? (costs.tiers?.[aiModel] ?? costs.tiers?.['meshy-5'] ?? 0) + (textured ? costs.refine || 0 : 0)
+      : null
 
   const submittedRef = useRef(null)
   const kindRef = useRef(null) // 'text' | 'image' — how the current task was made
@@ -78,13 +93,15 @@ export default function GeneratePanel({
   useEffect(() => {
     if (didAutostart.current || !autostart) return
     didAutostart.current = true
+    // texturing is a Meshy-only second stage; Tripo builds it in one step
+    const refine = engine === 'meshy' && textured
     if (initialMode === 'image' && initialImageId) {
       submittedRef.current = 'image → 3D'
       kindRef.current = 'image'
       start(
         '/api/generate',
-        { mode: 'image', imageId: initialImageId, model: aiModel },
-        { refine: textured, model: aiModel, prompt: 'image → 3D' },
+        { mode: 'image', imageId: initialImageId, model: aiModel, engine },
+        { refine, model: aiModel, prompt: 'image → 3D' },
       )
     } else if (initialPrompt.trim()) {
       const trimmed = initialPrompt.trim()
@@ -92,8 +109,8 @@ export default function GeneratePanel({
       kindRef.current = 'text'
       start(
         '/api/generate',
-        { prompt: trimmed, model: aiModel },
-        { refine: textured, model: aiModel, prompt: trimmed },
+        { prompt: trimmed, model: aiModel, engine },
+        { refine, model: aiModel, prompt: trimmed },
       )
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -148,6 +165,8 @@ export default function GeneratePanel({
   const appendSpeech = (text) =>
     setPrompt((prev) => (prev.trim() ? `${prev.trim()} ${text}` : text))
 
+  // texturing only applies to Meshy (Tripo outputs a finished textured model)
+  const wantsRefine = engine === 'meshy' && textured
   const startText = () => {
     const trimmed = prompt.trim()
     if (!trimmed) return
@@ -155,8 +174,8 @@ export default function GeneratePanel({
     kindRef.current = 'text'
     start(
       '/api/generate',
-      { prompt: trimmed, model: aiModel },
-      { refine: textured, model: aiModel, prompt: trimmed },
+      { prompt: trimmed, model: aiModel, engine },
+      { refine: wantsRefine, model: aiModel, prompt: trimmed },
     )
   }
   const startImage = () => {
@@ -165,18 +184,29 @@ export default function GeneratePanel({
     kindRef.current = 'image'
     start(
       '/api/generate',
-      { mode: 'image', imageId: image.id, model: aiModel },
-      { refine: textured, model: aiModel, prompt: 'image → 3D' },
+      { mode: 'image', imageId: image.id, model: aiModel, engine },
+      { refine: wantsRefine, model: aiModel, prompt: 'image → 3D' },
     )
   }
 
+  // load the whole version family for an image and focus it (used after a
+  // generate or an edit so the cards + numbering stay authoritative)
+  const loadVersions = async (id) => {
+    const res = await fetch(`/api/images/${encodeURIComponent(id)}/versions`)
+    const data = await res.json()
+    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`)
+    setVersions(data.versions)
+    setCurrentId(id)
+  }
+
   // Imagine: text → reference photo (real Gemini when GEMINI_API_KEY is set,
-  // SVG placeholder otherwise — same response shape either way).
+  // SVG placeholder otherwise). Starts a fresh version family.
   const generatePhoto = async () => {
     const trimmed = prompt.trim()
     if (!trimmed) return
     setGenImgLoading(true)
     setGenImgError(null)
+    setEditError(null)
     try {
       const res = await fetch('/api/images/generate', {
         method: 'POST',
@@ -185,8 +215,8 @@ export default function GeneratePanel({
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`)
-      setGenImage(data.image)
       setGenImgStub(!!data.stub)
+      await loadVersions(data.image.id)
     } catch (e) {
       setGenImgError(e.message)
     } finally {
@@ -194,14 +224,42 @@ export default function GeneratePanel({
     }
   }
 
-  // hand a generated photo to the image→3D flow: pick an engine, then Generate.
+  // Edit the CURRENT version → a new version. Editing an older version branches
+  // (the server links the new image to its parentId), so nothing is overwritten.
+  const applyEdit = async () => {
+    const instr = editInstruction.trim()
+    if (!instr || !currentId) return
+    setEditing(true)
+    setEditError(null)
+    try {
+      const res = await fetch(`/api/images/${encodeURIComponent(currentId)}/edit`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ instruction: instr }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`)
+      setGenImgStub(!!data.stub)
+      setEditInstruction('')
+      await loadVersions(data.image.id) // refresh family, focus the new version
+    } catch (e) {
+      setEditError(e.message)
+    } finally {
+      setEditing(false)
+    }
+  }
+
+  // hand the current version to the image→3D flow: pick an engine, then Generate.
   const useImageForModel = () => {
-    if (!genImage) return
-    setImage(genImage)
-    setPreview(null) // no object URL — the image mode falls back to genImage.url
+    if (!currentImage) return
+    setImage(currentImage)
+    setPreview(null) // no object URL — the image mode falls back to currentImage.url
     setImgError(null)
     setMode('image')
   }
+
+  const appendEditSpeech = (text) =>
+    setEditInstruction((prev) => (prev.trim() ? `${prev.trim()} ${text}` : text))
 
   const previewSrc = preview || image?.url
   const canGenerate = mode === 'text' ? !!prompt.trim() : !!image
@@ -287,23 +345,69 @@ export default function GeneratePanel({
             onClick={generatePhoto}
             disabled={genImgLoading || disabled || !prompt.trim()}
           >
-            {genImgLoading ? 'Generating image…' : genImage ? 'Regenerate image' : 'Generate image'}
+            {genImgLoading ? 'Generating image…' : versions.length ? 'Generate new image' : 'Generate image'}
           </button>
           {genImgError && <span className="url-error">{genImgError}</span>}
-          {genImage && (
+
+          {currentImage && (
             <div className="field">
-              <label>Generated image</label>
-              <div className="image-drop has-image">
-                <img className="image-drop-preview" src={genImage.url} alt={genImage.prompt || 'generated reference'} />
+              <label>Image versions</label>
+              <div className="image-lab">
+                <div className="image-lab-main">
+                  <div className="image-drop has-image">
+                    <img
+                      className="image-drop-preview"
+                      src={currentImage.url}
+                      alt={currentImage.prompt || `version ${currentImage.version}`}
+                    />
+                  </div>
+                  {genImgStub && (
+                    <span className="hint">
+                      preview placeholder — set GEMINI_API_KEY on the server for real images
+                    </span>
+                  )}
+                  <div className="input-with-mic">
+                    <textarea
+                      className="point-prompt"
+                      rows={2}
+                      value={editInstruction}
+                      onChange={(e) => setEditInstruction(e.target.value)}
+                      placeholder={`Edit V${currentImage.version} — e.g. "make it red", "add a spoiler"`}
+                      disabled={editing || disabled}
+                    />
+                    <MicButton onTranscript={appendEditSpeech} disabled={editing || disabled} />
+                  </div>
+                  <button
+                    className="submit"
+                    onClick={applyEdit}
+                    disabled={editing || disabled || !editInstruction.trim()}
+                  >
+                    {editing ? 'Editing…' : `Apply edit → new version`}
+                  </button>
+                  {editError && <span className="url-error">{editError}</span>}
+                  <button className="submit" onClick={useImageForModel} disabled={disabled}>
+                    Use V{currentImage.version} → 3D
+                  </button>
+                </div>
+                <div className="image-lab-versions">
+                  {versions.map((v) => (
+                    <button
+                      key={v.id}
+                      type="button"
+                      className={`version-card ${v.id === currentId ? 'active' : ''}`}
+                      onClick={() => {
+                        setCurrentId(v.id)
+                        setGenImgStub((v.mime || '').includes('svg'))
+                        setEditError(null)
+                      }}
+                      title={v.prompt || `version ${v.version}`}
+                    >
+                      <img src={v.url} alt={`V${v.version}`} />
+                      <span className="version-tag">V{v.version}</span>
+                    </button>
+                  ))}
+                </div>
               </div>
-              {genImgStub && (
-                <span className="hint">
-                  preview placeholder — set GEMINI_API_KEY on the server for real images
-                </span>
-              )}
-              <button className="submit" onClick={useImageForModel} disabled={disabled}>
-                Use this image → 3D
-              </button>
             </div>
           )}
         </>
@@ -343,36 +447,63 @@ export default function GeneratePanel({
       {mode !== 'imagine' && (
       <>
       <div className="model-select">
-        <span className="model-label">Model</span>
+        <span className="model-label">Engine</span>
         <button
           type="button"
-          className={`chip ${aiModel === 'meshy-5' ? 'chip--on' : ''}`}
-          onClick={() => setAiModel('meshy-5')}
+          className={`chip ${engine === 'meshy' ? 'chip--on' : ''}`}
+          onClick={() => setEngine('meshy')}
           disabled={busy}
-          title="Meshy-5 — faster, lower token cost"
+          title="Meshy — tiered previews, optional texturing stage"
         >
-          M5 · Fast{costs ? ` · ${costs.tiers?.['meshy-5']}` : ''}
+          Meshy
         </button>
         <button
           type="button"
-          className={`chip ${aiModel === 'meshy-6' ? 'chip--on' : ''}`}
-          onClick={() => setAiModel('meshy-6')}
+          className={`chip ${engine === 'tripo' ? 'chip--on' : ''}`}
+          onClick={() => setEngine('tripo')}
           disabled={busy}
-          title="Meshy-6 — highest quality"
+          title="Tripo — builds a finished, already-textured model in one step"
         >
-          M6 · Quality{costs ? ` · ${costs.tiers?.['meshy-6']}` : ''}
+          Tripo
         </button>
       </div>
-      <label className="toggle">
+      {engine === 'meshy' && (
+        <div className="model-select">
+          <span className="model-label">Model</span>
+          <button
+            type="button"
+            className={`chip ${aiModel === 'meshy-5' ? 'chip--on' : ''}`}
+            onClick={() => setAiModel('meshy-5')}
+            disabled={busy}
+            title="Meshy-5 — faster, lower token cost"
+          >
+            M5 · Fast{costs ? ` · ${costs.tiers?.['meshy-5']}` : ''}
+          </button>
+          <button
+            type="button"
+            className={`chip ${aiModel === 'meshy-6' ? 'chip--on' : ''}`}
+            onClick={() => setAiModel('meshy-6')}
+            disabled={busy}
+            title="Meshy-6 — highest quality"
+          >
+            M6 · Quality{costs ? ` · ${costs.tiers?.['meshy-6']}` : ''}
+          </button>
+        </div>
+      )}
+      <label className={`toggle ${engine === 'tripo' ? 'toggle--disabled' : ''}`}>
         <input
           type="checkbox"
-          checked={textured}
+          checked={engine === 'meshy' && textured}
           onChange={(e) => setTextured(e.target.checked)}
-          disabled={busy}
+          disabled={busy || engine === 'tripo'}
         />
         Add textures (color){' '}
         <span className="hint">
-          ({textured ? `+${costs?.refine ?? 20} tokens, colored` : 'off — gray preview'})
+          {engine === 'tripo'
+            ? '(Tripo builds a textured model in one step)'
+            : textured
+              ? `(+${costs?.refine ?? 20} tokens, colored)`
+              : '(off — gray preview)'}
         </span>
       </label>
       <button
@@ -395,7 +526,12 @@ export default function GeneratePanel({
         </div>
       )}
       {generating && task.mock && (
-        <span className="hint">mock mode — set MESHY_API_KEY on the server for real generation</span>
+        <span className="hint">
+          mock mode — set {engine === 'tripo' ? 'TRIPO_API_KEY' : 'MESHY_API_KEY'} on the server for real
+          generation
+        </span>
+      )}
+      </>
       )}
       </>
       )}
