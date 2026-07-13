@@ -1,9 +1,11 @@
 import * as THREE from 'three'
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
 
-// Renders a GLB to two PNG data URLs once and caches them by model URL:
-//   { shaded } — the lit model, and
-//   { wire }   — a steel wireframe ("reveal the geometry" on card hover).
+// Renders a GLB to PNG data URLs once and caches them by model URL:
+//   { shaded } — the lit model (front),
+//   { wire }   — a cyan wireframe ("reveal the geometry" on card hover), and
+//   { views }  — three more shaded angles (90°/180°/270° orbit) for the
+//                hover-reveal multi-angle strip on cards.
 // Cards show a real preview without each mounting a live WebGL viewer (browsers
 // cap concurrent contexts). Renders are serialized through a queue, so at most
 // one transient context exists at a time and it's disposed right after capture.
@@ -81,11 +83,27 @@ function renderThumbnail(modelUrl) {
           camera.updateProjectionMatrix()
           scene.add(model)
 
-          // pass 1 — shaded
+          // pass 1 — shaded (front)
           renderer.render(scene, camera)
           const shaded = canvas.toDataURL('image/png')
 
-          // pass 2 — steel wireframe (stash originals so we can dispose them)
+          // pass 2 — three more shaded angles, orbiting at the same radius and
+          // elevation (feeds the hover-reveal multi-angle strip on cards)
+          const radius = Math.hypot(0.6, 0.85) * size
+          const baseAz = Math.atan2(0.6, 0.85)
+          const views = []
+          for (const quarter of [1, 2, 3]) {
+            const az = baseAz + (quarter * Math.PI) / 2
+            camera.position.set(Math.sin(az) * radius, size * 0.45, Math.cos(az) * radius)
+            camera.lookAt(0, 0, 0)
+            renderer.render(scene, camera)
+            views.push(canvas.toDataURL('image/png'))
+          }
+          // back to the front angle for the wireframe pass
+          camera.position.set(size * 0.6, size * 0.45, size * 0.85)
+          camera.lookAt(0, 0, 0)
+
+          // pass 3 — cyan wireframe (stash originals so we can dispose them)
           wireMat = new THREE.MeshBasicMaterial({ color: WIRE_COLOR, wireframe: true })
           model.traverse((o) => {
             if (o.isMesh) {
@@ -97,7 +115,7 @@ function renderThumbnail(modelUrl) {
           const wire = canvas.toDataURL('image/png')
 
           teardown(model)
-          resolve({ shaded, wire })
+          resolve({ shaded, wire, views })
         } catch (err) {
           teardown()
           reject(err)
@@ -112,7 +130,7 @@ function renderThumbnail(modelUrl) {
   })
 }
 
-/** Get (or start) the cached { shaded, wire } render for a model URL. */
+/** Get (or start) the cached { shaded, wire, views } render for a model URL. */
 export function getThumbnail(modelUrl) {
   if (!modelUrl) return Promise.reject(new Error('no modelUrl'))
   if (cache.has(modelUrl)) return cache.get(modelUrl)
