@@ -2,7 +2,7 @@ import { readdirSync } from 'fs'
 import { fileURLToPath } from 'url'
 import { dirname, join } from 'path'
 import { dbReady } from '../db.js'
-import { register } from './auth.js'
+import { register, getUserByUsername, updateProfile } from './auth.js'
 import { createPost, listPosts } from './posts.js'
 import { toggleLike, addComment } from './social.js'
 import { toggleFollow } from './follows.js'
@@ -35,6 +35,42 @@ const USERS = [
   'nova', 'mecha_smith', 'voxel_witch', 'orin3d', 'claywell', 'protostudio',
   'ember_forge', 'polypaws', 'stellarch', 'gritbyte', 'lumen_lab', 'drift_koi',
 ]
+
+// Profile dressing so demo creators don't look bare: bio + avatar colour +
+// banner per user. Colours must stay within the client/server palette
+// (see routes/users.js AVATAR_COLORS).
+const PALETTE = ['#22d3ee', '#ff2d9b', '#a855f7', '#35e6a4', '#ffd23d', '#5b8cff']
+const BIOS = [
+  'Sci-fi props & clean topology. Everything here is remixable.',
+  'Mechs, turrets and heavy plating. Game-res or nothing.',
+  'Stylized sculpts with a witchy streak. Feedback welcome.',
+  'Archviz blockouts and furniture at real-world scale.',
+  'Clay-first workflow — sculpt loose, retopo later.',
+  'Small studio account. We ship printable minis weekly.',
+  'Hard-surface + emissive everything. Neon or bust.',
+  'Low-poly critters for cozy games.',
+  'Environments, ruins and temples. Big silhouettes.',
+  'Gritty industrial kitbash sets.',
+  'Lighting studies and lamp-adjacent props.',
+  'Slow, careful jewelry and tiny treasures.',
+]
+
+/** Give each demo creator a bio / avatar colour / banner (idempotent — skips
+ *  users that already have a bio, so re-runs never clobber real edits). */
+export async function dressDemoProfiles() {
+  let dressed = 0
+  for (let i = 0; i < USERS.length; i++) {
+    const existing = await getUserByUsername(USERS[i])
+    if (!existing || existing.bio) continue
+    await updateProfile(existing.id, {
+      bio: BIOS[i % BIOS.length],
+      avatarColor: PALETTE[i % PALETTE.length],
+      bannerId: i % 6,
+    })
+    dressed++
+  }
+  return dressed
+}
 
 // One base mesh shared by the whole community is the project's own premise, so
 // these read as different makers' takes / remixes of the same model.
@@ -85,7 +121,12 @@ export async function seedDemoData() {
   // shared class-demo Atlas DB in (still only when the gallery is empty).
   if (dbReady() && process.env.SEED_DEMO !== 'force') return
   if (process.env.SEED_DEMO === 'false') return
-  if ((await listPosts({ limit: 1 })).length > 0) return // already populated
+  if ((await listPosts({ limit: 1 })).length > 0) {
+    // already populated — still dress bare demo profiles (idempotent backfill)
+    const dressed = await dressDemoProfiles()
+    if (dressed) console.log(`Seed: dressed ${dressed} existing demo profiles`)
+    return
+  }
 
   const models = discoverModels()
   const users = []
@@ -133,6 +174,8 @@ export async function seedDemoData() {
     await toggleFollow(users[i].id, users[(i + 1) % users.length].id)
     await toggleFollow(users[i].id, users[(i + 3) % users.length].id)
   }
+
+  await dressDemoProfiles() // bios / avatar colours / banners
 
   console.log(
     `Seeded demo gallery: ${created.length} posts by ${users.length} users ` +

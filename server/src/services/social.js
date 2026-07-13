@@ -54,6 +54,19 @@ export async function toggleLike(userId, postId) {
   return { liked, likes: set.size }
 }
 
+/** Ids of every post a user has liked (newest first under Mongo). Powers the
+ *  profile "Favorites" tab via GET /api/posts?likedBy=<username>. */
+export async function likedPostIds(userId) {
+  if (!userId) return []
+  if (dbReady()) {
+    const docs = await Like.find({ userId }).sort({ createdAt: -1 }).lean()
+    return docs.map((d) => String(d.postId))
+  }
+  const ids = []
+  for (const [postId, set] of memLikes) if (set.has(userId)) ids.push(postId)
+  return ids
+}
+
 export async function likeInfo(postId, userId) {
   if (dbReady()) {
     return {

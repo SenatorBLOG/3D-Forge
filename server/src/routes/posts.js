@@ -11,11 +11,13 @@ import {
 import {
   toggleLike,
   likeInfo,
+  likedPostIds,
   addComment,
   listComments,
   commentCount,
   removePostSocial,
 } from '../services/social.js'
+import { getUserByUsername } from '../services/auth.js'
 import { notify, removePostNotifications } from '../services/notifications.js'
 import { followingIds } from '../services/follows.js'
 import { getTheme, THEMES } from '../services/themes.js'
@@ -34,7 +36,8 @@ const withSocial = async (post, userId) => {
 const str = (v) => (typeof v === 'string' ? v : undefined)
 
 // GET /api/posts — public community feed.
-// Filters: ?author / ?username / ?tag / ?theme / ?q, or ?following=1 for your follows' posts
+// Filters: ?author / ?username / ?tag / ?theme / ?q / ?likedBy=<username>,
+// or ?following=1 for your follows' posts
 router.get('/', optionalAuth, async (req, res) => {
   try {
     // ?following=1 → only posts by people the signed-in user follows. Anonymous
@@ -42,6 +45,13 @@ router.get('/', optionalAuth, async (req, res) => {
     let authorIds
     if (req.query.following === '1') {
       authorIds = req.user ? await followingIds(req.user.id) : []
+    }
+    // ?likedBy=<username> → the posts that user has liked (profile Favorites tab).
+    // Likes are public counts already, so this exposes nothing new.
+    let ids
+    if (str(req.query.likedBy)) {
+      const target = await getUserByUsername(req.query.likedBy)
+      ids = target ? await likedPostIds(target.id) : []
     }
     // ?theme=<id> → posts carrying any of the theme's curated tags
     let anyTags
@@ -57,6 +67,7 @@ router.get('/', optionalAuth, async (req, res) => {
     const posts = await listPosts({
       authorId: str(req.query.author),
       authorIds,
+      ids,
       authorUsername: str(req.query.username),
       tag: str(req.query.tag),
       anyTags,

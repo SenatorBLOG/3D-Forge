@@ -41,6 +41,7 @@ export default function ProfilePage() {
   const [posts, setPosts] = useState(null)
   const [profile, setProfile] = useState(null)
   const [stats, setStats] = useState(null) // B11: { creations, published, …, badges }
+  const [favs, setFavs] = useState(null) // posts this user has liked (lazy)
   const [error, setError] = useState(null)
   const [busy, setBusy] = useState(false)
   const [tab, setTab] = useState('models')
@@ -76,6 +77,7 @@ export default function ProfilePage() {
       })
     // B11: public stats + achievements (independent fetch — non-fatal)
     setStats(null)
+    setFavs(null)
     fetch(`/api/users/${encodeURIComponent(username)}/stats`)
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => !cancelled && d && setStats(d))
@@ -84,6 +86,19 @@ export default function ProfilePage() {
       cancelled = true
     }
   }, [username, token])
+
+  // Favorites tab: the posts this user has liked — fetched when first opened
+  useEffect(() => {
+    if (tab !== 'favorites' || favs !== null) return undefined
+    let cancelled = false
+    fetch(`/api/posts?likedBy=${encodeURIComponent(username)}`)
+      .then((r) => (r.ok ? r.json() : { posts: [] }))
+      .then((d) => !cancelled && setFavs(d.posts || []))
+      .catch(() => !cancelled && setFavs([]))
+    return () => {
+      cancelled = true
+    }
+  }, [tab, favs, username])
 
   const toggleFollow = async () => {
     if (!token || busy) return
@@ -224,9 +239,22 @@ export default function ProfilePage() {
         ) : (
           <CardSkeleton count={4} />
         ))}
-      {tab === 'favorites' && (
-        <EmptyState icon="star" title="Favorites are coming soon" hint="Models you like will collect here." />
-      )}
+      {tab === 'favorites' &&
+        (favs === null ? (
+          <CardSkeleton count={4} />
+        ) : favs.length === 0 ? (
+          <EmptyState
+            icon="star"
+            title={isSelf ? 'Nothing liked yet' : `@${username} hasn’t liked anything yet`}
+            hint="Liked models collect here."
+          />
+        ) : (
+          <div className="explore-grid">
+            {favs.map((p) => (
+              <PostCard key={p.id} post={p} />
+            ))}
+          </div>
+        ))}
       {tab === 'badges' &&
         (stats ? (
           <>

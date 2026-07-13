@@ -87,6 +87,7 @@ export async function listPosts({
   authorId,
   authorIds,
   authorUsername,
+  ids, // restrict to these post ids (profile Favorites: the posts a user liked)
   tag,
   anyTags, // match posts carrying ANY of these tags (theme filtering, B9)
   q,
@@ -95,12 +96,15 @@ export async function listPosts({
   const query = typeof q === 'string' ? q.trim().toLowerCase() : ''
   const wantTag = tag ? normalizeTags(tag)[0] : undefined
   const wantAny = Array.isArray(anyTags) && anyTags.length ? normalizeTags(anyTags) : undefined
-  // an empty authorIds list means "follows nobody" → no posts (not "all posts")
+  // an empty authorIds/ids list means "matches nothing", not "all posts"
   if (authorIds && authorIds.length === 0) return []
+  if (ids && ids.length === 0) return []
   if (dbReady()) {
     const filter = {}
     if (authorId) filter.authorId = authorId
     if (authorIds) filter.authorId = { $in: authorIds }
+    // drop anything that can't be a Mongo id so a mem-mode id never throws a CastError
+    if (ids) filter._id = { $in: ids.filter((i) => /^[0-9a-f]{24}$/i.test(i)) }
     if (authorUsername) filter.authorUsername = authorUsername
     if (wantTag) filter.tags = wantTag
     if (wantAny) filter.tags = { ...(wantTag ? { $eq: wantTag } : {}), $in: wantAny }
@@ -112,9 +116,11 @@ export async function listPosts({
     return docs.map((d) => publicPost({ ...d, id: String(d._id) }))
   }
   const idSet = authorIds ? new Set(authorIds) : null
+  const postIdSet = ids ? new Set(ids) : null
   const list = memPosts.filter((p) => {
     if (authorId && p.authorId !== authorId) return false
     if (idSet && !idSet.has(p.authorId)) return false
+    if (postIdSet && !postIdSet.has(p.id)) return false
     if (authorUsername && p.authorUsername !== authorUsername) return false
     if (wantTag && !(p.tags || []).includes(wantTag)) return false
     if (wantAny && !(p.tags || []).some((t) => wantAny.includes(t))) return false
