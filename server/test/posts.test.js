@@ -106,3 +106,25 @@ test('listPosts filters by tag and free-text query', async () => {
   const tags = await listTags()
   assert.ok(tags.some((t) => t.tag === 'dragon' && t.count >= 1))
 })
+
+test('likedPostIds + listPosts({ ids }) back the profile Favorites tab', async () => {
+  const { toggleLike, likedPostIds } = await import('../src/services/social.js')
+  const fan = { id: 'u-fan', username: 'fan' }
+  const maker = { id: 'u-maker', username: 'maker' }
+  const a = await createPost(maker, { title: 'Liked one', modelUrl: '/models/a.glb' })
+  const b = await createPost(maker, { title: 'Ignored one', modelUrl: '/models/b.glb' })
+
+  await toggleLike(fan.id, a.id)
+  const ids = await likedPostIds(fan.id)
+  assert.ok(ids.includes(a.id))
+  assert.ok(!ids.includes(b.id))
+
+  const favs = await listPosts({ ids })
+  assert.ok(favs.some((p) => p.id === a.id))
+  assert.ok(!favs.some((p) => p.id === b.id))
+
+  // an empty ids list matches nothing, not everything
+  assert.deepEqual(await listPosts({ ids: [] }), [])
+  // a user with no likes yields no ids
+  assert.deepEqual(await likedPostIds('u-nobody'), [])
+})
