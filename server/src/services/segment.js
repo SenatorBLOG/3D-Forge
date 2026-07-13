@@ -48,6 +48,24 @@ const worldBox = (world, min, max) => {
 
 const center = (box) => box.min.map((v, i) => (v + box.max[i]) / 2)
 
+// The client viewer recenters the model on its overall bbox center before the
+// user clicks, so raycast points arrive in CENTERED space while our bboxes are
+// world-space. Give every part a `hitBox`/`center` shifted by the overall
+// center for hit-testing, keeping `bbox` untouched (the swap needs raw coords).
+const recenterForHitTest = (parts) => {
+  if (!parts.length) return parts
+  const overall = unionBox(parts.map((p) => p.bbox))
+  const C = center(overall)
+  for (const p of parts) {
+    p.hitBox = {
+      min: p.bbox.min.map((v, i) => v - C[i]),
+      max: p.bbox.max.map((v, i) => v - C[i]),
+    }
+    p.center = center(p.hitBox)
+  }
+  return parts
+}
+
 const unionBox = (boxes) => {
   const lo = [Infinity, Infinity, Infinity]
   const hi = [-Infinity, -Infinity, -Infinity]
@@ -90,19 +108,35 @@ function extractParts(doc) {
       const mesh = node.getMesh()
       if (!mesh) return
       const idx = nodeIndex++
-      const boxes = []
-      for (const prim of mesh.listPrimitives()) {
-        const pos = prim.getAttribute('POSITION')
-        if (!pos) continue
-        boxes.push(worldBox(node.getWorldMatrix(), pos.getMin([]), pos.getMax([])))
-      }
-      if (!boxes.length) return
-      const box = unionBox(boxes)
+      const world = node.getWorldMatrix()
+      const prims = mesh.listPrimitives().filter((p) => p.getAttribute('POSITION'))
+      if (!prims.length) return
       const name = node.getName() || mesh.getName() || `part ${idx + 1}`
+      if (prims.length > 1) {
+        // generated GLBs are often ONE mesh with a primitive per logical part
+        // (our sample models are) — segment at primitive level so a swap
+        // touches just that piece
+        prims.forEach((prim, k) => {
+          const pos = prim.getAttribute('POSITION')
+          const box = worldBox(world, pos.getMin([]), pos.getMax([]))
+          const pname = prim.getMaterial()?.getName() || `piece ${k + 1}`
+          parts.push({
+            id: `${slug(pname) || 'part'}-${idx}-${k}`,
+            name: pname,
+            index: idx,
+            primIndex: k,
+            bbox: box,
+            center: center(box),
+          })
+        })
+        return
+      }
+      const pos = prims[0].getAttribute('POSITION')
+      const box = worldBox(world, pos.getMin([]), pos.getMax([]))
       parts.push({ id: `${slug(name) || 'part'}-${idx}`, name, index: idx, bbox: box, center: center(box) })
     })
   }
-  if (parts.length >= 2) return parts
+  if (parts.length >= 2) return recenterForHitTest(parts)
 
   // fallback: one merged mesh → 3 vertical bands (all map to the same node 0)
   if (parts.length === 1) {
@@ -115,12 +149,14 @@ function extractParts(doc) {
       ['middle', yLo + third, yLo + 2 * third],
       ['lower', yLo, yLo + third],
     ]
-    return bands.map(([name, lo, hi], i) => {
-      const box = { min: [whole.min[0], lo, whole.min[2]], max: [whole.max[0], hi, whole.max[2]] }
-      return { id: `${name}-0`, name, index: 0, bbox: box, center: center(box), synthetic: true }
-    })
+    return recenterForHitTest(
+      bands.map(([name, lo, hi]) => {
+        const box = { min: [whole.min[0], lo, whole.min[2]], max: [whole.max[0], hi, whole.max[2]] }
+        return { id: `${name}-0`, name, index: 0, bbox: box, center: center(box), synthetic: true }
+      }),
+    )
   }
-  return parts
+  return recenterForHitTest(parts)
 }
 
 // --- segmentation cache (dual-store) ---------------------------------------
@@ -172,18 +208,22 @@ export function hitTestPart(parts, point) {
   if (!Array.isArray(parts) || !parts.length) return null
   const p = [Number(point?.x), Number(point?.y), Number(point?.z)]
   if (p.some((v) => !Number.isFinite(v))) return null
-  const containing = parts.filter((part) => inside(part.bbox, p))
+  // hitBox/center are in the client's centered space; old cache entries may
+  // predate hitBox, so fall back to the raw bbox for them
+  const boxOf = (part) => part.hitBox || part.bbox
+  const containing = parts.filter((part) => inside(boxOf(part), p))
   if (containing.length) {
     const vol = (b) => (b.max[0] - b.min[0]) * (b.max[1] - b.min[1]) * (b.max[2] - b.min[2])
-    return containing.reduce((best, part) => (vol(part.bbox) < vol(best.bbox) ? part : best))
+    return containing.reduce((best, part) => (vol(boxOf(part)) < vol(boxOf(best)) ? part : best))
   }
   return parts.reduce((best, part) => (dist2(part.center, p) < dist2(best.center, p) ? part : best))
 }
 
 // --- B-H3: part swap (mock = replace the region with a primitive) ----------
 
-// a 24-vertex axis-aligned box (flat normals) spanning min..max
-function addBox(doc, buffer, min, max) {
+// a 24-vertex axis-aligned box (flat normals) spanning min..max — returns the
+// accessors + swap material so callers can build a mesh OR retarget a primitive
+function boxAccessors(doc, buffer, min, max) {
   const [x0, y0, z0] = min
   const [x1, y1, z1] = max
   const faces = [
@@ -208,9 +248,15 @@ function addBox(doc, buffer, min, max) {
   const idxAcc = doc.createAccessor().setType('SCALAR').setArray(new Uint16Array(idx)).setBuffer(buffer)
   const mat = doc
     .createMaterial('region-swap')
-    .setBaseColorFactor([0.96, 0.42, 0.13, 1]) // forge amber — visibly the new region
-    .setMetallicFactor(0)
-    .setRoughnessFactor(0.7)
+    .setBaseColorFactor([0.13, 0.83, 0.93, 1]) // electric cyan — visibly the new region
+    .setMetallicFactor(0.2)
+    .setRoughnessFactor(0.5)
+  return { posAcc, nrmAcc, idxAcc, mat }
+}
+
+// node-level replacement: the whole node's mesh becomes the swap box
+function boxMesh(doc, buffer, min, max) {
+  const { posAcc, nrmAcc, idxAcc, mat } = boxAccessors(doc, buffer, min, max)
   const prim = doc
     .createPrimitive()
     .setAttribute('POSITION', posAcc)
@@ -253,7 +299,23 @@ export async function partSwap(modelUrl, part) {
   }
   if (!target) throw Object.assign(new Error('part node not found'), { code: 'NOT_FOUND' })
 
-  target.setMesh(addBox(doc, buffer, part.bbox.min, part.bbox.max))
+  if (Number.isInteger(part.primIndex)) {
+    // primitive-level swap: replace just this primitive's geometry + material,
+    // in the node's LOCAL space (so any node transform still applies)
+    const prim = target.getMesh().listPrimitives()[part.primIndex]
+    if (!prim || !prim.getAttribute('POSITION')) {
+      throw Object.assign(new Error('part primitive not found'), { code: 'NOT_FOUND' })
+    }
+    const pos = prim.getAttribute('POSITION')
+    const { posAcc, nrmAcc, idxAcc, mat } = boxAccessors(doc, buffer, pos.getMin([]), pos.getMax([]))
+    prim
+      .setAttribute('POSITION', posAcc)
+      .setAttribute('NORMAL', nrmAcc)
+      .setIndices(idxAcc)
+      .setMaterial(mat)
+  } else {
+    target.setMesh(boxMesh(doc, buffer, part.bbox.min, part.bbox.max))
+  }
   const out = await new NodeIO().writeBinary(doc)
   const url = await storeModelBytes(out)
   return { modelUrl: url, swappedPart: { id: part.id, name: part.name } }

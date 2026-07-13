@@ -1,5 +1,9 @@
 import { Router } from 'express'
 import { segmentModel, hitTestPart, partSwap } from '../services/segment.js'
+import { optionalAuth } from '../middleware/auth.js'
+import { recordTask, updateTask } from '../services/history.js'
+import { dbReady } from '../db.js'
+import GeneratedModel from '../models/GeneratedModel.js'
 
 const router = Router()
 
@@ -36,7 +40,7 @@ router.post('/locate', async (req, res) => {
 // POST /api/edit/partswap { modelUrl, point?|partId?, instruction? } — regenerate
 // (mock: replace with a primitive) just the pointed/chosen part; returns a new
 // stored model. → { modelUrl, swappedPart, instruction }
-router.post('/partswap', async (req, res) => {
+router.post('/partswap', optionalAuth, async (req, res) => {
   const modelUrl = typeof req.body?.modelUrl === 'string' ? req.body.modelUrl : ''
   const point = req.body?.point
   const partId = typeof req.body?.partId === 'string' ? req.body.partId : ''
@@ -49,7 +53,28 @@ router.post('/partswap', async (req, res) => {
     const part = partId ? parts.find((p) => p.id === partId) : hitTestPart(parts, point)
     if (!part) return res.status(404).json({ error: 'no matching part for the given point/partId' })
     const result = await partSwap(modelUrl, part)
-    res.json({ ...result, instruction })
+
+    // mirror a finished generation so the swap lands in History + Library
+    const label = `part-swap: ${part.name}${instruction ? ` — ${instruction}` : ''}`.slice(0, 120)
+    const taskId = `partswap-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+    recordTask({ kind: 'generate', taskId, prompt: label, mock: true, ownerId: req.user?.id ?? null })
+    updateTask(taskId, 'SUCCEEDED', result.modelUrl)
+    if (dbReady()) {
+      try {
+        await GeneratedModel.create({
+          prompt: label,
+          meshyTaskId: taskId,
+          status: 'SUCCEEDED',
+          modelUrl: result.modelUrl,
+          mock: true,
+          ownerId: req.user?.id ?? null,
+        })
+      } catch (err) {
+        console.error('partswap library record failed:', err)
+      }
+    }
+
+    res.json({ ...result, instruction, mock: true, engine: 'hyper3d' })
   } catch (err) {
     if (err.code === 'NOT_FOUND') return res.status(404).json({ error: err.message })
     console.error('partswap failed:', err)

@@ -4921,3 +4921,18 @@ button.tag:hover {
     -webkit-mask-image: none;
   }
 }
+
+/* Hyper3D part-swap action — magenta so it reads as its own engine */
+.partswap-btn {
+  color: var(--steel);
+  border-color: rgba(255, 45, 155, 0.45);
+}
+
+.partswap-btn:hover:not(:disabled) {
+  border-color: var(--steel);
+  box-shadow: 0 0 16px var(--steel-glow);
+}
+
+.partswap-note {
+  color: var(--good);
+}
