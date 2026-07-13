@@ -2588,7 +2588,7 @@ a.ghost-button {
 
 .post-thumb-hint {
   position: absolute;
-  bottom: 8px;
+  top: 8px;
   right: 8px;
   font-family: var(--font-mono);
   font-size: 9.5px;
@@ -2605,6 +2605,43 @@ a.ghost-button {
 
 .post-card:hover .post-thumb-hint {
   opacity: 1;
+}
+
+/* hover-reveal multi-angle strip (Meshy collections-style): three more
+   camera angles slide up over the bottom of the artwork */
+.post-thumb-views {
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  bottom: 8px;
+  display: flex;
+  gap: 6px;
+  opacity: 0;
+  transform: translateY(10px);
+  transition: opacity 0.25s cubic-bezier(0.4, 0, 0.2, 1), transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  pointer-events: none;
+}
+
+.post-thumb-views img {
+  flex: 1;
+  min-width: 0;
+  aspect-ratio: 4 / 3;
+  object-fit: contain;
+  border-radius: 7px;
+  border: 1px solid var(--line);
+  background: rgba(11, 13, 18, 0.82);
+  backdrop-filter: blur(4px);
+}
+
+.post-card:hover .post-thumb-views {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .post-thumb-views {
+    transform: none;
+  }
 }
 
 .post-card-body {

@@ -48,6 +48,13 @@ export default function PostCard({ post }) {
             <img className="post-thumb-img shaded" src={thumb.shaded} alt={post.title} loading="lazy" />
             <img className="post-thumb-img wire" src={thumb.wire} alt="" aria-hidden="true" loading="lazy" />
             <span className="post-thumb-hint">wireframe</span>
+            {thumb.views?.length > 0 && (
+              <span className="post-thumb-views" aria-hidden="true">
+                {thumb.views.map((v, i) => (
+                  <img key={i} src={v} alt="" loading="lazy" />
+                ))}
+              </span>
+            )}
           </>
         ) : (
           <Logo size={56} />
