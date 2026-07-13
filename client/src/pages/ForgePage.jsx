@@ -48,6 +48,10 @@ export default function ForgePage() {
   const [saving, setSaving] = useState(false)
   const [historyKey, setHistoryKey] = useState(0)
   const [compare, setCompare] = useState(null)
+  // Hyper3D part-swap state
+  const [swapBusy, setSwapBusy] = useState(false)
+  const [swapMsg, setSwapMsg] = useState(null)
+  const [swapErr, setSwapErr] = useState(null)
 
   const swapModel = (url, { isObjectUrl = false } = {}) => {
     const stale = objectUrlRef.current
@@ -156,6 +160,39 @@ export default function ForgePage() {
   const startCompare = () => {
     if (!hasPrompts) return
     setCompare(buildEditBase())
+  }
+
+  // Hyper3D part-swap (mock): regenerate ONLY the part the points indicate —
+  // the rest of the mesh stays byte-identical (vs Meshy re-rolling everything)
+  const canPartSwap =
+    points.length > 0 && /^\/(models|uploads|files)\//.test(modelUrl || '')
+  const partSwap = async () => {
+    if (!canPartSwap || swapBusy || busy) return
+    setSwapBusy(true)
+    setSwapMsg(null)
+    setSwapErr(null)
+    try {
+      const base = buildEditBase()
+      const res = await fetch('/api/edit/partswap', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          modelUrl,
+          point: base.point, // centroid of the selected points
+          instruction: base.instruction,
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`)
+      setSwapMsg(`Part “${data.swappedPart?.name}” regenerated${data.mock ? ' (mock)' : ''}`)
+      setLastEditPrompt(null)
+      swapModel(data.modelUrl) // clears the points; library refreshes below
+      setHistoryKey((k) => k + 1)
+    } catch (e) {
+      setSwapErr(e.message)
+    } finally {
+      setSwapBusy(false)
+    }
   }
 
   // upload = preview only (view-only object URL); History gets nothing until the
@@ -404,6 +441,16 @@ export default function ForgePage() {
           >
             Compare spatial vs plain
           </button>
+          <button
+            className="ghost-button partswap-btn"
+            onClick={partSwap}
+            disabled={!canPartSwap || swapBusy || busy}
+            title="Hyper3D pipeline: segment the model, regenerate ONLY the pointed part, keep the rest byte-identical"
+          >
+            {swapBusy ? 'Swapping part…' : '⚡ Regenerate part (Hyper3D)'}
+          </button>
+          {swapMsg && <span className="hint partswap-note">✓ {swapMsg}</span>}
+          {swapErr && <span className="url-error">{swapErr}</span>}
           {editTask.generating && (
             <div className="progress" aria-hidden="true">
               <div

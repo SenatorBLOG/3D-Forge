@@ -18,13 +18,32 @@ test('segmentModel returns parts with bbox + center, and caches', async () => {
     assert.equal(Number.isInteger(p.index), true)
     assert.equal(p.bbox.min.length, 3)
     assert.equal(p.center.length, 3)
-    // center lies within its own bbox
+    // center is in the client's CENTERED space — it lies within hitBox
     for (let a = 0; a < 3; a++) {
-      assert.ok(p.center[a] >= p.bbox.min[a] - 1e-6 && p.center[a] <= p.bbox.max[a] + 1e-6)
+      assert.ok(p.center[a] >= p.hitBox.min[a] - 1e-6 && p.center[a] <= p.hitBox.max[a] + 1e-6)
     }
   }
   const second = await segmentModel(HAND)
   assert.equal(second.cached, true) // served from cache
+})
+
+test('hit-testing happens in the client viewer space (recentered)', async () => {
+  // the turret is deliberately off-center in Y; the viewer recenters it before
+  // the user clicks, so hitBoxes must straddle the origin overall
+  const { parts } = await segmentModel('/models/mech_turret.glb')
+  assert.ok(parts.length >= 2, 'turret segments into multiple parts')
+  const lo = Math.min(...parts.map((p) => p.hitBox.min[1]))
+  const hi = Math.max(...parts.map((p) => p.hitBox.max[1]))
+  assert.ok(lo < 0 && hi > 0, `recentered union must straddle y=0 (got ${lo}..${hi})`)
+
+  // a point AT a part's centered center resolves to that part
+  const target = parts[parts.length - 1]
+  const picked = hitTestPart(parts, {
+    x: target.center[0],
+    y: target.center[1],
+    z: target.center[2],
+  })
+  assert.equal(picked.id, target.id)
 })
 
 test('segmentModel rejects a non-local / unknown model', async () => {
@@ -60,7 +79,28 @@ test('partSwap returns a new, valid GLB with the region replaced', async () => {
   const out = readFileSync(resolveLocalModel(modelUrl))
   assert.equal(out.subarray(0, 4).toString('ascii'), 'glTF') // valid binary GLB
   assert.notEqual(out.length, orig.length) // geometry changed
-  // and it re-parses (the swap mesh exists)
+  // and it re-parses (the swap landed: node-level = a new mesh, primitive-level
+  // = a retargeted primitive — both carry the region-swap material/mesh name)
   const doc = await new NodeIO().readBinary(new Uint8Array(out))
-  assert.ok(doc.getRoot().listMeshes().some((m) => m.getName() === 'region-swap'))
+  assert.ok(
+    doc.getRoot().listMeshes().some((m) => m.getName() === 'region-swap') ||
+      doc.getRoot().listMaterials().some((m) => m.getName() === 'region-swap'),
+  )
+})
+
+test('a multi-primitive mesh segments per primitive and swaps only that piece', async () => {
+  const { parts } = await segmentModel('/models/runed_sword.glb')
+  // the sword is one mesh with 4 primitives (blade/guard/grip/pommel)
+  assert.ok(parts.length >= 3, `expected primitive-level parts, got ${parts.length}`)
+  assert.ok(parts.every((p) => Number.isInteger(p.primIndex)))
+
+  const blade = parts[0]
+  const { modelUrl } = await partSwap('/models/runed_sword.glb', blade)
+  const out = readFileSync(resolveLocalModel(modelUrl))
+  const doc = await new NodeIO().readBinary(new Uint8Array(out))
+  // still ONE mesh with the SAME number of primitives — only one was retargeted
+  const meshes = doc.getRoot().listMeshes()
+  assert.equal(meshes.length, 1)
+  assert.equal(meshes[0].listPrimitives().length, parts.length)
+  assert.ok(doc.getRoot().listMaterials().some((m) => m.getName() === 'region-swap'))
 })
