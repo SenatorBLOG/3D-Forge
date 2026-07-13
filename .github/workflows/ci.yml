@@ -1,0 +1,43 @@
+# Build + test gate: a PR whose client doesn't compile or whose server tests
+# fail cannot be merged green. Added after main was broken four times by
+# hand-merges (twice invisible to server tests — only the client build or the
+# server boot caught it).
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            client/package-lock.json
+            server/package-lock.json
+
+      - name: Install client deps
+        run: npm --prefix client ci
+
+      - name: Install server deps
+        run: npm --prefix server ci
+
+      - name: Client build (catches JSX/parse breakage)
+        run: npm --prefix client run build
+
+      - name: Server syntax check (catches boot-only breakage)
+        run: |
+          for f in $(find server/src -name '*.js'); do node --check "$f"; done
+
+      - name: Server tests
+        run: npm --prefix server test
+        env:
+          NODE_TEST_CONTEXT: ci
