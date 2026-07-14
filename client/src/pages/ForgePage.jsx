@@ -7,6 +7,7 @@ import CompareView from '../components/CompareView.jsx'
 import PublishPanel from '../components/PublishPanel.jsx'
 import ModelVersionStrip from '../components/ModelVersionStrip.jsx'
 import PhotoEditPanel from '../components/PhotoEditPanel.jsx'
+import RecolorPanel from '../components/RecolorPanel.jsx'
 import MicButton from '../components/MicButton.jsx'
 import useGenerationTask from '../hooks/useGenerationTask.js'
 
@@ -515,6 +516,17 @@ export default function ForgePage() {
         )}
         {modelUrl && (
           <PhotoEditPanel
+            modelUrl={modelUrl}
+            onModelReady3D={(url, label) => {
+              setBaseModelPrompt(label)
+              setModelKind(null)
+              setLastEditPrompt(null)
+              swapModel(url, { version: { as: 'child', label } })
+            }}
+          />
+        )}
+        {modelUrl && (
+          <RecolorPanel
             modelUrl={modelUrl}
             onModelReady3D={(url, label) => {
               setBaseModelPrompt(label)

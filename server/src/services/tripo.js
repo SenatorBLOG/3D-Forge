@@ -126,6 +126,32 @@ export async function createTripoMultiviewTask(views) {
   return data.task_id
 }
 
+/**
+ * Retexture an EXISTING model without changing its geometry (P2 — surface edits:
+ * recolor / new material by prompt). Uploads the model bytes, then creates a
+ * `texture_model` task with the prompt. The mesh is untouched, only the texture
+ * changes — so nothing drifts. Mock-safe (no key → mock model, free).
+ *
+ * NOTE: mapped from the public docs; not yet exercised against the live API —
+ * field names (task type, model token) may need a tweak once a key is set.
+ */
+export async function createTripoRetextureTask({ bytes, mime = 'model/gltf-binary', prompt }) {
+  if (isTripoMock()) return createMockTask('retexture')
+  enforceDailyLimit()
+  const form = new FormData()
+  form.append('file', new Blob([bytes], { type: mime }), 'model.glb')
+  const uploaded = await tripoFetch('/upload', { method: 'POST', body: form })
+  const data = await tripoFetch('/task', {
+    method: 'POST',
+    body: JSON.stringify({
+      type: 'texture_model',
+      original_model: { type: 'glb', file_token: uploaded.image_token },
+      texture_prompt: prompt || '',
+    }),
+  })
+  return data.task_id
+}
+
 // Tripo → our unified (Meshy-shaped) task object, so the existing polling
 // route and History flow work unchanged regardless of engine.
 const STATUS_MAP = {
