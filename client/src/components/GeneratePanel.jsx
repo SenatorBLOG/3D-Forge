@@ -69,7 +69,8 @@ export default function GeneratePanel({
   // runs in mock mode and is free; the server stays the source of truth on cost)
   const estCost =
     engine === 'meshy' && costs
-      ? (costs.tiers?.[aiModel] ?? costs.tiers?.['meshy-5'] ?? 0) + (textured ? costs.refine || 0 : 0)
+      ? (costs.tiers?.[aiModel] ?? costs.tiers?.['meshy-5'] ?? 0) +
+        (textured && mode === 'text' ? costs.refine || 0 : 0)
       : null
 
   const submittedRef = useRef(null)
@@ -93,8 +94,9 @@ export default function GeneratePanel({
   useEffect(() => {
     if (didAutostart.current || !autostart) return
     didAutostart.current = true
-    // texturing is a Meshy-only second stage; Tripo builds it in one step
-    const refine = engine === 'meshy' && textured
+    // texturing is a Meshy TEXT-mode second stage; image→3D already returns a
+    // PBR-textured model (and Tripo builds it in one step), so refine only here
+    const refine = engine === 'meshy' && textured && initialMode !== 'image'
     if (initialMode === 'image' && initialImageId) {
       submittedRef.current = 'image → 3D'
       kindRef.current = 'image'
@@ -165,7 +167,9 @@ export default function GeneratePanel({
   const appendSpeech = (text) =>
     setPrompt((prev) => (prev.trim() ? `${prev.trim()} ${text}` : text))
 
-  // texturing only applies to Meshy (Tripo outputs a finished textured model)
+  // texturing (refine) is a Meshy TEXT-mode stage only. image→3D already comes
+  // back PBR-textured, and its task can't be refined via the text endpoint
+  // (Meshy 400 "Preview task not found"); Tripo textures in one step too.
   const wantsRefine = engine === 'meshy' && textured
   const startText = () => {
     const trimmed = prompt.trim()
@@ -185,7 +189,7 @@ export default function GeneratePanel({
     start(
       '/api/generate',
       { mode: 'image', imageId: image.id, model: aiModel, engine },
-      { refine: wantsRefine, model: aiModel, prompt: 'image → 3D' },
+      { refine: false, model: aiModel, prompt: 'image → 3D' }, // image→3D is already textured
     )
   }
 
@@ -490,20 +494,22 @@ export default function GeneratePanel({
           </button>
         </div>
       )}
-      <label className={`toggle ${engine === 'tripo' ? 'toggle--disabled' : ''}`}>
+      <label className={`toggle ${engine !== 'meshy' || mode === 'image' ? 'toggle--disabled' : ''}`}>
         <input
           type="checkbox"
-          checked={engine === 'meshy' && textured}
+          checked={engine === 'meshy' && mode === 'text' && textured}
           onChange={(e) => setTextured(e.target.checked)}
-          disabled={busy || engine === 'tripo'}
+          disabled={busy || engine !== 'meshy' || mode === 'image'}
         />
         Add textures (color){' '}
         <span className="hint">
           {engine === 'tripo'
             ? '(Tripo builds a textured model in one step)'
-            : textured
-              ? `(+${costs?.refine ?? 20} tokens, colored)`
-              : '(off — gray preview)'}
+            : mode === 'image'
+              ? '(image→3D is already textured)'
+              : textured
+                ? `(+${costs?.refine ?? 20} tokens, colored)`
+                : '(off — gray preview)'}
         </span>
       </label>
       <button
