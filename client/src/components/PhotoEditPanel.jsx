@@ -1,27 +1,46 @@
 import { useState } from 'react'
 import { getThumbnail } from '../lib/thumbnailer.js'
+import MicButton from './MicButton.jsx'
 
 /**
  * Photo-based partial edit (plan: docs/plans/partial-3d-edit.md).
- * P1a — capture the currently-loaded 3D model as an image (render → upload) so it
- * can enter the Gemini edit loop. Editing the photo (P1b) and rebuilding it in 3D
- * (P1c) land next; the original model is never lost (it stays a version).
+ * P1a — capture the loaded 3D model as an image (render → upload).
+ * P1b — edit that photo with a prompt via Gemini (new version each time, branchable,
+ *        re-roll / add-prompt like the photo loop). The original model is never lost.
+ * P1c (next) — rebuild the chosen photo back into 3D.
  */
 export default function PhotoEditPanel({ modelUrl }) {
   const [capturing, setCapturing] = useState(false)
-  const [image, setImage] = useState(null) // stored render: { id, url, ... }
   const [error, setError] = useState(null)
+  // the edit-version family of the captured render (same shape as Image Lab)
+  const [versions, setVersions] = useState([]) // [{ id, url, prompt, version, mime }]
+  const [currentId, setCurrentId] = useState(null)
+  const [stub, setStub] = useState(false)
+  const [instruction, setInstruction] = useState('')
+  const [editing, setEditing] = useState(false)
+  const [editError, setEditError] = useState(null)
+  const [lastEdit, setLastEdit] = useState(null) // { sourceId, instruction } for re-roll
+
+  const currentImage = versions.find((v) => v.id === currentId) || null
+
+  const loadVersions = async (id) => {
+    const res = await fetch(`/api/images/${encodeURIComponent(id)}/versions`)
+    const data = await res.json()
+    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`)
+    setVersions(data.versions)
+    setCurrentId(id)
+  }
 
   const capture = async () => {
     if (!modelUrl || capturing) return
     setCapturing(true)
     setError(null)
+    setEditError(null)
+    setLastEdit(null)
     try {
-      // render the current model to a PNG (front view), reusing the thumbnailer
       const { shaded } = await getThumbnail(modelUrl)
       if (!shaded) throw new Error('Could not render the model')
       const blob = await (await fetch(shaded)).blob()
-      // store it as an image so the Gemini edit loop (P1b) can work on its bytes
       const res = await fetch('/api/images', {
         method: 'POST',
         headers: { 'Content-Type': blob.type || 'image/png' },
@@ -29,13 +48,50 @@ export default function PhotoEditPanel({ modelUrl }) {
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`)
-      setImage(data.image)
+      setStub(false)
+      await loadVersions(data.image.id) // starts a fresh edit family at V1
     } catch (e) {
       setError(e.message)
     } finally {
       setCapturing(false)
     }
   }
+
+  // Apply an instruction to the CURRENT photo → a new version (edits branch off
+  // whatever version is shown, so nothing is overwritten). Real Gemini when the
+  // key is set; a labelled SVG stub otherwise, so the loop still demos key-free.
+  const runEdit = async (sourceId, text) => {
+    const instr = text.trim()
+    if (!instr || !sourceId) return
+    setEditing(true)
+    setEditError(null)
+    try {
+      const res = await fetch(`/api/images/${encodeURIComponent(sourceId)}/edit`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ instruction: instr }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`)
+      setStub(!!data.stub)
+      setLastEdit({ sourceId, instruction: instr })
+      await loadVersions(data.image.id)
+    } catch (e) {
+      setEditError(e.message)
+    } finally {
+      setEditing(false)
+    }
+  }
+
+  const applyEdit = () => {
+    runEdit(currentId, instruction)
+    setInstruction('')
+  }
+  // re-roll: run the same last instruction on the same source again → a sibling variant
+  const regenerate = () => lastEdit && runEdit(lastEdit.sourceId, lastEdit.instruction)
+
+  const appendSpeech = (t) =>
+    setInstruction((prev) => (prev.trim() ? `${prev.trim()} ${t}` : t))
 
   return (
     <section className="panel photo-edit">
@@ -47,21 +103,75 @@ export default function PhotoEditPanel({ modelUrl }) {
         Turn this model into a photo, change it with a prompt, then rebuild it in 3D — the
         original stays as a version, so an edit you dislike never loses it.
       </p>
-      {!image ? (
+
+      {versions.length === 0 ? (
         <button className="submit" onClick={capture} disabled={!modelUrl || capturing}>
           {capturing ? 'Capturing…' : '📷 Capture this model'}
         </button>
       ) : (
-        <div className="field">
-          <label>Captured photo</label>
-          <div className="image-drop has-image">
-            <img className="image-drop-preview" src={image.url} alt="captured model" />
+        <>
+          <div className="image-lab">
+            <div className="image-lab-main">
+              <div className="image-drop has-image">
+                <img
+                  className="image-drop-preview"
+                  src={currentImage?.url}
+                  alt={currentImage?.prompt || 'model photo'}
+                />
+              </div>
+              {stub && (
+                <span className="hint">
+                  preview placeholder — set GEMINI_API_KEY on the server for real edits
+                </span>
+              )}
+              <div className="input-with-mic">
+                <textarea
+                  className="point-prompt"
+                  rows={2}
+                  value={instruction}
+                  onChange={(e) => setInstruction(e.target.value)}
+                  placeholder={`Change V${currentImage?.version} — e.g. "add horns to the head"`}
+                  disabled={editing}
+                />
+                <MicButton onTranscript={appendSpeech} disabled={editing} />
+              </div>
+              <button
+                className="submit"
+                onClick={applyEdit}
+                disabled={editing || !instruction.trim()}
+              >
+                {editing ? 'Editing…' : 'Apply edit → new version'}
+              </button>
+              {lastEdit && !editing && (
+                <button className="ghost-button" onClick={regenerate} title="Another take on the last change">
+                  ↻ Regenerate last change
+                </button>
+              )}
+              {editError && <span className="url-error">{editError}</span>}
+            </div>
+            <div className="image-lab-versions">
+              {versions.map((v) => (
+                <button
+                  key={v.id}
+                  type="button"
+                  className={`version-card ${v.id === currentId ? 'active' : ''}`}
+                  onClick={() => {
+                    setCurrentId(v.id)
+                    setStub((v.mime || '').includes('svg'))
+                    setEditError(null)
+                  }}
+                  title={v.prompt || `version ${v.version}`}
+                >
+                  <img src={v.url} alt={`V${v.version}`} />
+                  <span className="version-tag">V{v.version}</span>
+                </button>
+              ))}
+            </div>
           </div>
-          <span className="hint">Next: describe a change, then rebuild in 3D.</span>
-          <button className="link-button" onClick={() => setImage(null)}>
-            Recapture
+          <button className="link-button" onClick={capture} disabled={capturing}>
+            {capturing ? 'Capturing…' : '↺ Recapture from model'}
           </button>
-        </div>
+        </>
       )}
       {error && <span className="url-error">{error}</span>}
     </section>
