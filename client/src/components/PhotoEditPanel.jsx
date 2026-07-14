@@ -21,6 +21,8 @@ export default function PhotoEditPanel({ modelUrl, onModelReady3D }) {
   const [editing, setEditing] = useState(false)
   const [editError, setEditError] = useState(null)
   const [lastEdit, setLastEdit] = useState(null) // { sourceId, instruction } for re-roll
+  const [mvBusy, setMvBusy] = useState(false) // capture+upload phase of a multi-view rebuild
+  const [mvError, setMvError] = useState(null)
 
   const currentImage = versions.find((v) => v.id === currentId) || null
 
@@ -34,6 +36,7 @@ export default function PhotoEditPanel({ modelUrl, onModelReady3D }) {
     setLastEdit(null)
     setEditError(null)
     setError(null)
+    setMvError(null)
   }, [modelUrl])
 
   // P1c: rebuild the chosen photo into 3D. The result is handed up to the Forge,
@@ -43,12 +46,48 @@ export default function PhotoEditPanel({ modelUrl, onModelReady3D }) {
     onModelReady3D?.(url, currentImage?.prompt ? `Photo: ${currentImage.prompt}` : 'Photo edit'),
   )
   const rebuild3D = () => {
-    if (!currentId || gen3d.generating) return
+    if (!currentId || gen3d.generating || genMV.generating) return
     gen3d.start(
       '/api/generate',
       { mode: 'image', imageId: currentId, model: 'meshy-5', engine: 'meshy' },
       { refine: false, model: 'meshy-5', prompt: 'photo edit' },
     )
+  }
+
+  // P1.5 fidelity path: rebuild from MULTIPLE views — the edited front (this
+  // version) plus the ORIGINAL model's side/back as body anchors → Tripo
+  // multiview → a model that keeps the original body much better than one view.
+  // Tripo-only; mock-safe (no key → mock model, free).
+  const genMV = useGenerationTask((url) =>
+    onModelReady3D?.(url, currentImage?.prompt ? `Multi-view: ${currentImage.prompt}` : 'Multi-view edit'),
+  )
+  const rebuildMultiview = async () => {
+    if (!currentId || mvBusy || gen3d.generating || genMV.generating) return
+    setMvBusy(true)
+    setMvError(null)
+    try {
+      // original model rendered from other angles (90°/180°) — consistent anchors
+      const { views } = await getThumbnail(modelUrl)
+      const anchors = (views || []).slice(0, 2) // side + back
+      if (!anchors.length) throw new Error('Could not render extra views')
+      const imageIds = [currentId] // edited front
+      for (const dataUrl of anchors) {
+        const blob = await (await fetch(dataUrl)).blob()
+        const res = await fetch('/api/images', {
+          method: 'POST',
+          headers: { 'Content-Type': blob.type || 'image/png' },
+          body: blob,
+        })
+        const data = await res.json()
+        if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`)
+        imageIds.push(data.image.id)
+      }
+      await genMV.start('/api/generate/multiview', { imageIds }, { prompt: 'multi-view' })
+    } catch (e) {
+      setMvError(e.message)
+    } finally {
+      setMvBusy(false)
+    }
   }
 
   const loadVersions = async (id) => {
@@ -194,6 +233,28 @@ export default function PhotoEditPanel({ modelUrl, onModelReady3D }) {
                 <span className="hint">mock mode — set MESHY_API_KEY for a real rebuild</span>
               )}
               {gen3d.error && <span className="url-error">{gen3d.error}</span>}
+
+              <button
+                className="ghost-button"
+                onClick={rebuildMultiview}
+                disabled={editing || mvBusy || gen3d.generating || genMV.generating}
+                title="Higher fidelity: rebuild from the edited front + the original side/back (Tripo multi-view), so the body is preserved better"
+              >
+                {mvBusy
+                  ? 'Preparing views…'
+                  : genMV.generating
+                    ? `Multi-view… ${genMV.task.progress}%`
+                    : '🧊×3 Multi-view rebuild (Tripo)'}
+              </button>
+              {genMV.generating && (
+                <div className="progress" aria-hidden="true">
+                  <div className="progress-fill" style={{ width: `${genMV.task.progress}%` }} />
+                </div>
+              )}
+              {genMV.generating && genMV.task.mock && (
+                <span className="hint">mock mode — set TRIPO_API_KEY for a real multi-view rebuild</span>
+              )}
+              {(mvError || genMV.error) && <span className="url-error">{mvError || genMV.error}</span>}
             </div>
             <div className="image-lab-versions">
               {versions.map((v) => (
