@@ -54,33 +54,41 @@ export default function PhotoEditPanel({ modelUrl, onModelReady3D }) {
     )
   }
 
-  // P1.5 fidelity path: rebuild from MULTIPLE views — the edited front (this
-  // version) plus the ORIGINAL model's side/back as body anchors → Tripo
-  // multiview → a model that keeps the original body much better than one view.
-  // Tripo-only; mock-safe (no key → mock model, free).
+  // P1.5 fidelity path: after you've confirmed a front edit, apply the SAME change
+  // to the model's side & back renders too — so all three views are consistently
+  // updated — then Tripo multiview reconstructs a model that keeps the original
+  // body. Tripo-only; mock-safe (no key → mock model, free).
   const genMV = useGenerationTask((url) =>
-    onModelReady3D?.(url, currentImage?.prompt ? `Multi-view: ${currentImage.prompt}` : 'Multi-view edit'),
+    onModelReady3D?.(url, lastEdit?.instruction ? `Multi-view: ${lastEdit.instruction}` : 'Multi-view edit'),
   )
   const rebuildMultiview = async () => {
-    if (!currentId || mvBusy || gen3d.generating || genMV.generating) return
+    if (!currentId || !lastEdit || mvBusy || gen3d.generating || genMV.generating) return
     setMvBusy(true)
     setMvError(null)
     try {
-      // original model rendered from other angles (90°/180°) — consistent anchors
+      // render the original model from the other angles (90°/180° = side/back)
       const { views } = await getThumbnail(modelUrl)
-      const anchors = (views || []).slice(0, 2) // side + back
-      if (!anchors.length) throw new Error('Could not render extra views')
-      const imageIds = [currentId] // edited front
-      for (const dataUrl of anchors) {
+      const extraViews = (views || []).slice(0, 2)
+      if (!extraViews.length) throw new Error('Could not render extra views')
+      const imageIds = [currentId] // the already-edited & confirmed front
+      // apply the SAME instruction to each extra view → consistently updated views
+      for (const dataUrl of extraViews) {
         const blob = await (await fetch(dataUrl)).blob()
-        const res = await fetch('/api/images', {
+        const up = await fetch('/api/images', {
           method: 'POST',
           headers: { 'Content-Type': blob.type || 'image/png' },
           body: blob,
         })
-        const data = await res.json()
-        if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`)
-        imageIds.push(data.image.id)
+        const upData = await up.json()
+        if (!up.ok) throw new Error(upData.error || `HTTP ${up.status}`)
+        const ed = await fetch(`/api/images/${encodeURIComponent(upData.image.id)}/edit`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ instruction: lastEdit.instruction }),
+        })
+        const edData = await ed.json()
+        if (!ed.ok) throw new Error(edData.error || `HTTP ${ed.status}`)
+        imageIds.push(edData.image.id)
       }
       await genMV.start('/api/generate/multiview', { imageIds }, { prompt: 'multi-view' })
     } catch (e) {
@@ -237,11 +245,15 @@ export default function PhotoEditPanel({ modelUrl, onModelReady3D }) {
               <button
                 className="ghost-button"
                 onClick={rebuildMultiview}
-                disabled={editing || mvBusy || gen3d.generating || genMV.generating}
-                title="Higher fidelity: rebuild from the edited front + the original side/back (Tripo multi-view), so the body is preserved better"
+                disabled={editing || mvBusy || gen3d.generating || genMV.generating || !lastEdit}
+                title={
+                  lastEdit
+                    ? 'Higher fidelity: apply your change to the side & back views too, then Tripo multi-view — keeps the original body better'
+                    : 'Make an edit first, then multi-view applies it to all sides'
+                }
               >
                 {mvBusy
-                  ? 'Preparing views…'
+                  ? 'Updating side & back…'
                   : genMV.generating
                     ? `Multi-view… ${genMV.task.progress}%`
                     : '🧊×3 Multi-view rebuild (Tripo)'}
