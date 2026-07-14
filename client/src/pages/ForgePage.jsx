@@ -513,7 +513,17 @@ export default function ForgePage() {
           )}
         </section>
         )}
-        {modelUrl && <PhotoEditPanel modelUrl={modelUrl} />}
+        {modelUrl && (
+          <PhotoEditPanel
+            modelUrl={modelUrl}
+            onModelReady3D={(url, label) => {
+              setBaseModelPrompt(label)
+              setModelKind(null)
+              setLastEditPrompt(null)
+              swapModel(url, { version: { as: 'child', label } })
+            }}
+          />
+        )}
       </aside>
 
       {/* CENTER — canvas, or the create-first surface when empty */}

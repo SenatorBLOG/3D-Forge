@@ -1,5 +1,6 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { getThumbnail } from '../lib/thumbnailer.js'
+import useGenerationTask from '../hooks/useGenerationTask.js'
 import MicButton from './MicButton.jsx'
 
 /**
@@ -9,7 +10,7 @@ import MicButton from './MicButton.jsx'
  *        re-roll / add-prompt like the photo loop). The original model is never lost.
  * P1c (next) — rebuild the chosen photo back into 3D.
  */
-export default function PhotoEditPanel({ modelUrl }) {
+export default function PhotoEditPanel({ modelUrl, onModelReady3D }) {
   const [capturing, setCapturing] = useState(false)
   const [error, setError] = useState(null)
   // the edit-version family of the captured render (same shape as Image Lab)
@@ -22,6 +23,33 @@ export default function PhotoEditPanel({ modelUrl }) {
   const [lastEdit, setLastEdit] = useState(null) // { sourceId, instruction } for re-roll
 
   const currentImage = versions.find((v) => v.id === currentId) || null
+
+  // each loaded model gets a fresh photo-edit session (incl. after a rebuild,
+  // which swaps in the new model) — the old model's captured photos don't linger
+  useEffect(() => {
+    setVersions([])
+    setCurrentId(null)
+    setInstruction('')
+    setStub(false)
+    setLastEdit(null)
+    setEditError(null)
+    setError(null)
+  }, [modelUrl])
+
+  // P1c: rebuild the chosen photo into 3D. The result is handed up to the Forge,
+  // which loads it as a NEW model version (a child of the current model) — the
+  // original is kept, so a rebuild you dislike never loses it.
+  const gen3d = useGenerationTask((url) =>
+    onModelReady3D?.(url, currentImage?.prompt ? `Photo: ${currentImage.prompt}` : 'Photo edit'),
+  )
+  const rebuild3D = () => {
+    if (!currentId || gen3d.generating) return
+    gen3d.start(
+      '/api/generate',
+      { mode: 'image', imageId: currentId, model: 'meshy-5', engine: 'meshy' },
+      { refine: false, model: 'meshy-5', prompt: 'photo edit' },
+    )
+  }
 
   const loadVersions = async (id) => {
     const res = await fetch(`/api/images/${encodeURIComponent(id)}/versions`)
@@ -148,6 +176,24 @@ export default function PhotoEditPanel({ modelUrl }) {
                 </button>
               )}
               {editError && <span className="url-error">{editError}</span>}
+
+              <button
+                className="submit gen-go"
+                onClick={rebuild3D}
+                disabled={editing || gen3d.generating}
+                title="Rebuild this photo into a new 3D model (kept as a new version)"
+              >
+                {gen3d.generating ? `Building 3D… ${gen3d.task.progress}%` : `🧊 Rebuild V${currentImage?.version} in 3D`}
+              </button>
+              {gen3d.generating && (
+                <div className="progress" aria-hidden="true">
+                  <div className="progress-fill" style={{ width: `${gen3d.task.progress}%` }} />
+                </div>
+              )}
+              {gen3d.generating && gen3d.task.mock && (
+                <span className="hint">mock mode — set MESHY_API_KEY for a real rebuild</span>
+              )}
+              {gen3d.error && <span className="url-error">{gen3d.error}</span>}
             </div>
             <div className="image-lab-versions">
               {versions.map((v) => (
