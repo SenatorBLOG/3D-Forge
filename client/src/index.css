@@ -531,6 +531,123 @@ body::before {
   box-shadow: 0 0 12px var(--forge-glow);
 }
 
+.viewer-brightness {
+  position: absolute;
+  bottom: 14px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 10px;
+  background: rgba(18, 21, 29, 0.72);
+  backdrop-filter: blur(6px);
+  border: 1px solid var(--line);
+  border-radius: 9px;
+}
+
+.viewer-brightness-icon {
+  font-size: 13px;
+  color: var(--text-dim);
+}
+
+.viewer-brightness input[type='range'] {
+  width: 110px;
+  accent-color: var(--forge);
+  cursor: pointer;
+}
+
+.viewer-brightness-reset {
+  border: none;
+  background: none;
+  color: var(--text-dim);
+  cursor: pointer;
+  font-size: 13px;
+  padding: 0 2px;
+  line-height: 1;
+}
+
+.viewer-brightness-reset:hover {
+  color: var(--forge);
+}
+
+/* ---- 3D model version strip (right edge of the viewer) ---- */
+
+.mversion-strip {
+  position: absolute;
+  top: 50%;
+  right: 12px;
+  transform: translateY(-50%);
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 80%;
+  overflow-y: auto;
+  padding: 8px 6px;
+  background: rgba(18, 21, 29, 0.72);
+  backdrop-filter: blur(6px);
+  border: 1px solid var(--line);
+  border-radius: 11px;
+}
+
+.mversion-title {
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--text-dim);
+  text-align: center;
+  margin-bottom: 2px;
+}
+
+.mversion-card {
+  position: relative;
+  width: 60px;
+  height: 60px;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel-2);
+  cursor: pointer;
+  overflow: hidden;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.mversion-card img,
+.mversion-ph {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.mversion-ph {
+  background: linear-gradient(135deg, #1a1c22, #2b2f3a);
+}
+
+.mversion-card:hover {
+  border-color: var(--forge);
+}
+
+.mversion-card.active {
+  border-color: var(--forge);
+  box-shadow: 0 0 0 2px var(--forge-glow);
+}
+
+.mversion-tag {
+  position: absolute;
+  bottom: 2px;
+  right: 2px;
+  padding: 0 4px;
+  border-radius: 4px;
+  background: rgba(11, 13, 18, 0.8);
+  color: var(--text);
+  font-size: 10px;
+  font-family: var(--font-ui);
+  line-height: 14px;
+}
+
 .viewer-overlay {
   position: absolute;
   inset: 0;

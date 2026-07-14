@@ -5,6 +5,7 @@ import GeneratePanel from '../components/GeneratePanel.jsx'
 import LibraryPanel from '../components/LibraryPanel.jsx'
 import CompareView from '../components/CompareView.jsx'
 import PublishPanel from '../components/PublishPanel.jsx'
+import ModelVersionStrip from '../components/ModelVersionStrip.jsx'
 import MicButton from '../components/MicButton.jsx'
 import useGenerationTask from '../hooks/useGenerationTask.js'
 
@@ -52,8 +53,19 @@ export default function ForgePage() {
   const [swapBusy, setSwapBusy] = useState(false)
   const [swapMsg, setSwapMsg] = useState(null)
   const [swapErr, setSwapErr] = useState(null)
+  // 3D model version history: every generate/edit/part-swap appends a version
+  // (branch by parentId), so an edit you dislike never loses the model you kept.
+  const [modelVersions, setModelVersions] = useState([]) // [{ id, modelUrl, label, parentId, kind }]
+  const [currentVersionId, setCurrentVersionId] = useState(null)
+  const versionSeq = useRef(0)
+  const currentVersionIdRef = useRef(null)
+  currentVersionIdRef.current = currentVersionId
 
-  const swapModel = (url, { isObjectUrl = false } = {}) => {
+  // switch the on-screen model, and optionally record it as a version:
+  //   version:{ as:'root' }  — start a fresh chain (a loaded/generated base)
+  //   version:{ as:'child' } — append a child of the current version (an edit)
+  //   (omitted)              — just switch (used when clicking a version card)
+  const swapModel = (url, { isObjectUrl = false, version } = {}) => {
     const stale = objectUrlRef.current
     if (stale && stale !== url) {
       // defer revocation: the old viewer must unmount first (its `disposed`
@@ -71,10 +83,33 @@ export default function ForgePage() {
     setModelStatus('loading')
     setModelUrl(url)
     setLoadKey((k) => k + 1)
+
+    if (version?.as === 'root') {
+      const id = `v${++versionSeq.current}`
+      setModelVersions([{ id, modelUrl: url, label: version.label || 'Model', parentId: null, kind: version.kind }])
+      setCurrentVersionId(id)
+    } else if (version?.as === 'child') {
+      const id = `v${++versionSeq.current}`
+      const parentId = currentVersionIdRef.current
+      setModelVersions((prev) => [
+        ...prev,
+        { id, modelUrl: url, label: version.label || 'Edit', parentId, kind: version.kind },
+      ])
+      setCurrentVersionId(id)
+    }
+  }
+
+  // click a version card → load that model back without disturbing the others
+  const loadVersion = (v) => {
+    if (v.id === currentVersionIdRef.current) return
+    setLastEditPrompt(null)
+    setCurrentVersionId(v.id)
+    swapModel(v.modelUrl) // no version option → history untouched
   }
 
   const editTask = useGenerationTask((url) => {
-    swapModel(url) // clears points + selection
+    // an edit result is a child of whatever version is currently loaded (branch)
+    swapModel(url, { version: { as: 'child', label: pendingEditPromptRef.current || 'Spatial edit' } })
     setBaseModelPrompt(pendingEditPromptRef.current)
   })
 
@@ -186,7 +221,9 @@ export default function ForgePage() {
       if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`)
       setSwapMsg(`Part “${data.swappedPart?.name}” regenerated${data.mock ? ' (mock)' : ''}`)
       setLastEditPrompt(null)
-      swapModel(data.modelUrl) // clears the points; library refreshes below
+      swapModel(data.modelUrl, {
+        version: { as: 'child', label: `Part: ${data.swappedPart?.name || 'region'}` },
+      })
       setHistoryKey((k) => k + 1)
     } catch (e) {
       setSwapErr(e.message)
@@ -221,7 +258,7 @@ export default function ForgePage() {
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`)
-      swapModel(data.url) // switch to the stored URL + clear pendingFile
+      swapModel(data.url, { version: { as: 'root', label: name || 'Upload' } })
       setHistoryKey((k) => k + 1) // refresh History to show the new card
     } catch (err) {
       setModelError(`Couldn't save the model: ${err.message}`)
@@ -242,7 +279,7 @@ export default function ForgePage() {
     setBaseModelPrompt(null)
     setModelKind(null)
     setLastEditPrompt(null)
-    swapModel(url)
+    swapModel(url, { version: { as: 'root', label: 'Loaded model' } })
   }
 
   // load the bundled demo model on demand (no longer auto-loaded)
@@ -250,7 +287,7 @@ export default function ForgePage() {
     setBaseModelPrompt(null)
     setModelKind(null)
     setLastEditPrompt(null)
-    swapModel(SAMPLE_MODEL_URL)
+    swapModel(SAMPLE_MODEL_URL, { version: { as: 'root', label: 'Sample model' } })
   }
 
   // return the canvas to its empty create-first state
@@ -270,6 +307,8 @@ export default function ForgePage() {
     setModelStatus('idle')
     setModelUrl(null)
     setLoadKey((k) => k + 1)
+    setModelVersions([])
+    setCurrentVersionId(null)
   }
 
   return (
@@ -289,7 +328,7 @@ export default function ForgePage() {
             setBaseModelPrompt(prompt)
             setModelKind(kind || null)
             setLastEditPrompt(null)
-            swapModel(url)
+            swapModel(url, { version: { as: 'root', label: prompt || 'Generated', kind } })
           }}
         />
         <section className="panel">
@@ -502,6 +541,11 @@ export default function ForgePage() {
             {modelStatus === 'ready' && points.length === 0 && (
               <div className="viewer-hint">✦ Spatial edit — click any part to reshape it</div>
             )}
+            <ModelVersionStrip
+              versions={modelVersions}
+              currentId={currentVersionId}
+              onSelect={loadVersion}
+            />
           </>
         ) : busy ? (
           <div className="forge-empty">
@@ -542,7 +586,7 @@ export default function ForgePage() {
             // library entries label image runs as "image → 3D" — recover the kind
             setModelKind(entry.prompt === 'image → 3D' ? 'image' : entry.prompt ? 'text' : null)
             setLastEditPrompt(null)
-            swapModel(entry.modelUrl)
+            swapModel(entry.modelUrl, { version: { as: 'root', label: entry.prompt || 'Library model' } })
           }}
         />
       </aside>
