@@ -6,6 +6,7 @@ import LibraryPanel from '../components/LibraryPanel.jsx'
 import CompareView from '../components/CompareView.jsx'
 import PublishPanel from '../components/PublishPanel.jsx'
 import ModelVersionStrip from '../components/ModelVersionStrip.jsx'
+import PhotoEditPanel from '../components/PhotoEditPanel.jsx'
 import MicButton from '../components/MicButton.jsx'
 import useGenerationTask from '../hooks/useGenerationTask.js'
 
@@ -512,6 +513,7 @@ export default function ForgePage() {
           )}
         </section>
         )}
+        {modelUrl && <PhotoEditPanel modelUrl={modelUrl} />}
       </aside>
 
       {/* CENTER — canvas, or the create-first surface when empty */}
