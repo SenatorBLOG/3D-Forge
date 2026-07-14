@@ -72,5 +72,10 @@ version cards shipped in F0.
   segmentation + retexture.
 
 ## Status
-- Prereq done: **F0** (viewer brightness + 3D version cards) — PR #88.
-- Next: **P1a**.
+- **F0** (brightness + 3D version cards) — done, PR #88.
+- **P1 (a–d) + P1.5** — done, PR #89.
+- **P2** (recolor/retexture, Tripo, mock-first) — done.
+- **P3** (part buttons + hover-highlight + explode; Tripo segment written doc-based,
+  UI runs on the geometric segmentation key-free) — done.
+- **Next:** enable TRIPO_API_KEY → verify/adjust the doc-based Tripo schemas
+  (multiview, texture_model, segmentation) on a real call. Then P4/P5/P6.

@@ -8,6 +8,7 @@ import PublishPanel from '../components/PublishPanel.jsx'
 import ModelVersionStrip from '../components/ModelVersionStrip.jsx'
 import PhotoEditPanel from '../components/PhotoEditPanel.jsx'
 import RecolorPanel from '../components/RecolorPanel.jsx'
+import PartButtons from '../components/PartButtons.jsx'
 import MicButton from '../components/MicButton.jsx'
 import useGenerationTask from '../hooks/useGenerationTask.js'
 
@@ -55,6 +56,8 @@ export default function ForgePage() {
   const [swapBusy, setSwapBusy] = useState(false)
   const [swapMsg, setSwapMsg] = useState(null)
   const [swapErr, setSwapErr] = useState(null)
+  // P3: bbox of the part hovered in the part-buttons row, highlighted in the viewer
+  const [highlightBox, setHighlightBox] = useState(null)
   // 3D model version history: every generate/edit/part-swap appends a version
   // (branch by parentId), so an edit you dislike never loses the model you kept.
   const [modelVersions, setModelVersions] = useState([]) // [{ id, modelUrl, label, parentId, kind }]
@@ -225,6 +228,33 @@ export default function ForgePage() {
       setLastEditPrompt(null)
       swapModel(data.modelUrl, {
         version: { as: 'child', label: `Part: ${data.swappedPart?.name || 'region'}` },
+      })
+      setHistoryKey((k) => k + 1)
+    } catch (e) {
+      setSwapErr(e.message)
+    } finally {
+      setSwapBusy(false)
+    }
+  }
+
+  // P3: regenerate a single part chosen from the part-buttons row (by id)
+  const partSwapById = async (part) => {
+    if (!part?.id || swapBusy || busy) return
+    setSwapBusy(true)
+    setSwapMsg(null)
+    setSwapErr(null)
+    setHighlightBox(null)
+    try {
+      const res = await fetch('/api/edit/partswap', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ modelUrl, partId: part.id }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`)
+      setSwapMsg(`Part “${data.swappedPart?.name}” regenerated${data.mock ? ' (mock)' : ''}`)
+      swapModel(data.modelUrl, {
+        version: { as: 'child', label: `Part: ${data.swappedPart?.name || part.name}` },
       })
       setHistoryKey((k) => k + 1)
     } catch (e) {
@@ -561,6 +591,7 @@ export default function ForgePage() {
                 setModelError(message)
                 setModelStatus('error')
               }}
+              highlightBox={highlightBox}
             />
             {modelStatus === 'ready' && points.length === 0 && (
               <div className="viewer-hint">✦ Spatial edit — click any part to reshape it</div>
@@ -570,6 +601,14 @@ export default function ForgePage() {
               currentId={currentVersionId}
               onSelect={loadVersion}
             />
+            {modelStatus === 'ready' && (
+              <PartButtons
+                modelUrl={modelUrl}
+                busy={swapBusy || busy}
+                onHoverPart={setHighlightBox}
+                onPickPart={partSwapById}
+              />
+            )}
           </>
         ) : busy ? (
           <div className="forge-empty">

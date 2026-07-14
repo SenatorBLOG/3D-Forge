@@ -37,6 +37,7 @@ export default function ModelViewer({
   onPromptChange,
   onLoaded,
   onError,
+  highlightBox = null,
   showcase = false,
 }) {
   const containerRef = useRef(null)
@@ -54,6 +55,8 @@ export default function ModelViewer({
   const [brightness, setBrightness] = useState(1)
   const brightnessRef = useRef(1)
   brightnessRef.current = brightness
+  // "explode" the parts apart to reveal structure (Tripo-style), toolbar toggle
+  const [exploded, setExploded] = useState(false)
   // display mode + mesh stats for the viewer toolbar/badge
   const [mode, setMode] = useState('shaded') // shaded | solid | wireframe
   const [stats, setStats] = useState(null) // { faces, vertices }
@@ -168,6 +171,37 @@ export default function ModelViewer({
     }
 
     let homePosition = null
+    // model center (in the GLB's own coords) — part bboxes/segments are in that
+    // space, but the model is shifted by -center for display, so highlights/explode
+    // apply the same shift
+    const modelCenter = new THREE.Vector3()
+    let highlightHelper = null
+    const explodeParts = [] // { mesh, origPos:Vector3, dir:Vector3 }
+
+    // draw a wireframe box over a part's bbox (from segmentation), or clear it
+    const setHighlight = (box) => {
+      if (highlightHelper) {
+        scene.remove(highlightHelper)
+        highlightHelper.geometry?.dispose()
+        highlightHelper.material?.dispose()
+        highlightHelper = null
+      }
+      if (!box?.min || !box?.max) return
+      const b3 = new THREE.Box3(
+        new THREE.Vector3(box.min[0], box.min[1], box.min[2]).sub(modelCenter),
+        new THREE.Vector3(box.max[0], box.max[1], box.max[2]).sub(modelCenter),
+      )
+      highlightHelper = new THREE.Box3Helper(b3, MARKER_COLOR)
+      scene.add(highlightHelper)
+    }
+
+    // push each mesh outward from the model center to reveal the parts, or restore
+    const setExploded = (on) => {
+      for (const p of explodeParts) {
+        p.mesh.position.copy(on ? p.origPos.clone().addScaledVector(p.dir, 0.6) : p.origPos)
+      }
+    }
+
     apiRef.current = {
       controls,
       syncMarkers,
@@ -182,6 +216,8 @@ export default function ModelViewer({
       setExposure: (mult) => {
         renderer.toneMappingExposure = BASE_EXPOSURE * mult
       },
+      setHighlight,
+      setExploded,
     }
 
     let model = null
@@ -198,6 +234,16 @@ export default function ModelViewer({
         const center = box.getCenter(new THREE.Vector3())
         const size = box.getSize(new THREE.Vector3()).length()
         model.position.sub(center)
+        modelCenter.copy(center)
+        // record each mesh's outward direction (from center) for the explode toggle
+        model.updateWorldMatrix(true, true)
+        model.traverse((o) => {
+          if (!o.isMesh) return
+          const c = new THREE.Box3().setFromObject(o).getCenter(new THREE.Vector3())
+          const dir =
+            c.lengthSq() > 1e-6 ? c.clone().normalize().multiplyScalar(size * 0.5) : new THREE.Vector3()
+          explodeParts.push({ mesh: o, origPos: o.position.clone(), dir })
+        })
         camera.position.set(size * 0.7, size * 0.5, size * 0.9)
         camera.near = size / 100
         camera.far = size * 10
@@ -306,6 +352,10 @@ export default function ModelViewer({
       renderer.domElement.removeEventListener('pointerup', onPointerUp)
       controls.removeEventListener('change', updateLabels)
       controls.dispose()
+      if (highlightHelper) {
+        highlightHelper.geometry?.dispose()
+        highlightHelper.material?.dispose()
+      }
       markersGroup.clear()
       markerGeom.dispose()
       markerMat.dispose()
@@ -339,6 +389,14 @@ export default function ModelViewer({
   useEffect(() => {
     apiRef.current.setExposure?.(brightness)
   }, [brightness])
+
+  // highlight the hovered part's bbox, and reflect the explode toggle
+  useEffect(() => {
+    apiRef.current.setHighlight?.(highlightBox)
+  }, [highlightBox])
+  useEffect(() => {
+    apiRef.current.setExploded?.(exploded)
+  }, [exploded])
 
   // focus the inline editor when it opens
   useEffect(() => {
@@ -377,6 +435,14 @@ export default function ModelViewer({
               {label}
             </button>
           ))}
+          <button
+            type="button"
+            className={exploded ? 'on' : ''}
+            onClick={() => setExploded((v) => !v)}
+            title="Explode the parts apart to reveal structure"
+          >
+            Explode
+          </button>
         </div>
       )}
       {!showcase && stats && (
