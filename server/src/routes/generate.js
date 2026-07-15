@@ -1,6 +1,7 @@
 import { Router } from 'express'
 import { createRefineTask, createImageTask, isMockMode } from '../services/meshy.js'
 import { resolveEngine, engineIsMock, startGeneration, getAnyTask } from '../services/engines.js'
+import { createTripoMultiviewTask, isTripoMock } from '../services/tripo.js'
 import { archiveModelUrl } from '../services/modelArchive.js'
 import { dbReady } from '../db.js'
 import GeneratedModel from '../models/GeneratedModel.js'
@@ -279,6 +280,52 @@ router.post('/refine', optionalAuth, async (req, res) => {
     mock: isMockMode(),
     cost: generationCost({ kind: 'refine', aiModel, mock: isMockMode() }),
   })
+})
+
+// POST /api/generate/multiview — P1.5 fidelity path: 2-4 views of the SAME object
+// (edited front + original side/back) reconstruct one model that keeps the body.
+// Tripo-only (its multiview_to_model); mock-safe (no key → mock model, free).
+router.post('/multiview', optionalAuth, async (req, res) => {
+  const raw = req.body?.imageIds
+  const imageIds = Array.isArray(raw) ? raw.filter((x) => typeof x === 'string') : []
+  if (imageIds.length < 2 || imageIds.length > 4 || imageIds.length !== raw?.length) {
+    return res.status(400).json({ error: 'imageIds must be 2-4 view image ids' })
+  }
+  const images = await Promise.all(imageIds.map((id) => getImage(id)))
+  const missing = imageIds.filter((_, i) => !images[i])
+  if (missing.length) return res.status(404).json({ error: 'Unknown imageId(s)', imageIds: missing })
+
+  const mock = isTripoMock()
+  // cost gating (real Tripo only — mock stays free/ungated), same pattern as POST /
+  const charge = await chargeGeneration(req, { kind: 'preview', aiModel: 'meshy-5', mock })
+  if (!charge.ok) return res.status(charge.status).json(charge.body)
+
+  let taskId
+  try {
+    let views
+    if (mock) {
+      views = images.map((im) => ({ url: im.url })) // mock ignores the bytes
+    } else {
+      views = await Promise.all(
+        images.map(async (im) => {
+          const f = await readImageBytes(im)
+          if (!f) throw new Error(`view ${im.id} unreadable`)
+          return { bytes: f.bytes, mime: f.mime }
+        }),
+      )
+    }
+    const id = await createTripoMultiviewTask(views)
+    taskId = isTripoMock() ? id : `tripo-${id}` // namespace real Tripo ids for polling
+  } catch (err) {
+    await refundGeneration(req, { kind: 'preview', aiModel: 'meshy-5', mock })
+    if (err.code === 'DAILY_LIMIT') return res.status(429).json({ error: err.message })
+    console.error('multiview failed:', err)
+    return res.status(502).json({ error: 'Multi-view generation failed' })
+  }
+
+  const ownerId = req.user?.id ?? null
+  recordTask({ kind: 'generate', taskId, prompt: 'multi-view → 3D', mock, engine: 'tripo', ownerId })
+  res.status(202).json({ taskId, mode: 'multiview', engine: 'tripo', mock, cost: charge.cost })
 })
 
 // GET /api/generate/costs — the token price list for the UI (declared before

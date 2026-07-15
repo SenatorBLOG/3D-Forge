@@ -6,6 +6,7 @@ import LibraryPanel from '../components/LibraryPanel.jsx'
 import CompareView from '../components/CompareView.jsx'
 import PublishPanel from '../components/PublishPanel.jsx'
 import ModelVersionStrip from '../components/ModelVersionStrip.jsx'
+import PhotoEditPanel from '../components/PhotoEditPanel.jsx'
 import MicButton from '../components/MicButton.jsx'
 import useGenerationTask from '../hooks/useGenerationTask.js'
 
@@ -511,6 +512,17 @@ export default function ForgePage() {
             </div>
           )}
         </section>
+        )}
+        {modelUrl && (
+          <PhotoEditPanel
+            modelUrl={modelUrl}
+            onModelReady3D={(url, label) => {
+              setBaseModelPrompt(label)
+              setModelKind(null)
+              setLastEditPrompt(null)
+              swapModel(url, { version: { as: 'child', label } })
+            }}
+          />
         )}
       </aside>
 

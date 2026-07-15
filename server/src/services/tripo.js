@@ -94,6 +94,38 @@ export async function createTripoImageTask(imageBytes, mime = 'image/png') {
   return data.task_id
 }
 
+/**
+ * Start a multi-view→3D task (P1.5 fidelity path): several views of the SAME
+ * object (e.g. edited front + original side/back) reconstruct one model that
+ * keeps the original body far better than a single view. `views` is an ordered
+ * array of { bytes, mime } for [front, left, back, right] (trailing slots may be
+ * omitted). Each is uploaded to a file token, then a `multiview_to_model` task is
+ * created. Mock-safe (no key → mock task), so the flow demos without Tripo.
+ *
+ * NOTE: mapped from the public docs; not yet exercised against the live API.
+ */
+export async function createTripoMultiviewTask(views) {
+  if (isTripoMock()) return createMockTask('multiview-to-3d')
+  enforceDailyLimit()
+  const files = []
+  for (const v of views) {
+    if (!v?.bytes) {
+      files.push({}) // an empty slot — Tripo allows missing views
+      continue
+    }
+    const form = new FormData()
+    const ext = v.mime?.includes('jpeg') ? 'jpg' : v.mime?.includes('webp') ? 'webp' : 'png'
+    form.append('file', new Blob([v.bytes], { type: v.mime || 'image/png' }), `view.${ext}`)
+    const uploaded = await tripoFetch('/upload', { method: 'POST', body: form })
+    files.push({ type: ext, file_token: uploaded.image_token })
+  }
+  const data = await tripoFetch('/task', {
+    method: 'POST',
+    body: JSON.stringify({ type: 'multiview_to_model', files }),
+  })
+  return data.task_id
+}
+
 // Tripo → our unified (Meshy-shaped) task object, so the existing polling
 // route and History flow work unchanged regardless of engine.
 const STATUS_MAP = {
