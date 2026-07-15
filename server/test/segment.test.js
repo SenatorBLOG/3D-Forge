@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { segmentModel, hitTestPart, partSwap } from '../src/services/segment.js'
+import { segmentModel, hitTestPart, partSwap, extractPart, stitchPart } from '../src/services/segment.js'
 import { resolveLocalModel } from '../src/services/convert.js'
 import { readFileSync } from 'node:fs'
 import { NodeIO } from '@gltf-transform/core'
@@ -85,6 +85,60 @@ test('partSwap returns a new, valid GLB with the region replaced', async () => {
   assert.ok(
     doc.getRoot().listMeshes().some((m) => m.getName() === 'region-swap') ||
       doc.getRoot().listMaterials().some((m) => m.getName() === 'region-swap'),
+  )
+})
+
+test('extractPart writes a standalone GLB of just that part', async () => {
+  const { parts } = await segmentModel('/models/runed_sword.glb')
+  const target = parts[0]
+  const { partUrl, part } = await extractPart('/models/runed_sword.glb', target)
+
+  assert.match(partUrl, /^\/uploads\/edit-.*\.glb$/)
+  assert.equal(part.id, target.id)
+  const bytes = readFileSync(resolveLocalModel(partUrl))
+  assert.equal(bytes.subarray(0, 4).toString('ascii'), 'glTF')
+  const doc = await new NodeIO().readBinary(new Uint8Array(bytes))
+  // exactly one mesh with one primitive — the extracted piece only
+  const meshes = doc.getRoot().listMeshes()
+  assert.equal(meshes.length, 1)
+  assert.equal(meshes[0].listPrimitives().length, 1)
+})
+
+test('stitchPart fits a new part model into the original bbox, rest intact', async () => {
+  const { parts } = await segmentModel('/models/runed_sword.glb')
+  const target = parts[0]
+  // use ANOTHER model as the "generated part" (stands in for image-to-3D output)
+  const { modelUrl, stitchedPart } = await stitchPart(
+    '/models/runed_sword.glb',
+    target,
+    '/models/robotic_hand.glb',
+  )
+  assert.match(modelUrl, /^\/uploads\/edit-.*\.glb$/)
+  assert.equal(stitchedPart.id, target.id)
+
+  const bytes = readFileSync(resolveLocalModel(modelUrl))
+  const doc = await new NodeIO().readBinary(new Uint8Array(bytes))
+  // the stitched node exists…
+  const stitched = doc.getRoot().listNodes().find((n) => n.getName() === `stitched-${target.id}`)
+  assert.ok(stitched, 'stitched node present')
+  // …its geometry fills the ORIGINAL part's bbox (per-axis fit, small tolerance)
+  const prim = stitched.getMesh().listPrimitives()[0]
+  const min = prim.getAttribute('POSITION').getMin([])
+  const max = prim.getAttribute('POSITION').getMax([])
+  for (let a = 0; a < 3; a++) {
+    assert.ok(Math.abs(min[a] - target.bbox.min[a]) < 1e-3, `min[${a}] fits`)
+    assert.ok(Math.abs(max[a] - target.bbox.max[a]) < 1e-3, `max[${a}] fits`)
+  }
+  // and the original mesh kept its OTHER primitives (one was removed, none added)
+  const sword = doc.getRoot().listMeshes().find((m) => m !== stitched.getMesh())
+  assert.equal(sword.listPrimitives().length, parts.length - 1)
+})
+
+test('stitchPart rejects an unreadable part model', async () => {
+  const { parts } = await segmentModel(HAND)
+  await assert.rejects(
+    () => stitchPart(HAND, parts[0], 'https://evil.example/x.glb'),
+    (err) => err.code === 'NOT_FOUND',
   )
 })
 

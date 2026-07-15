@@ -9,6 +9,7 @@ import ModelVersionStrip from '../components/ModelVersionStrip.jsx'
 import PhotoEditPanel from '../components/PhotoEditPanel.jsx'
 import RecolorPanel from '../components/RecolorPanel.jsx'
 import PartButtons from '../components/PartButtons.jsx'
+import PartEditPanel from '../components/PartEditPanel.jsx'
 import MicButton from '../components/MicButton.jsx'
 import useGenerationTask from '../hooks/useGenerationTask.js'
 
@@ -58,6 +59,8 @@ export default function ForgePage() {
   const [swapErr, setSwapErr] = useState(null)
   // P3: bbox of the part hovered in the part-buttons row, highlighted in the viewer
   const [highlightBox, setHighlightBox] = useState(null)
+  // P4: the part being edited in the part-edit panel (click a part chip to open)
+  const [activePart, setActivePart] = useState(null)
   // 3D model version history: every generate/edit/part-swap appends a version
   // (branch by parentId), so an edit you dislike never loses the model you kept.
   const [modelVersions, setModelVersions] = useState([]) // [{ id, modelUrl, label, parentId, kind }]
@@ -81,6 +84,8 @@ export default function ForgePage() {
     }
     if (isObjectUrl) objectUrlRef.current = url
     // any model switch discards an unsaved upload preview (re-set by onFileChosen)
+    // and closes the part-edit panel (its part ids belong to the old model)
+    setActivePart(null)
     setPendingFile(null)
     setPoints([])
     setSelectedIndex(null)
@@ -237,31 +242,10 @@ export default function ForgePage() {
     }
   }
 
-  // P3: regenerate a single part chosen from the part-buttons row (by id)
-  const partSwapById = async (part) => {
-    if (!part?.id || swapBusy || busy) return
-    setSwapBusy(true)
-    setSwapMsg(null)
-    setSwapErr(null)
+  // P4: clicking a part chip opens the part-edit panel (photo loop + stitch)
+  const openPartEdit = (part) => {
     setHighlightBox(null)
-    try {
-      const res = await fetch('/api/edit/partswap', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ modelUrl, partId: part.id }),
-      })
-      const data = await res.json()
-      if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`)
-      setSwapMsg(`Part “${data.swappedPart?.name}” regenerated${data.mock ? ' (mock)' : ''}`)
-      swapModel(data.modelUrl, {
-        version: { as: 'child', label: `Part: ${data.swappedPart?.name || part.name}` },
-      })
-      setHistoryKey((k) => k + 1)
-    } catch (e) {
-      setSwapErr(e.message)
-    } finally {
-      setSwapBusy(false)
-    }
+    setActivePart(part)
   }
 
   // upload = preview only (view-only object URL); History gets nothing until the
@@ -555,6 +539,21 @@ export default function ForgePage() {
             }}
           />
         )}
+        {modelUrl && activePart && (
+          <PartEditPanel
+            key={activePart.id}
+            modelUrl={modelUrl}
+            part={activePart}
+            onClose={() => setActivePart(null)}
+            onStitched={(url, label) => {
+              setBaseModelPrompt(label)
+              setModelKind(null)
+              setLastEditPrompt(null)
+              setHistoryKey((k) => k + 1)
+              swapModel(url, { version: { as: 'child', label } }) // also closes the panel
+            }}
+          />
+        )}
         {modelUrl && (
           <RecolorPanel
             modelUrl={modelUrl}
@@ -606,7 +605,7 @@ export default function ForgePage() {
                 modelUrl={modelUrl}
                 busy={swapBusy || busy}
                 onHoverPart={setHighlightBox}
-                onPickPart={partSwapById}
+                onPickPart={openPartEdit}
               />
             )}
           </>
