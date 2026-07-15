@@ -1,7 +1,7 @@
 import { readFileSync, mkdirSync, writeFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { join, basename } from 'node:path'
-import { NodeIO } from '@gltf-transform/core'
+import { Document, NodeIO } from '@gltf-transform/core'
 import { dbReady } from '../db.js'
 import { load, flush } from './persistence.js'
 import { resolveLocalModel } from './convert.js'
@@ -274,6 +274,193 @@ async function storeModelBytes(bytes) {
   mkdirSync(UPLOADS_DIR, { recursive: true })
   writeFileSync(join(UPLOADS_DIR, name), Buffer.from(bytes))
   return `/uploads/${name}`
+}
+
+// --- P4: part extraction + stitch (segment → photo → regen → stitch) --------
+
+/**
+ * Collect a doc's mesh primitives as world-space triangle soup. When `onlyIndex`
+ * is given, only the node at that traversal index (same order segmentModel used)
+ * is taken. Normals are copied as-is (generated GLBs are near-identity), indices
+ * as-is, and the material reduces to its baseColorFactor — textures are dropped,
+ * an accepted tradeoff of the experimental stitch path.
+ */
+function collectWorldPrimitives(doc, onlyIndex = null, onlyPrim = null) {
+  const prims = []
+  let nodeIndex = 0
+  for (const scene of doc.getRoot().listScenes()) {
+    scene.traverse((node) => {
+      const mesh = node.getMesh()
+      if (!mesh) return
+      const idx = nodeIndex++
+      if (onlyIndex != null && idx !== onlyIndex) return
+      const world = node.getWorldMatrix()
+      // primIndex counts over POSITION-bearing primitives (same as extractParts)
+      let primIndex = -1
+      for (const prim of mesh.listPrimitives()) {
+        const pos = prim.getAttribute('POSITION')
+        if (!pos) continue
+        primIndex++
+        if (onlyPrim != null && primIndex !== onlyPrim) continue
+        const src = pos.getArray()
+        const positions = new Float32Array(src.length)
+        for (let i = 0; i < src.length; i += 3) {
+          const p = xform(world, src[i], src[i + 1], src[i + 2])
+          positions[i] = p[0]
+          positions[i + 1] = p[1]
+          positions[i + 2] = p[2]
+        }
+        const nrm = prim.getAttribute('NORMAL')
+        const idxAcc = prim.getIndices()
+        prims.push({
+          positions,
+          normals: nrm ? new Float32Array(nrm.getArray()) : null,
+          indices: idxAcc ? idxAcc.getArray().slice() : null,
+          color: prim.getMaterial()?.getBaseColorFactor() || [0.62, 0.65, 0.7, 1],
+        })
+      }
+    })
+  }
+  return prims
+}
+
+/** Append triangle-soup primitives to `mesh`, optionally remapping each point. */
+function addPrimsToMesh(doc, buffer, mesh, prims, mapPoint = null) {
+  for (const p of prims) {
+    let positions = p.positions
+    if (mapPoint) {
+      positions = new Float32Array(p.positions.length)
+      for (let i = 0; i < p.positions.length; i += 3) {
+        const m = mapPoint([p.positions[i], p.positions[i + 1], p.positions[i + 2]])
+        positions[i] = m[0]
+        positions[i + 1] = m[1]
+        positions[i + 2] = m[2]
+      }
+    }
+    const posAcc = doc.createAccessor().setType('VEC3').setArray(positions).setBuffer(buffer)
+    const prim = doc.createPrimitive().setAttribute('POSITION', posAcc)
+    if (p.normals) {
+      prim.setAttribute(
+        'NORMAL',
+        doc.createAccessor().setType('VEC3').setArray(p.normals).setBuffer(buffer),
+      )
+    }
+    if (p.indices) {
+      prim.setIndices(
+        doc.createAccessor().setType('SCALAR').setArray(new Uint32Array(p.indices)).setBuffer(buffer),
+      )
+    }
+    const mat = doc
+      .createMaterial('part-mat')
+      .setBaseColorFactor(p.color)
+      .setMetallicFactor(0)
+      .setRoughnessFactor(0.7)
+    prim.setMaterial(mat)
+    mesh.addPrimitive(prim)
+  }
+}
+
+const primsBBox = (prims) => {
+  const lo = [Infinity, Infinity, Infinity]
+  const hi = [-Infinity, -Infinity, -Infinity]
+  for (const p of prims) {
+    for (let i = 0; i < p.positions.length; i += 3) {
+      for (let a = 0; a < 3; a++) {
+        const v = p.positions[i + a]
+        if (v < lo[a]) lo[a] = v
+        if (v > hi[a]) hi[a] = v
+      }
+    }
+  }
+  return { min: lo, max: hi }
+}
+
+/**
+ * Extract ONE part into its own stored GLB (world-space, textures reduced to
+ * base color). The client renders it to a photo for the edit loop. Synthetic
+ * band parts share node 0, so a band extracts the whole mesh — documented
+ * limitation of the geometric fallback.
+ */
+export async function extractPart(modelUrl, part) {
+  const bytes = await readModelBytes(modelUrl)
+  if (!bytes) throw Object.assign(new Error('model not found'), { code: 'NOT_FOUND' })
+  const srcDoc = await new NodeIO().readBinary(new Uint8Array(bytes))
+  const prims = collectWorldPrimitives(
+    srcDoc,
+    part.index,
+    Number.isInteger(part.primIndex) ? part.primIndex : null,
+  )
+  if (!prims.length) throw Object.assign(new Error('part has no geometry'), { code: 'NOT_FOUND' })
+
+  const doc = new Document()
+  const buffer = doc.createBuffer()
+  const mesh = doc.createMesh('part')
+  const node = doc.createNode(part.name || 'part').setMesh(mesh)
+  doc.createScene().addChild(node)
+  addPrimsToMesh(doc, buffer, mesh, prims)
+
+  const out = await new NodeIO().writeBinary(doc)
+  const url = await storeModelBytes(out)
+  return { partUrl: url, part: { id: part.id, name: part.name } }
+}
+
+/**
+ * Stitch a newly generated part model into the original: the new part's geometry
+ * is scaled/translated to fill the ORIGINAL part's bbox (per-axis fit), the old
+ * part node's mesh is detached, and the fitted geometry joins the scene — the
+ * rest of the model stays byte-identical. No CSG weld (experimental): seams can
+ * show; that's the accepted tradeoff versus regenerating everything.
+ */
+export async function stitchPart(modelUrl, part, partModelUrl) {
+  const baseBytes = await readModelBytes(modelUrl)
+  if (!baseBytes) throw Object.assign(new Error('model not found'), { code: 'NOT_FOUND' })
+  const newBytes = await readModelBytes(partModelUrl)
+  if (!newBytes) throw Object.assign(new Error('part model not found'), { code: 'NOT_FOUND' })
+
+  const io = new NodeIO()
+  const doc = await io.readBinary(new Uint8Array(baseBytes))
+  const partDoc = await io.readBinary(new Uint8Array(newBytes))
+  const newPrims = collectWorldPrimitives(partDoc)
+  if (!newPrims.length) throw Object.assign(new Error('part model has no geometry'), { code: 'NOT_FOUND' })
+
+  // per-axis fit of the new geometry into the original part's bbox
+  const src = primsBBox(newPrims)
+  const t = part.bbox
+  const eps = 1e-9
+  const scale = [0, 1, 2].map((a) => (t.max[a] - t.min[a]) / Math.max(src.max[a] - src.min[a], eps))
+  const mapPoint = (p) => [0, 1, 2].map((a) => t.min[a] + (p[a] - src.min[a]) * scale[a])
+
+  // detach the replaced part (same traversal order segmentModel used): the whole
+  // node mesh for node-level parts, or just that primitive for primitive-level ones
+  let nodeIndex = 0
+  let target = null
+  for (const scene of doc.getRoot().listScenes()) {
+    scene.traverse((node) => {
+      if (!node.getMesh()) return
+      if (nodeIndex === part.index) target = node
+      nodeIndex++
+    })
+  }
+  if (!target) throw Object.assign(new Error('part node not found'), { code: 'NOT_FOUND' })
+  if (Number.isInteger(part.primIndex)) {
+    const withPos = target.getMesh().listPrimitives().filter((p) => p.getAttribute('POSITION'))
+    const prim = withPos[part.primIndex]
+    if (!prim) throw Object.assign(new Error('part primitive not found'), { code: 'NOT_FOUND' })
+    target.getMesh().removePrimitive(prim)
+  } else {
+    target.setMesh(null)
+  }
+
+  // the fitted new part joins at the scene root (identity transform, world coords)
+  const buffer = doc.getRoot().listBuffers()[0] || doc.createBuffer()
+  const mesh = doc.createMesh('stitched-part')
+  addPrimsToMesh(doc, buffer, mesh, newPrims, mapPoint)
+  const scene0 = doc.getRoot().listScenes()[0]
+  scene0.addChild(doc.createNode(`stitched-${part.id}`).setMesh(mesh))
+
+  const out = await io.writeBinary(doc)
+  const url = await storeModelBytes(out)
+  return { modelUrl: url, stitchedPart: { id: part.id, name: part.name } }
 }
 
 /**

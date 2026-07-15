@@ -1,5 +1,5 @@
 import { Router } from 'express'
-import { segmentModel, hitTestPart, partSwap } from '../services/segment.js'
+import { segmentModel, hitTestPart, partSwap, extractPart, stitchPart } from '../services/segment.js'
 import { optionalAuth } from '../middleware/auth.js'
 import { recordTask, updateTask } from '../services/history.js'
 import { dbReady } from '../db.js'
@@ -79,6 +79,72 @@ router.post('/partswap', optionalAuth, async (req, res) => {
     if (err.code === 'NOT_FOUND') return res.status(404).json({ error: err.message })
     console.error('partswap failed:', err)
     res.status(500).json({ error: 'Failed to swap part' })
+  }
+})
+
+// POST /api/edit/extract { modelUrl, partId?|point? } — P4 step 1: pull ONE part
+// out into its own stored GLB, so the client can photograph it for the edit loop.
+// → { partUrl, part: { id, name } }
+router.post('/extract', async (req, res) => {
+  const modelUrl = typeof req.body?.modelUrl === 'string' ? req.body.modelUrl : ''
+  const partId = typeof req.body?.partId === 'string' ? req.body.partId : ''
+  const point = req.body?.point
+  if (!modelUrl || (!partId && !point)) {
+    return res.status(400).json({ error: 'modelUrl and one of partId / point are required' })
+  }
+  try {
+    const { parts } = await segmentModel(modelUrl)
+    const part = partId ? parts.find((p) => p.id === partId) : hitTestPart(parts, point)
+    if (!part) return res.status(404).json({ error: 'no matching part for the given partId/point' })
+    res.json(await extractPart(modelUrl, part))
+  } catch (err) {
+    if (err.code === 'NOT_FOUND') return res.status(404).json({ error: err.message })
+    console.error('extract failed:', err)
+    res.status(500).json({ error: 'Failed to extract part' })
+  }
+})
+
+// POST /api/edit/stitch { modelUrl, partId, partModelUrl } — P4 final step: fit a
+// newly generated part model into the ORIGINAL part's bbox and swap it in; the
+// rest of the model stays byte-identical. → { modelUrl, stitchedPart }
+router.post('/stitch', optionalAuth, async (req, res) => {
+  const modelUrl = typeof req.body?.modelUrl === 'string' ? req.body.modelUrl : ''
+  const partId = typeof req.body?.partId === 'string' ? req.body.partId : ''
+  const partModelUrl = typeof req.body?.partModelUrl === 'string' ? req.body.partModelUrl : ''
+  if (!modelUrl || !partId || !partModelUrl) {
+    return res.status(400).json({ error: 'modelUrl, partId and partModelUrl are required' })
+  }
+  try {
+    const { parts } = await segmentModel(modelUrl)
+    const part = parts.find((p) => p.id === partId)
+    if (!part) return res.status(404).json({ error: 'unknown partId for this model' })
+    const result = await stitchPart(modelUrl, part, partModelUrl)
+
+    // mirror a finished generation so the stitch lands in History + Library
+    const label = `part-stitch: ${part.name}`.slice(0, 120)
+    const taskId = `stitch-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+    recordTask({ kind: 'generate', taskId, prompt: label, mock: true, ownerId: req.user?.id ?? null })
+    updateTask(taskId, 'SUCCEEDED', result.modelUrl)
+    if (dbReady()) {
+      try {
+        await GeneratedModel.create({
+          prompt: label,
+          meshyTaskId: taskId,
+          status: 'SUCCEEDED',
+          modelUrl: result.modelUrl,
+          mock: true,
+          ownerId: req.user?.id ?? null,
+        })
+      } catch (err) {
+        console.error('stitch library record failed:', err)
+      }
+    }
+
+    res.json(result)
+  } catch (err) {
+    if (err.code === 'NOT_FOUND') return res.status(404).json({ error: err.message })
+    console.error('stitch failed:', err)
+    res.status(500).json({ error: 'Failed to stitch part' })
   }
 })
 

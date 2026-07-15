@@ -77,5 +77,11 @@ version cards shipped in F0.
 - **P2** (recolor/retexture, Tripo, mock-first) — done.
 - **P3** (part buttons + hover-highlight + explode; Tripo segment written doc-based,
   UI runs on the geometric segmentation key-free) — done.
+- **P4** (part-only stitch: extract part → photo → edit → rebuild part → stitch at
+  the original bbox, rest byte-identical; no CSG weld, seams accepted) — done.
+- Hyper3D docs re-checked (llms-full corpus): the ONLY mesh-input endpoint is
+  **BANG!** (`/api/v2/bang`) = segmentation of an uploaded model, Business-only,
+  0.5 credits/op. Still no localized-edit / part-completion / retexture API —
+  Tripo remains the right bet.
 - **Next:** enable TRIPO_API_KEY → verify/adjust the doc-based Tripo schemas
-  (multiview, texture_model, segmentation) on a real call. Then P4/P5/P6.
+  (multiview, texture_model, segmentation) on a real call. Then P5/P6.
