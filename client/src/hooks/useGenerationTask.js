@@ -1,7 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
+import { useAuth } from '../auth/AuthContext.jsx'
 
 const POLL_INTERVAL_MS = 2000
 const TERMINAL = ['SUCCEEDED', 'FAILED', 'CANCELED']
+
+// Bearer header for the signed-in user (empty when logged out). Real (keyed)
+// generation is gated on a user + wallet, so these POSTs must carry the token.
+const authHeaders = (token) => (token ? { Authorization: `Bearer ${token}` } : {})
 
 /**
  * Generation-task lifecycle: POST to an endpoint that answers { taskId, mock },
@@ -13,6 +18,11 @@ export default function useGenerationTask(onModelReady) {
   const [error, setError] = useState(null)
   const onModelReadyRef = useRef(onModelReady)
   onModelReadyRef.current = onModelReady
+  // the auth token, kept in a ref so the poll effect's refine handoff always
+  // reads the current value without re-subscribing the interval
+  const { token } = useAuth()
+  const tokenRef = useRef(token)
+  tokenRef.current = token
   const notifiedRef = useRef(null)
   const pollFailsRef = useRef(0)
   // two-stage support: { refine, model, prompt }; refinedRef guards the handoff
@@ -28,7 +38,7 @@ export default function useGenerationTask(onModelReady) {
     try {
       const res = await fetch(endpoint, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...authHeaders(tokenRef.current) },
         body: JSON.stringify(body),
       })
       const data = await res.json()
@@ -69,7 +79,7 @@ export default function useGenerationTask(onModelReady) {
             try {
               const r = await fetch('/api/generate/refine', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 'Content-Type': 'application/json', ...authHeaders(tokenRef.current) },
                 body: JSON.stringify({
                   previewTaskId: data.taskId,
                   model: optsRef.current.model,

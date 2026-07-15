@@ -6,6 +6,7 @@ import MicButton from './MicButton.jsx'
 import { toLoadableUrl } from '../lib/modelUrl.js'
 
 const MARKER_COLOR = 0xff2d9b // hot magenta — matches the selection accent
+const BASE_EXPOSURE = 1.1 // tone-mapping exposure at brightness 1.0 (slider multiplies it)
 
 /**
  * Browser 3D viewer: loads a GLB/glTF model, orbit controls, and raycast click
@@ -47,6 +48,12 @@ export default function ModelViewer({
   // imperative handles the toolbar + points effect reach into the live scene
   const apiRef = useRef({})
   const [autoRotate, setAutoRotate] = useState(showcase)
+  // viewer brightness: multiplies the renderer's tone-mapping exposure so darker
+  // Meshy/Tripo models can be lit up without re-generating (kept in a ref so a
+  // model swap re-applies the current value at mount)
+  const [brightness, setBrightness] = useState(1)
+  const brightnessRef = useRef(1)
+  brightnessRef.current = brightness
   // display mode + mesh stats for the viewer toolbar/badge
   const [mode, setMode] = useState('shaded') // shaded | solid | wireframe
   const [stats, setStats] = useState(null) // { faces, vertices }
@@ -88,7 +95,7 @@ export default function ModelViewer({
     renderer.setPixelRatio(window.devicePixelRatio)
     renderer.setSize(container.clientWidth, container.clientHeight)
     renderer.toneMapping = THREE.ACESFilmicToneMapping
-    renderer.toneMappingExposure = 1.1
+    renderer.toneMappingExposure = BASE_EXPOSURE * brightnessRef.current
     container.appendChild(renderer.domElement)
 
     const controls = new OrbitControls(camera, renderer.domElement)
@@ -172,6 +179,9 @@ export default function ModelViewer({
         controls.update()
       },
       setDisplayMode: applyDisplayMode,
+      setExposure: (mult) => {
+        renderer.toneMappingExposure = BASE_EXPOSURE * mult
+      },
     }
 
     let model = null
@@ -325,6 +335,11 @@ export default function ModelViewer({
     apiRef.current.setDisplayMode?.(mode)
   }, [mode])
 
+  // push brightness changes into the live renderer (continuous rAF shows it next frame)
+  useEffect(() => {
+    apiRef.current.setExposure?.(brightness)
+  }, [brightness])
+
   // focus the inline editor when it opens
   useEffect(() => {
     if (selectedIndex != null) popupRef.current?.focus()
@@ -362,6 +377,30 @@ export default function ModelViewer({
               {label}
             </button>
           ))}
+        </div>
+      )}
+      {!showcase && stats && (
+        <div className="viewer-brightness" title={`Brightness ${Math.round(brightness * 100)}%`}>
+          <span className="viewer-brightness-icon" aria-hidden="true">☀</span>
+          <input
+            type="range"
+            min="0.5"
+            max="2.5"
+            step="0.05"
+            value={brightness}
+            onChange={(e) => setBrightness(Number(e.target.value))}
+            aria-label="Viewer brightness"
+          />
+          {brightness !== 1 && (
+            <button
+              type="button"
+              className="viewer-brightness-reset"
+              onClick={() => setBrightness(1)}
+              title="Reset brightness"
+            >
+              ⟳
+            </button>
+          )}
         </div>
       )}
       {!showcase && (
