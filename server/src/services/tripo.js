@@ -126,6 +126,58 @@ export async function createTripoMultiviewTask(views) {
   return data.task_id
 }
 
+/**
+ * Retexture an EXISTING model without changing its geometry (P2 — surface edits:
+ * recolor / new material by prompt). Uploads the model bytes, then creates a
+ * `texture_model` task with the prompt. The mesh is untouched, only the texture
+ * changes — so nothing drifts. Mock-safe (no key → mock model, free).
+ *
+ * NOTE: mapped from the public docs; not yet exercised against the live API —
+ * field names (task type, model token) may need a tweak once a key is set.
+ */
+export async function createTripoRetextureTask({ bytes, mime = 'model/gltf-binary', prompt }) {
+  if (isTripoMock()) return createMockTask('retexture')
+  enforceDailyLimit()
+  const form = new FormData()
+  form.append('file', new Blob([bytes], { type: mime }), 'model.glb')
+  const uploaded = await tripoFetch('/upload', { method: 'POST', body: form })
+  const data = await tripoFetch('/task', {
+    method: 'POST',
+    body: JSON.stringify({
+      type: 'texture_model',
+      original_model: { type: 'glb', file_token: uploaded.image_token },
+      texture_prompt: prompt || '',
+    }),
+  })
+  return data.task_id
+}
+
+/**
+ * P3 — real semantic segmentation: split a model into named parts with ids.
+ * Uploads the model, creates a `segmentation` task; polling returns the segmented
+ * output (per-part meshes / part_names). Mock-safe (no key → mock task).
+ *
+ * NOTE: written from the docs; not yet exercised live. The current
+ * routes/regionEdit.js path uses the built-in GEOMETRIC segmentation (node graph /
+ * bands), which is key-free and drives the part UI today; wiring this real Tripo
+ * result into that shape is the follow-up once a key is set.
+ */
+export async function createTripoSegmentTask({ bytes, mime = 'model/gltf-binary' }) {
+  if (isTripoMock()) return createMockTask('segmentation')
+  enforceDailyLimit()
+  const form = new FormData()
+  form.append('file', new Blob([bytes], { type: mime }), 'model.glb')
+  const uploaded = await tripoFetch('/upload', { method: 'POST', body: form })
+  const data = await tripoFetch('/task', {
+    method: 'POST',
+    body: JSON.stringify({
+      type: 'segmentation',
+      original_model: { type: 'glb', file_token: uploaded.image_token },
+    }),
+  })
+  return data.task_id
+}
+
 // Tripo → our unified (Meshy-shaped) task object, so the existing polling
 // route and History flow work unchanged regardless of engine.
 const STATUS_MAP = {

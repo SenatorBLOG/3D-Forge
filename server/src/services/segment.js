@@ -79,7 +79,7 @@ const unionBox = (boxes) => {
 }
 
 /** Read a model's bytes from local disk or GridFS (/files/...). Null if remote/missing. */
-async function readModelBytes(modelUrl) {
+export async function readModelBytes(modelUrl) {
   if (typeof modelUrl !== 'string') return null
   if (modelUrl.startsWith('/files/')) {
     const f = await readCloudFile(basename(modelUrl))

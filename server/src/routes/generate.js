@@ -1,7 +1,8 @@
 import { Router } from 'express'
 import { createRefineTask, createImageTask, isMockMode } from '../services/meshy.js'
 import { resolveEngine, engineIsMock, startGeneration, getAnyTask } from '../services/engines.js'
-import { createTripoMultiviewTask, isTripoMock } from '../services/tripo.js'
+import { createTripoMultiviewTask, createTripoRetextureTask, isTripoMock } from '../services/tripo.js'
+import { readModelBytes } from '../services/segment.js'
 import { archiveModelUrl } from '../services/modelArchive.js'
 import { dbReady } from '../db.js'
 import GeneratedModel from '../models/GeneratedModel.js'
@@ -326,6 +327,44 @@ router.post('/multiview', optionalAuth, async (req, res) => {
   const ownerId = req.user?.id ?? null
   recordTask({ kind: 'generate', taskId, prompt: 'multi-view → 3D', mock, engine: 'tripo', ownerId })
   res.status(202).json({ taskId, mode: 'multiview', engine: 'tripo', mock, cost: charge.cost })
+})
+
+// POST /api/generate/retexture — P2 surface edit: recolor / re-material an
+// EXISTING model by prompt, geometry untouched (no drift). Tripo texture_model;
+// mock-safe (no key → mock model, free). → { taskId, mock }, poll GET /:taskId.
+router.post('/retexture', optionalAuth, async (req, res) => {
+  const modelUrl = typeof req.body?.modelUrl === 'string' ? req.body.modelUrl : ''
+  const prompt = typeof req.body?.prompt === 'string' ? req.body.prompt.trim() : ''
+  if (!modelUrl || !prompt) {
+    return res.status(400).json({ error: 'modelUrl and prompt are required' })
+  }
+  if (prompt.length > 600) {
+    return res.status(400).json({ error: 'prompt must be 600 characters or fewer' })
+  }
+
+  const mock = isTripoMock()
+  const charge = await chargeGeneration(req, { kind: 'preview', aiModel: 'meshy-5', mock })
+  if (!charge.ok) return res.status(charge.status).json(charge.body)
+
+  let taskId
+  try {
+    let bytes = null
+    if (!mock) {
+      bytes = await readModelBytes(modelUrl)
+      if (!bytes) return res.status(400).json({ error: 'could not read the model to retexture' })
+    }
+    const id = await createTripoRetextureTask({ bytes, prompt })
+    taskId = isTripoMock() ? id : `tripo-${id}`
+  } catch (err) {
+    await refundGeneration(req, { kind: 'preview', aiModel: 'meshy-5', mock })
+    if (err.code === 'DAILY_LIMIT') return res.status(429).json({ error: err.message })
+    console.error('retexture failed:', err)
+    return res.status(502).json({ error: 'Retexture failed' })
+  }
+
+  const ownerId = req.user?.id ?? null
+  recordTask({ kind: 'generate', taskId, prompt: `retexture: ${prompt}`, mock, engine: 'tripo', ownerId })
+  res.status(202).json({ taskId, mode: 'retexture', engine: 'tripo', mock, cost: charge.cost })
 })
 
 // GET /api/generate/costs — the token price list for the UI (declared before
