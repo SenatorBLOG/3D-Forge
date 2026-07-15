@@ -469,6 +469,30 @@ export default function ModelViewer({
           )}
         </div>
       )}
+      {!showcase && stats && (
+        <div className="viewer-brightness" title={`Brightness ${Math.round(brightness * 100)}%`}>
+          <span className="viewer-brightness-icon" aria-hidden="true">☀</span>
+          <input
+            type="range"
+            min="0.5"
+            max="2.5"
+            step="0.05"
+            value={brightness}
+            onChange={(e) => setBrightness(Number(e.target.value))}
+            aria-label="Viewer brightness"
+          />
+          {brightness !== 1 && (
+            <button
+              type="button"
+              className="viewer-brightness-reset"
+              onClick={() => setBrightness(1)}
+              title="Reset brightness"
+            >
+              ⟳
+            </button>
+          )}
+        </div>
+      )}
       {!showcase && (
         <div className="viewer-labels">
           {labels.map((l, i) =>
