@@ -83,5 +83,9 @@ version cards shipped in F0.
   **BANG!** (`/api/v2/bang`) = segmentation of an uploaded model, Business-only,
   0.5 credits/op. Still no localized-edit / part-completion / retexture API —
   Tripo remains the right bet.
+- **P5** (Paint-for-3D: texture brush that also covers decals, inflate/dent sculpt)
+  and **P6** (kitbash: prebuilt horn/spike/ball/fin/plate placed on the surface
+  along the normal) — done; edits export via GLTFExporter → upload → new version.
 - **Next:** enable TRIPO_API_KEY → verify/adjust the doc-based Tripo schemas
-  (multiview, texture_model, segmentation) on a real call. Then P5/P6.
+  (multiview, texture_model, segmentation) on a real call. Then the UI layout
+  redesign pass (left rail is crowded — user wants big clean cards).
