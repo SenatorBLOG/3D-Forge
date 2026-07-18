@@ -3,6 +3,25 @@ import { getThumbnail } from '../lib/thumbnailer.js'
 import useGenerationTask from '../hooks/useGenerationTask.js'
 import MicButton from './MicButton.jsx'
 
+// Read a fetch response as JSON without throwing the cryptic "Unexpected end of
+// JSON input" when the body is empty — which happens when the dev server is
+// mid-restart (node --watch). Turn that into a clear, retryable message.
+async function readJson(res) {
+  const text = await res.text()
+  let data = {}
+  try {
+    data = text ? JSON.parse(text) : {}
+  } catch {
+    /* non-JSON body (HTML error page, etc.) */
+  }
+  if (!res.ok) {
+    throw new Error(
+      data.error || `HTTP ${res.status}${text ? '' : ' — empty response (server restarting? try again)'}`,
+    )
+  }
+  return data
+}
+
 /**
  * Photo-based partial edit (plan: docs/plans/partial-3d-edit.md).
  * P1a — capture the loaded 3D model as an image (render → upload).
@@ -23,6 +42,9 @@ export default function PhotoEditPanel({ modelUrl, onModelReady3D }) {
   const [lastEdit, setLastEdit] = useState(null) // { sourceId, instruction } for re-roll
   const [mvBusy, setMvBusy] = useState(false) // capture+upload phase of a multi-view rebuild
   const [mvError, setMvError] = useState(null)
+  // the 3 prepared views (front + side + back, edit applied) shown BIG before we
+  // spend Tripo credits — [{ id, url, label }]. Null until "Prepare views" runs.
+  const [mvViews, setMvViews] = useState(null)
 
   const currentImage = versions.find((v) => v.id === currentId) || null
 
@@ -37,6 +59,7 @@ export default function PhotoEditPanel({ modelUrl, onModelReady3D }) {
     setEditError(null)
     setError(null)
     setMvError(null)
+    setMvViews(null)
   }, [modelUrl])
 
   // P1c: rebuild the chosen photo into 3D. The result is handed up to the Forge,
@@ -61,40 +84,59 @@ export default function PhotoEditPanel({ modelUrl, onModelReady3D }) {
   const genMV = useGenerationTask((url) =>
     onModelReady3D?.(url, lastEdit?.instruction ? `Multi-view: ${lastEdit.instruction}` : 'Multi-view edit'),
   )
-  const rebuildMultiview = async () => {
+  // Step 1 (free-ish): render the model from front/side/back, apply the SAME
+  // confirmed edit to the side & back, and SHOW all three big so the user sees
+  // exactly what will be sent to Tripo before spending credits.
+  const prepareMvViews = async () => {
     if (!currentId || !lastEdit || mvBusy || gen3d.generating || genMV.generating) return
     setMvBusy(true)
     setMvError(null)
+    setMvViews(null)
     try {
-      // render the original model from the other angles (90°/180° = side/back)
-      const { views } = await getThumbnail(modelUrl)
-      const extraViews = (views || []).slice(0, 2)
+      const { views } = await getThumbnail(modelUrl) // extra angles (90°/180°/270°)
+      // Tripo multiview wants 4 slots [front, left, back, right] — views[] is
+      // exactly [left(90°), back(180°), right(270°)], so front + all three = 4.
+      const extraViews = (views || []).slice(0, 3)
       if (!extraViews.length) throw new Error('Could not render extra views')
-      const imageIds = [currentId] // the already-edited & confirmed front
-      // apply the SAME instruction to each extra view → consistently updated views
-      for (const dataUrl of extraViews) {
-        const blob = await (await fetch(dataUrl)).blob()
+      const prepared = [{ id: currentId, url: currentImage?.url, label: 'Front' }]
+      const labels = ['Left', 'Back', 'Right']
+      for (let i = 0; i < extraViews.length; i++) {
+        const blob = await (await fetch(extraViews[i])).blob()
         const up = await fetch('/api/images', {
           method: 'POST',
           headers: { 'Content-Type': blob.type || 'image/png' },
           body: blob,
         })
-        const upData = await up.json()
-        if (!up.ok) throw new Error(upData.error || `HTTP ${up.status}`)
+        const upData = await readJson(up)
+        // apply the SAME instruction so all three views agree
         const ed = await fetch(`/api/images/${encodeURIComponent(upData.image.id)}/edit`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ instruction: lastEdit.instruction }),
         })
-        const edData = await ed.json()
-        if (!ed.ok) throw new Error(edData.error || `HTTP ${ed.status}`)
-        imageIds.push(edData.image.id)
+        const edData = await readJson(ed)
+        prepared.push({ id: edData.image.id, url: edData.image.url, label: labels[i] })
       }
-      await genMV.start('/api/generate/multiview', { imageIds }, { prompt: 'multi-view' })
+      setMvViews(prepared)
     } catch (e) {
       setMvError(e.message)
     } finally {
       setMvBusy(false)
+    }
+  }
+
+  // Step 2 (~30 Tripo credits): reconstruct the whole model from the 3 shown views.
+  const buildMultiview = async () => {
+    if (!mvViews?.length || genMV.generating) return
+    setMvError(null)
+    try {
+      await genMV.start(
+        '/api/generate/multiview',
+        { imageIds: mvViews.map((v) => v.id) },
+        { prompt: 'multi-view' },
+      )
+    } catch (e) {
+      setMvError(e.message)
     }
   }
 
@@ -171,11 +213,11 @@ export default function PhotoEditPanel({ modelUrl, onModelReady3D }) {
   return (
     <section className="panel photo-edit">
       <div className="spatial-head">
-        <span className="spatial-flag">✎ Photo edit</span>
-        <h2>Edit as photo</h2>
+        <span className="spatial-flag">✎ Edit</span>
+        <h2>Edit this model</h2>
       </div>
       <p className="spatial-blurb">
-        Turn this model into a photo, change it with a prompt, then rebuild it in 3D — the
+        Capture the model as a photo, describe the change, then rebuild it in 3D — the
         original stays as a version, so an edit you dislike never loses it.
       </p>
 
@@ -242,22 +284,43 @@ export default function PhotoEditPanel({ modelUrl, onModelReady3D }) {
               )}
               {gen3d.error && <span className="url-error">{gen3d.error}</span>}
 
+              {/* Multi-view: step 1 renders & shows 3 big views, step 2 spends Tripo */}
               <button
                 className="ghost-button"
-                onClick={rebuildMultiview}
+                onClick={prepareMvViews}
                 disabled={editing || mvBusy || gen3d.generating || genMV.generating || !lastEdit}
                 title={
                   lastEdit
-                    ? 'Higher fidelity: apply your change to the side & back views too, then Tripo multi-view — keeps the original body better'
-                    : 'Make an edit first, then multi-view applies it to all sides'
+                    ? 'Render front + side + back with your change applied, and preview them before rebuilding'
+                    : 'Make an edit first — multi-view applies it to all sides'
                 }
               >
-                {mvBusy
-                  ? 'Updating side & back…'
-                  : genMV.generating
-                    ? `Multi-view… ${genMV.task.progress}%`
-                    : '🧊×3 Multi-view rebuild (Tripo)'}
+                {mvBusy ? 'Rendering 4 views…' : '🖼️×4 Prepare 4 views'}
               </button>
+
+              {mvViews && (
+                <div className="mv-views">
+                  {mvViews.map((v) => (
+                    <figure className="mv-view" key={v.id}>
+                      <img src={v.url} alt={v.label} />
+                      <figcaption>{v.label}</figcaption>
+                    </figure>
+                  ))}
+                </div>
+              )}
+
+              {mvViews && (
+                <button
+                  className="submit gen-go"
+                  onClick={buildMultiview}
+                  disabled={genMV.generating}
+                  title="Reconstruct the whole model from these 4 views with Tripo (~30 credits)"
+                >
+                  {genMV.generating
+                    ? `Multi-view… ${genMV.task.progress}%`
+                    : '🧊 Build 3D from these 4 views (Tripo)'}
+                </button>
+              )}
               {genMV.generating && (
                 <div className="progress" aria-hidden="true">
                   <div className="progress-fill" style={{ width: `${genMV.task.progress}%` }} />

@@ -16,8 +16,19 @@ const getBucket = () => {
   return bucket
 }
 
-/** Whether cloud file storage is active (Mongo connected). */
-export const cloudFilesEnabled = () => dbReady()
+/**
+ * Whether cloud file storage (GridFS) is active. Normally follows the Mongo
+ * connection, but FILES_STORAGE overrides it:
+ *   FILES_STORAGE=local → always store new files on local disk (keeps bytes OUT
+ *     of Atlas, so the 512 MB free-tier cap can't fill up / block writes)
+ *   FILES_STORAGE=cloud → force GridFS when Mongo is connected
+ * Reads still work either way (routes fall back to disk / GridFS by URL prefix).
+ */
+export const cloudFilesEnabled = () => {
+  const mode = (process.env.FILES_STORAGE || '').toLowerCase()
+  if (mode === 'local') return false
+  return dbReady()
+}
 
 // GridFS filenames come from our own generated ids, but validate anyway so a
 // crafted name can never traverse or collide weirdly.

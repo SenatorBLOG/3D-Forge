@@ -8,6 +8,12 @@ import { toLoadableUrl } from '../lib/modelUrl.js'
 
 const MARKER_COLOR = 0xff2d9b // hot magenta — matches the selection accent
 const BASE_EXPOSURE = 1.1 // tone-mapping exposure at brightness 1.0 (slider multiplies it)
+// vivid per-part palette for the "Parts" display mode (Tripo-Studio style: each
+// segmented mesh gets its own flat colour so parts read at a glance)
+const PART_PALETTE = [
+  0xff4d4d, 0x4dff4d, 0x4d7fff, 0xffd24d, 0xb84dff, 0x22d3ee,
+  0xff8a4d, 0xff4dd2, 0x9dff4d, 0x4dffa0, 0xff6b6b, 0x6b8cff,
+]
 
 /**
  * Browser 3D viewer: loads a GLB/glTF model, orbit controls, and raycast click
@@ -39,6 +45,8 @@ export default function ModelViewer({
   onLoaded,
   onError,
   onExportModel,
+  onRevertEdits,
+  apiOut,
   highlightBox = null,
   showcase = false,
 }) {
@@ -70,6 +78,9 @@ export default function ModelViewer({
   const [dirty, setDirty] = useState(false) // unsaved manual edits exist
   const [savingEdits, setSavingEdits] = useState(false)
   const [toolError, setToolError] = useState(null)
+  // brush ring that follows the pointer over the canvas so the paint/sculpt area
+  // is visible (hidden over the UI panels so their buttons stay clickable)
+  const [brushCursor, setBrushCursor] = useState(null) // { x, y } in canvas px, or null
   const toolRef = useRef(null)
   toolRef.current = tool
   const colorRef = useRef(paintColor)
@@ -131,11 +142,17 @@ export default function ModelViewer({
     controls.autoRotateSpeed = 1.6
     controls.autoRotate = autoRotate
 
-    // three-point lighting: cool sky/ground ambient + warm key + steel rim
-    scene.add(new THREE.HemisphereLight(0x8fb4d6, 0x1a1208, 0.7))
-    const keyLight = new THREE.DirectionalLight(0xfff1e0, 2.2)
+    // three-point lighting: cool sky/ground ambient + warm key + steel rim, plus
+    // a soft fill so very dark models (e.g. matte-black recolors) never go to a
+    // pure-black void. The brightness slider scales overall exposure on top.
+    scene.add(new THREE.HemisphereLight(0x8fb4d6, 0x1a1208, 0.95))
+    scene.add(new THREE.AmbientLight(0xffffff, 0.35))
+    const keyLight = new THREE.DirectionalLight(0xfff1e0, 2.4)
     keyLight.position.set(3, 5, 2)
     scene.add(keyLight)
+    const fillLight = new THREE.DirectionalLight(0xffffff, 0.7)
+    fillLight.position.set(-2, 1, 4)
+    scene.add(fillLight)
     const rimLight = new THREE.DirectionalLight(0x22d3ee, 0.9)
     rimLight.position.set(-3, 2, -4)
     scene.add(rimLight)
@@ -153,9 +170,27 @@ export default function ModelViewer({
     const wireMat = new THREE.MeshBasicMaterial({ color: 0x22d3ee, wireframe: true })
     const applyDisplayMode = (m) => {
       if (!model) return
+      let idx = 0
       model.traverse((o) => {
         if (!o.isMesh) return
-        o.material = m === 'wireframe' ? wireMat : m === 'solid' ? solidMat : o.userData.origMat
+        // meshes added AFTER load (kitbash parts) never got an origMat at load
+        // time — capture it lazily so "Shaded" can restore them instead of
+        // blanking their material (which made placed parts vanish)
+        if (!o.userData.origMat) o.userData.origMat = o.material
+        if (m === 'parts') {
+          // one flat colour per mesh (segmented parts read distinctly), cached
+          if (!o.userData.partsMat) {
+            o.userData.partsMat = new THREE.MeshStandardMaterial({
+              color: PART_PALETTE[idx % PART_PALETTE.length],
+              metalness: 0.05,
+              roughness: 0.8,
+            })
+          }
+          o.material = o.userData.partsMat
+        } else {
+          o.material = m === 'wireframe' ? wireMat : m === 'solid' ? solidMat : o.userData.origMat
+        }
+        idx++
       })
     }
 
@@ -253,6 +288,31 @@ export default function ModelViewer({
           if (!model) return reject(new Error('no model loaded'))
           new GLTFExporter().parse(model, resolve, reject, { binary: true })
         }),
+      // LOCAL recolor (free, instant, shape untouched): set the base colour on
+      // every material and adjust the PBR finish. Keeps the texture map so panel
+      // detail survives — colour multiplies the map, so e.g. black reads black.
+      // Updates userData.origMat so display-mode toggles keep the new colour.
+      recolor: (hex, finish) => {
+        if (!model) return
+        const col = new THREE.Color(hex)
+        model.traverse((o) => {
+          if (!o.isMesh) return
+          const base = o.userData.origMat || o.material
+          const mats = (Array.isArray(base) ? base : [base]).map((m) => {
+            const nm = m.clone()
+            if (nm.color) nm.color.copy(col)
+            if (finish === 'matte') { nm.roughness = 0.9; nm.metalness = 0.0 }
+            else if (finish === 'metal') { nm.roughness = 0.25; nm.metalness = 0.9 }
+            else if (finish === 'glossy') { nm.roughness = 0.15; nm.metalness = 0.1 }
+            nm.needsUpdate = true
+            return nm
+          })
+          const applied = Array.isArray(base) ? mats : mats[0]
+          o.userData.origMat = applied
+          // reflect immediately unless a non-shaded overlay (solid/wire) is active
+          if (modeRef.current === 'shaded' || modeRef.current === 'parts') o.material = applied
+        })
+      },
       undoLastPart: () => {
         const part = placedParts.pop()
         if (!part) return placedParts.length
@@ -262,6 +322,8 @@ export default function ModelViewer({
         return placedParts.length
       },
     }
+    // hand the imperative API to the parent (RecolorPanel calls recolor/exportModel)
+    if (apiOut) apiOut.current = apiRef.current
 
     let model = null
     const loader = new GLTFLoader()
@@ -288,6 +350,12 @@ export default function ModelViewer({
             c.lengthSq() > 1e-6 ? c.clone().normalize().multiplyScalar(size * 0.5) : new THREE.Vector3()
           explodeParts.push({ mesh: o, origPos: o.position.clone(), dir })
         })
+        // Default view: a 3/4 FRONT shot so the model faces the camera (slightly
+        // turned to the viewer's right), for Meshy and Tripo alike. Earlier we
+        // flipped the camera behind Tripo models on the theory they export
+        // back-to-front — but in practice that showed their BACK, so all engines
+        // now use the same front position. Only the CAMERA moves (the mesh stays
+        // put, so segment bboxes still line up).
         camera.position.set(size * 0.7, size * 0.5, size * 0.9)
         camera.near = size / 100
         camera.far = size * 10
@@ -550,6 +618,7 @@ export default function ModelViewer({
     return () => {
       disposed = true
       apiRef.current = {}
+      if (apiOut) apiOut.current = {}
       cancelAnimationFrame(raf)
       resizeObserver.disconnect()
       renderer.domElement.removeEventListener('pointerdown', onPointerDown)
@@ -563,6 +632,7 @@ export default function ModelViewer({
         highlightHelper.geometry?.dispose()
         highlightHelper.material?.dispose()
       }
+      if (model) model.traverse((o) => o.userData?.partsMat?.dispose())
       markersGroup.clear()
       markerGeom.dispose()
       markerMat.dispose()
@@ -630,8 +700,47 @@ export default function ModelViewer({
   const selected = selectedIndex != null ? points[selectedIndex] : null
   const selectedPos = selectedIndex != null ? labels[selectedIndex] : null
 
+  const UI_SELECTOR =
+    '.viewer-tools, .viewer-modes, .part-buttons, .viewer-toolbar, .viewer-stats, .mversion-strip, .viewer-hint, .viewer-labels'
+
+  // the brightness slider also lifts the BACKDROP around the model (the canvas
+  // is transparent, so this CSS glow shows through) — not just the model's
+  // exposure. Lets a dark model / dark presentation room read against the void.
+  const bt = Math.max(0, Math.min(1, (brightness - 0.6) / 2))
+  const g = Math.round(bt * 42)
+  const viewerBg = showcase
+    ? undefined
+    : `radial-gradient(circle at 50% 46%, rgb(${g + 16},${g + 20},${g + 28}), rgb(${g + 4},${g + 5},${g + 10}) 78%)`
+
   return (
-    <div className="viewer" ref={containerRef}>
+    <div
+      className={`viewer${tool ? ' tool-active' : ''}`}
+      ref={containerRef}
+      style={viewerBg ? { background: viewerBg } : undefined}
+      onPointerMove={(e) => {
+        if (!tool) return
+        // over a control panel → normal cursor, no brush ring (so you can click)
+        if (e.target.closest?.(UI_SELECTOR)) {
+          if (brushCursor) setBrushCursor(null)
+          return
+        }
+        const rect = containerRef.current.getBoundingClientRect()
+        setBrushCursor({ x: e.clientX - rect.left, y: e.clientY - rect.top })
+      }}
+      onPointerLeave={() => brushCursor && setBrushCursor(null)}
+    >
+      {tool && brushCursor && (
+        <div
+          className="brush-cursor"
+          style={{
+            left: brushCursor.x,
+            top: brushCursor.y,
+            width: (10 + brushSize * 44) * 2,
+            height: (10 + brushSize * 44) * 2,
+            borderColor: tool === 'sculpt' ? '#22d3ee' : paintColor,
+          }}
+        />
+      )}
       {!showcase && stats && (
         <div className="viewer-stats" title="Mesh topology">
           <span className="viewer-stats-topo">TRIS</span>
@@ -649,6 +758,7 @@ export default function ModelViewer({
             ['shaded', 'Shaded'],
             ['solid', 'Solid'],
             ['wireframe', 'Wire'],
+            ['parts', 'Parts'],
           ].map(([m, label]) => (
             <button
               key={m}
@@ -667,30 +777,6 @@ export default function ModelViewer({
           >
             Explode
           </button>
-        </div>
-      )}
-      {!showcase && stats && (
-        <div className="viewer-brightness" title={`Brightness ${Math.round(brightness * 100)}%`}>
-          <span className="viewer-brightness-icon" aria-hidden="true">☀</span>
-          <input
-            type="range"
-            min="0.5"
-            max="2.5"
-            step="0.05"
-            value={brightness}
-            onChange={(e) => setBrightness(Number(e.target.value))}
-            aria-label="Viewer brightness"
-          />
-          {brightness !== 1 && (
-            <button
-              type="button"
-              className="viewer-brightness-reset"
-              onClick={() => setBrightness(1)}
-              title="Reset brightness"
-            >
-              ⟳
-            </button>
-          )}
         </div>
       )}
       {!showcase && stats && (
@@ -753,22 +839,43 @@ export default function ModelViewer({
                     onClick={() => apiRef.current.undoLastPart?.()}
                     title="Remove the last placed part"
                   >
-                    ↩
+                    ↩ Undo part
                   </button>
                 </>
               )}
+              <button
+                type="button"
+                className="viewer-tools-exit"
+                onClick={() => setTool(null)}
+                title="Exit this tool (back to orbit)"
+              >
+                ✕
+              </button>
             </>
           )}
           {dirty && (
-            <button
-              type="button"
-              className="viewer-tools-save"
-              onClick={saveEdits}
-              disabled={savingEdits}
-              title="Save the manual edits as a new model version"
-            >
-              {savingEdits ? 'Saving…' : '💾 Save as version'}
-            </button>
+            <>
+              <button
+                type="button"
+                className="viewer-tools-revert"
+                onClick={() => {
+                  setTool(null)
+                  onRevertEdits?.()
+                }}
+                title="Discard ALL unsaved manual edits (parts, sculpt, paint) and reload the model"
+              >
+                ↺ Revert
+              </button>
+              <button
+                type="button"
+                className="viewer-tools-save"
+                onClick={saveEdits}
+                disabled={savingEdits}
+                title="Save the manual edits as a new model version"
+              >
+                {savingEdits ? 'Saving…' : '💾 Save as version'}
+              </button>
+            </>
           )}
           {toolError && <span className="url-error">{toolError}</span>}
         </div>
@@ -869,6 +976,27 @@ export default function ModelViewer({
               />
             </svg>
           </button>
+          <div className="viewer-bright" title="Scene brightness">
+            <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true">
+              <circle cx="12" cy="12" r="4.5" fill="currentColor" />
+              <path
+                d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M19.1 4.9L17 7M7 17l-2.1 2.1"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+              />
+            </svg>
+            <input
+              type="range"
+              min="0.6"
+              max="2.6"
+              step="0.05"
+              value={brightness}
+              onChange={(e) => setBrightness(Number(e.target.value))}
+              aria-label="Scene brightness"
+            />
+          </div>
         </div>
       )}
     </div>

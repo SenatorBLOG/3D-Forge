@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { recordTask, updateTask } from '../src/services/history.js'
+import { recordTask, updateTask, removeTask } from '../src/services/history.js'
 import { listLibrary } from '../src/services/library.js'
 import { toggleFavorite, favoriteIds } from '../src/services/favorites.js'
 
@@ -58,4 +58,13 @@ test('anonymous callers get favorite:false and no favorites set', async () => {
   const { models } = await listLibrary({})
   assert.ok(models.every((m) => m.favorite === false))
   assert.equal((await favoriteIds(null)).size, 0)
+})
+
+test('removeTask deletes a generation from the library (DELETE endpoint path)', async () => {
+  recordTask({ kind: 'generate', taskId: 'lib-del', prompt: 'to be deleted', mock: true, ownerId: 'u1' })
+  assert.ok((await listLibrary({})).models.some((m) => m.taskId === 'lib-del'))
+  const removed = removeTask('lib-del')
+  assert.equal(removed.taskId, 'lib-del')
+  assert.ok((await listLibrary({})).models.every((m) => m.taskId !== 'lib-del'))
+  assert.equal(removeTask('does-not-exist'), null) // idempotent 404 path
 })

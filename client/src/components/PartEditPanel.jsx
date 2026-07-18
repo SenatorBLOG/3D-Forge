@@ -114,10 +114,13 @@ export default function PartEditPanel({ modelUrl, part, onClose, onStitched }) {
   })
   const rebuildPart = () => {
     if (!image?.id || gen.generating) return
+    // Rebuild the part with TRIPO (image→3D), same engine that made the base model
+    // and Multiview — so the rebuilt part shares Tripo's orientation/scale
+    // convention and stitches back straighter than a Meshy rebuild did.
     gen.start(
       '/api/generate',
-      { mode: 'image', imageId: image.id, model: 'meshy-5', engine: 'meshy' },
-      { refine: false, model: 'meshy-5', prompt: `part: ${part.name}` },
+      { mode: 'image', imageId: image.id, engine: 'tripo' },
+      { refine: false, prompt: `part: ${part.name}` },
     )
   }
 
@@ -187,7 +190,7 @@ export default function PartEditPanel({ modelUrl, part, onClose, onStitched }) {
             </div>
           )}
           {gen.generating && gen.task.mock && (
-            <span className="hint">mock mode — set MESHY_API_KEY for a real part rebuild</span>
+            <span className="hint">mock mode — set TRIPO_API_KEY for a real part rebuild</span>
           )}
         </div>
       )}
