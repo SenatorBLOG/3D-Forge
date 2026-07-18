@@ -880,6 +880,86 @@ export default function ModelViewer({
           {toolError && <span className="url-error">{toolError}</span>}
         </div>
       )}
+      {!showcase && stats && (
+        <div className="viewer-tools" role="group" aria-label="Manual edit tools">
+          {[
+            ['paint', '🖌 Paint', 'Drag on the model to paint (covers decals too)'],
+            ['sculpt', '↕ Sculpt', 'Drag to inflate or dent the surface'],
+            ['place', '➕ Part', 'Click the surface to attach a prebuilt part'],
+          ].map(([t, label, title]) => (
+            <button
+              key={t}
+              type="button"
+              className={tool === t ? 'on' : ''}
+              title={title}
+              onClick={() => {
+                setTool(tool === t ? null : t)
+                if (t === 'paint' && tool !== t) setMode('shaded') // paint needs real materials
+              }}
+            >
+              {label}
+            </button>
+          ))}
+          {tool && (
+            <>
+              <input
+                type="color"
+                value={paintColor}
+                onChange={(e) => setPaintColor(e.target.value)}
+                title="Brush / part color"
+              />
+              <input
+                type="range"
+                min="0.1"
+                max="1"
+                step="0.05"
+                value={brushSize}
+                onChange={(e) => setBrushSize(Number(e.target.value))}
+                title="Brush / part size"
+              />
+              {tool === 'sculpt' && (
+                <button
+                  type="button"
+                  onClick={() => setSculptDir(-sculptDir)}
+                  title="Toggle between inflating and denting"
+                >
+                  {sculptDir > 0 ? '⬆ Inflate' : '⬇ Dent'}
+                </button>
+              )}
+              {tool === 'place' && (
+                <>
+                  <select value={preset} onChange={(e) => setPreset(e.target.value)} title="Part shape">
+                    {['horn', 'spike', 'ball', 'fin', 'plate'].map((p) => (
+                      <option key={p} value={p}>
+                        {p}
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    type="button"
+                    onClick={() => apiRef.current.undoLastPart?.()}
+                    title="Remove the last placed part"
+                  >
+                    ↩
+                  </button>
+                </>
+              )}
+            </>
+          )}
+          {dirty && (
+            <button
+              type="button"
+              className="viewer-tools-save"
+              onClick={saveEdits}
+              disabled={savingEdits}
+              title="Save the manual edits as a new model version"
+            >
+              {savingEdits ? 'Saving…' : '💾 Save as version'}
+            </button>
+          )}
+          {toolError && <span className="url-error">{toolError}</span>}
+        </div>
+      )}
       {!showcase && (
         <div className="viewer-labels">
           {labels.map((l, i) =>
