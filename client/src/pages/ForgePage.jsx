@@ -590,6 +590,20 @@ export default function ForgePage() {
                 setModelError(message)
                 setModelStatus('error')
               }}
+              onExportModel={async (buf) => {
+                // manual paint/sculpt/kitbash edits → stored model → new child version
+                const res = await fetch('/api/models/upload?name=manual-edit', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/octet-stream' },
+                  body: buf,
+                })
+                const data = await res.json()
+                if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`)
+                setBaseModelPrompt('Manual edit')
+                setLastEditPrompt(null)
+                setHistoryKey((k) => k + 1)
+                swapModel(data.url, { version: { as: 'child', label: 'Manual edit' } })
+              }}
               highlightBox={highlightBox}
             />
             {modelStatus === 'ready' && points.length === 0 && (

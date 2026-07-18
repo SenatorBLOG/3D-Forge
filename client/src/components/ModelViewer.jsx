@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import * as THREE from 'three'
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
+import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js'
 import MicButton from './MicButton.jsx'
 import { toLoadableUrl } from '../lib/modelUrl.js'
 
@@ -37,6 +38,7 @@ export default function ModelViewer({
   onPromptChange,
   onLoaded,
   onError,
+  onExportModel,
   highlightBox = null,
   showcase = false,
 }) {
@@ -57,6 +59,29 @@ export default function ModelViewer({
   brightnessRef.current = brightness
   // "explode" the parts apart to reveal structure (Tripo-style), toolbar toggle
   const [exploded, setExploded] = useState(false)
+  // P5/P6 manual edit tools: paint (texture brush), sculpt (inflate/dent),
+  // place (kitbash a prebuilt part). Values mirrored into refs so the pointer
+  // handlers (bound once per model) always read the current setting.
+  const [tool, setTool] = useState(null) // null | 'paint' | 'sculpt' | 'place'
+  const [paintColor, setPaintColor] = useState('#e64545')
+  const [brushSize, setBrushSize] = useState(0.5)
+  const [sculptDir, setSculptDir] = useState(1) // +1 inflate, -1 dent
+  const [preset, setPreset] = useState('horn')
+  const [dirty, setDirty] = useState(false) // unsaved manual edits exist
+  const [savingEdits, setSavingEdits] = useState(false)
+  const [toolError, setToolError] = useState(null)
+  const toolRef = useRef(null)
+  toolRef.current = tool
+  const colorRef = useRef(paintColor)
+  colorRef.current = paintColor
+  const sizeRef = useRef(brushSize)
+  sizeRef.current = brushSize
+  const dirRef = useRef(sculptDir)
+  dirRef.current = sculptDir
+  const presetRef = useRef(preset)
+  presetRef.current = preset
+  const setDirtyRef = useRef(() => {})
+  setDirtyRef.current = () => setDirty(true)
   // display mode + mesh stats for the viewer toolbar/badge
   const [mode, setMode] = useState('shaded') // shaded | solid | wireframe
   const [stats, setStats] = useState(null) // { faces, vertices }
@@ -177,6 +202,10 @@ export default function ModelViewer({
     const modelCenter = new THREE.Vector3()
     let highlightHelper = null
     const explodeParts = [] // { mesh, origPos:Vector3, dir:Vector3 }
+    // P5/P6 manual-edit state (per loaded model)
+    let modelSize = 1 // world diagonal, set by the loader — scales brushes/parts
+    const placedParts = [] // kitbash meshes, newest last (for undo)
+    const sculptedMeshes = new Set() // normals recomputed at stroke end
 
     // draw a wireframe box over a part's bbox (from segmentation), or clear it
     const setHighlight = (box) => {
@@ -218,6 +247,20 @@ export default function ModelViewer({
       },
       setHighlight,
       setExploded,
+      // serialize the (edited) model back to a GLB — manual edits become a new version
+      exportModel: () =>
+        new Promise((resolve, reject) => {
+          if (!model) return reject(new Error('no model loaded'))
+          new GLTFExporter().parse(model, resolve, reject, { binary: true })
+        }),
+      undoLastPart: () => {
+        const part = placedParts.pop()
+        if (!part) return placedParts.length
+        part.parent?.remove(part)
+        part.geometry.dispose()
+        part.material.dispose()
+        return placedParts.length
+      },
     }
 
     let model = null
@@ -235,6 +278,7 @@ export default function ModelViewer({
         const size = box.getSize(new THREE.Vector3()).length()
         model.position.sub(center)
         modelCenter.copy(center)
+        modelSize = size
         // record each mesh's outward direction (from center) for the explode toggle
         model.updateWorldMatrix(true, true)
         model.traverse((o) => {
@@ -304,6 +348,7 @@ export default function ModelViewer({
         !downAt || Math.hypot(e.clientX - downAt.x, e.clientY - downAt.y) > 5
       downAt = null
       if (wasDrag || !model) return
+      if (toolRef.current) return // an edit tool owns clicks — no point-adding
 
       const rect = renderer.domElement.getBoundingClientRect()
       pointer.x = ((e.clientX - rect.left) / rect.width) * 2 - 1
@@ -322,6 +367,165 @@ export default function ModelViewer({
     renderer.domElement.addEventListener('pointerup', onPointerUp)
     // labels follow the model as the camera moves (orbit/zoom/pan)
     controls.addEventListener('change', updateLabels)
+
+    // --- P5/P6 manual edit tools: paint / sculpt / place ---------------------
+
+    const pick = (e) => {
+      if (!model) return null
+      const rect = renderer.domElement.getBoundingClientRect()
+      pointer.x = ((e.clientX - rect.left) / rect.width) * 2 - 1
+      pointer.y = -((e.clientY - rect.top) / rect.height) * 2 + 1
+      raycaster.setFromCamera(pointer, camera)
+      return raycaster.intersectObject(model, true)[0] ?? null
+    }
+
+    // P5 paint: draw into a CanvasTexture copy of the mesh's texture at the hit
+    // UV. Meshes without a texture get a canvas filled with their base color, so
+    // painting over a decal (e.g. a gold skull) covers it exactly.
+    const prepPaint = (mesh) => {
+      if (mesh.userData.paintCtx) return
+      const mat = (mesh.userData.origMat || mesh.material).clone()
+      const img = mat.map?.image
+      const canvas = document.createElement('canvas')
+      canvas.width = img?.width || 1024
+      canvas.height = img?.height || 1024
+      const ctx = canvas.getContext('2d')
+      if (img) {
+        try {
+          ctx.drawImage(img, 0, 0, canvas.width, canvas.height)
+        } catch {
+          ctx.fillStyle = `#${mat.color.getHexString()}`
+          ctx.fillRect(0, 0, canvas.width, canvas.height)
+        }
+      } else {
+        ctx.fillStyle = `#${mat.color.getHexString()}`
+        ctx.fillRect(0, 0, canvas.width, canvas.height)
+        mat.color.set('#ffffff') // color moved into the map — avoid double-tinting
+      }
+      const tex = new THREE.CanvasTexture(canvas)
+      tex.flipY = mat.map ? mat.map.flipY : false // glTF textures are unflipped
+      tex.colorSpace = THREE.SRGBColorSpace
+      if (mat.map) {
+        tex.wrapS = mat.map.wrapS
+        tex.wrapT = mat.map.wrapT
+      }
+      mat.map = tex
+      mat.needsUpdate = true
+      mesh.material = mat
+      mesh.userData.origMat = mat // display-mode toggles keep showing the paint
+      mesh.userData.paintCtx = ctx
+      mesh.userData.paintTex = tex
+    }
+
+    const paintAt = (hit) => {
+      const mesh = hit.object
+      if (!mesh.isMesh || !hit.uv) return
+      prepPaint(mesh)
+      const { paintCtx: ctx, paintTex: tex } = mesh.userData
+      const w = ctx.canvas.width
+      const h = ctx.canvas.height
+      const y = (tex.flipY ? 1 - hit.uv.y : hit.uv.y) * h
+      ctx.fillStyle = colorRef.current
+      ctx.beginPath()
+      ctx.arc(hit.uv.x * w, y, Math.max(2, sizeRef.current * 0.05 * w), 0, Math.PI * 2)
+      ctx.fill()
+      tex.needsUpdate = true
+      setDirtyRef.current()
+    }
+
+    // P5 sculpt: displace vertices near the hit point along their normals
+    // (inflate or dent); normals are recomputed once at stroke end.
+    const sculptAt = (hit) => {
+      const mesh = hit.object
+      const pos = mesh.geometry?.attributes.position
+      const nrm = mesh.geometry?.attributes.normal
+      if (!pos || !nrm) return
+      const local = mesh.worldToLocal(hit.point.clone())
+      const meshScale = mesh.getWorldScale(new THREE.Vector3()).x || 1
+      const radius = (modelSize * 0.05 * (0.3 + sizeRef.current)) / meshScale
+      const strength = radius * 0.18 * dirRef.current
+      const r2 = radius * radius
+      for (let i = 0; i < pos.count; i++) {
+        const dx = pos.getX(i) - local.x
+        const dy = pos.getY(i) - local.y
+        const dz = pos.getZ(i) - local.z
+        const d2 = dx * dx + dy * dy + dz * dz
+        if (d2 > r2) continue
+        const fall = 1 - Math.sqrt(d2) / radius
+        pos.setXYZ(
+          i,
+          pos.getX(i) + nrm.getX(i) * strength * fall,
+          pos.getY(i) + nrm.getY(i) * strength * fall,
+          pos.getZ(i) + nrm.getZ(i) * strength * fall,
+        )
+      }
+      pos.needsUpdate = true
+      sculptedMeshes.add(mesh)
+      setDirtyRef.current()
+    }
+
+    // P6 kitbash: drop a prebuilt part on the surface, oriented along the normal
+    const PART_PRESETS = {
+      horn: () => new THREE.ConeGeometry(0.35, 1.6, 20),
+      spike: () => new THREE.ConeGeometry(0.18, 1.1, 10),
+      ball: () => new THREE.SphereGeometry(0.5, 20, 16),
+      fin: () => new THREE.BoxGeometry(1.4, 0.9, 0.08),
+      plate: () => new THREE.CylinderGeometry(0.55, 0.55, 0.09, 24),
+    }
+    const placeAt = (hit) => {
+      const normal = hit.face
+        ? hit.face.normal.clone().transformDirection(hit.object.matrixWorld)
+        : new THREE.Vector3(0, 1, 0)
+      const geom = (PART_PRESETS[presetRef.current] || PART_PRESETS.horn)()
+      const mat = new THREE.MeshStandardMaterial({
+        color: colorRef.current,
+        metalness: 0.1,
+        roughness: 0.7,
+      })
+      const part = new THREE.Mesh(geom, mat)
+      const s = modelSize * 0.12 * (0.35 + sizeRef.current)
+      part.scale.setScalar(s)
+      part.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), normal)
+      part.position.copy(hit.point).addScaledVector(normal, s * 0.45)
+      part.userData.kitPart = true
+      scene.add(part)
+      model.attach(part) // reparent under the model so exports include it
+      placedParts.push(part)
+      setDirtyRef.current()
+    }
+
+    let stroking = false
+    const onToolDown = (e) => {
+      if (!toolRef.current || !model || e.button !== 0) return
+      const hit = pick(e)
+      if (!hit) return
+      controls.enabled = false // the stroke owns the drag, not the orbit
+      if (toolRef.current === 'place') {
+        placeAt(hit)
+        controls.enabled = true
+        return
+      }
+      stroking = true
+      if (toolRef.current === 'paint') paintAt(hit)
+      else sculptAt(hit)
+    }
+    const onToolMove = (e) => {
+      if (!stroking) return
+      const hit = pick(e)
+      if (!hit) return
+      if (toolRef.current === 'paint') paintAt(hit)
+      else if (toolRef.current === 'sculpt') sculptAt(hit)
+    }
+    const onToolUp = () => {
+      if (!stroking) return
+      stroking = false
+      controls.enabled = true
+      for (const m of sculptedMeshes) m.geometry.computeVertexNormals()
+      sculptedMeshes.clear()
+    }
+    renderer.domElement.addEventListener('pointerdown', onToolDown)
+    renderer.domElement.addEventListener('pointermove', onToolMove)
+    window.addEventListener('pointerup', onToolUp)
 
     const onResize = () => {
       if (!container.clientWidth || !container.clientHeight) return
@@ -350,6 +554,9 @@ export default function ModelViewer({
       resizeObserver.disconnect()
       renderer.domElement.removeEventListener('pointerdown', onPointerDown)
       renderer.domElement.removeEventListener('pointerup', onPointerUp)
+      renderer.domElement.removeEventListener('pointerdown', onToolDown)
+      renderer.domElement.removeEventListener('pointermove', onToolMove)
+      window.removeEventListener('pointerup', onToolUp)
       controls.removeEventListener('change', updateLabels)
       controls.dispose()
       if (highlightHelper) {
@@ -402,6 +609,23 @@ export default function ModelViewer({
   useEffect(() => {
     if (selectedIndex != null) popupRef.current?.focus()
   }, [selectedIndex])
+
+  // export the manually edited model and hand it up as a new version
+  const saveEdits = async () => {
+    if (!apiRef.current.exportModel || savingEdits) return
+    setSavingEdits(true)
+    setToolError(null)
+    try {
+      const buf = await apiRef.current.exportModel()
+      await onExportModel?.(buf)
+      setDirty(false)
+      setTool(null)
+    } catch (e) {
+      setToolError(e.message || 'Failed to save the edits')
+    } finally {
+      setSavingEdits(false)
+    }
+  }
 
   const selected = selectedIndex != null ? points[selectedIndex] : null
   const selectedPos = selectedIndex != null ? labels[selectedIndex] : null
@@ -467,6 +691,86 @@ export default function ModelViewer({
               ⟳
             </button>
           )}
+        </div>
+      )}
+      {!showcase && stats && (
+        <div className="viewer-tools" role="group" aria-label="Manual edit tools">
+          {[
+            ['paint', '🖌 Paint', 'Drag on the model to paint (covers decals too)'],
+            ['sculpt', '↕ Sculpt', 'Drag to inflate or dent the surface'],
+            ['place', '➕ Part', 'Click the surface to attach a prebuilt part'],
+          ].map(([t, label, title]) => (
+            <button
+              key={t}
+              type="button"
+              className={tool === t ? 'on' : ''}
+              title={title}
+              onClick={() => {
+                setTool(tool === t ? null : t)
+                if (t === 'paint' && tool !== t) setMode('shaded') // paint needs real materials
+              }}
+            >
+              {label}
+            </button>
+          ))}
+          {tool && (
+            <>
+              <input
+                type="color"
+                value={paintColor}
+                onChange={(e) => setPaintColor(e.target.value)}
+                title="Brush / part color"
+              />
+              <input
+                type="range"
+                min="0.1"
+                max="1"
+                step="0.05"
+                value={brushSize}
+                onChange={(e) => setBrushSize(Number(e.target.value))}
+                title="Brush / part size"
+              />
+              {tool === 'sculpt' && (
+                <button
+                  type="button"
+                  onClick={() => setSculptDir(-sculptDir)}
+                  title="Toggle between inflating and denting"
+                >
+                  {sculptDir > 0 ? '⬆ Inflate' : '⬇ Dent'}
+                </button>
+              )}
+              {tool === 'place' && (
+                <>
+                  <select value={preset} onChange={(e) => setPreset(e.target.value)} title="Part shape">
+                    {['horn', 'spike', 'ball', 'fin', 'plate'].map((p) => (
+                      <option key={p} value={p}>
+                        {p}
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    type="button"
+                    onClick={() => apiRef.current.undoLastPart?.()}
+                    title="Remove the last placed part"
+                  >
+                    ↩
+                  </button>
+                </>
+              )}
+            </>
+          )}
+          {dirty && (
+            <button
+              type="button"
+              className="viewer-tools-save"
+              onClick={saveEdits}
+              disabled={savingEdits}
+              title="Save the manual edits as a new model version"
+            >
+              {savingEdits ? 'Saving…' : '💾 Save as version'}
+            </button>
+          )}
+          {toolError && <span className="url-error">{toolError}</span>}
         </div>
       )}
       {!showcase && (
