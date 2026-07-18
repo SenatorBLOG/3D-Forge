@@ -107,21 +107,33 @@ export async function createTripoImageTask(imageBytes, mime = 'image/png') {
 export async function createTripoMultiviewTask(views) {
   if (isTripoMock()) return createMockTask('multiview-to-3d')
   enforceDailyLimit()
+  // verified 2026-07-18: `files` must be EXACTLY 4 slots [front, left, back,
+  // right]; missing views are empty `{}` (2 real + 2 `{}` was accepted, 2-only
+  // gave code 1004). Each present slot is { type:'jpg'|'png', file_token };
+  // webp is not accepted.
   const files = []
-  for (const v of views) {
+  for (const v of views.slice(0, 4)) {
     if (!v?.bytes) {
-      files.push({}) // an empty slot — Tripo allows missing views
+      files.push({})
       continue
     }
+    const ext = v.mime?.includes('png') ? 'png' : 'jpg'
+    const mime = ext === 'png' ? 'image/png' : 'image/jpeg'
     const form = new FormData()
-    const ext = v.mime?.includes('jpeg') ? 'jpg' : v.mime?.includes('webp') ? 'webp' : 'png'
-    form.append('file', new Blob([v.bytes], { type: v.mime || 'image/png' }), `view.${ext}`)
+    form.append('file', new Blob([v.bytes], { type: mime }), `view.${ext}`)
     const uploaded = await tripoFetch('/upload', { method: 'POST', body: form })
     files.push({ type: ext, file_token: uploaded.image_token })
   }
+  while (files.length < 4) files.push({}) // pad to the required 4 slots
   const data = await tripoFetch('/task', {
     method: 'POST',
-    body: JSON.stringify({ type: 'multiview_to_model', files }),
+    body: JSON.stringify({
+      type: 'multiview_to_model',
+      files,
+      texture: true,
+      pbr: true,
+      texture_quality: 'standard',
+    }),
   })
   return data.task_id
 }
@@ -146,7 +158,27 @@ export async function createTripoRetextureTask({ bytes, mime = 'model/gltf-binar
     body: JSON.stringify({
       type: 'texture_model',
       original_model: { type: 'glb', file_token: uploaded.image_token },
-      texture_prompt: prompt || '',
+      text_prompt: prompt || '',
+    }),
+  })
+  return data.task_id
+}
+
+/**
+ * Retexture via the NATIVE chain: recolor a model that ALREADY lives in Tripo by
+ * its generation task_id — no /upload, so it works regardless of GLB size (big
+ * models 413 on upload). Mirrors createTripoSegmentByTaskId. `texture_model`
+ * takes `original_model_task_id`; geometry is untouched, only the texture changes.
+ */
+export async function createTripoRetextureByTaskId(originalModelTaskId, prompt) {
+  if (isTripoMock()) return createMockTask('retexture')
+  enforceDailyLimit()
+  const data = await tripoFetch('/task', {
+    method: 'POST',
+    body: JSON.stringify({
+      type: 'texture_model',
+      original_model_task_id: originalModelTaskId,
+      text_prompt: prompt || '',
     }),
   })
   return data.task_id
@@ -178,6 +210,25 @@ export async function createTripoSegmentTask({ bytes, mime = 'model/gltf-binary'
   return data.task_id
 }
 
+/**
+ * P3 real (native chain): segment a model that ALREADY lives in Tripo, by its
+ * generation task_id — no upload/import/STS. Cheapest path (~40 credits).
+ * `mesh_segmentation` takes `original_model_task_id`; polling returns
+ * `output.model` = a GLB with one node/mesh per part (tripo_part_N).
+ */
+export async function createTripoSegmentByTaskId(originalModelTaskId) {
+  if (isTripoMock()) return createMockTask('segmentation')
+  enforceDailyLimit()
+  const data = await tripoFetch('/task', {
+    method: 'POST',
+    body: JSON.stringify({
+      type: 'mesh_segmentation',
+      original_model_task_id: originalModelTaskId,
+    }),
+  })
+  return data.task_id
+}
+
 // Tripo → our unified (Meshy-shaped) task object, so the existing polling
 // route and History flow work unchanged regardless of engine.
 const STATUS_MAP = {
@@ -188,6 +239,24 @@ const STATUS_MAP = {
   cancelled: 'CANCELED',
   banned: 'FAILED',
 }
+
+/**
+ * Fetch the RAW Tripo task data (status + full `output`), or null when unknown.
+ * Segmentation output fields aren't the same as generation (pbr_model/model), so
+ * the segmentation flow needs the untranslated object to find its result URL.
+ */
+export async function getTripoTaskRaw(id) {
+  if (isTripoMock()) return getMockTask(id)
+  try {
+    return await tripoFetch(`/task/${encodeURIComponent(id)}`)
+  } catch (err) {
+    if (err.status === 404 || err.status === 400) return null
+    throw err
+  }
+}
+
+/** Map a raw Tripo status string to our unified status. */
+export const tripoStatus = (s) => STATUS_MAP[s] ?? 'IN_PROGRESS'
 
 /** Fetch a Tripo task in the unified shape, or null when unknown. */
 export async function getTripoTask(id) {

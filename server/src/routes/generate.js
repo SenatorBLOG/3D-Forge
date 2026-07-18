@@ -1,13 +1,13 @@
 import { Router } from 'express'
 import { createRefineTask, createImageTask, isMockMode } from '../services/meshy.js'
 import { resolveEngine, engineIsMock, startGeneration, getAnyTask } from '../services/engines.js'
-import { createTripoMultiviewTask, createTripoRetextureTask, isTripoMock } from '../services/tripo.js'
+import { createTripoMultiviewTask, createTripoRetextureTask, createTripoRetextureByTaskId, isTripoMock } from '../services/tripo.js'
 import { readModelBytes } from '../services/segment.js'
 import { archiveModelUrl } from '../services/modelArchive.js'
 import { dbReady } from '../db.js'
 import GeneratedModel from '../models/GeneratedModel.js'
 import SpatialPromptRecord from '../models/SpatialPromptRecord.js'
-import { recordTask, updateTask, removeTask } from '../services/history.js'
+import { recordTask, updateTask, removeTask, listMemory } from '../services/history.js'
 import { optionalAuth } from '../middleware/auth.js'
 import { getWallet, spend, grant } from '../services/wallet.js'
 import { getImage, imageDataUri, readImageBytes } from '../services/images.js'
@@ -329,6 +329,21 @@ router.post('/multiview', optionalAuth, async (req, res) => {
   res.status(202).json({ taskId, mode: 'multiview', engine: 'tripo', mock, cost: charge.cost })
 })
 
+// Find the native Tripo generation task_id behind a stored model URL (records
+// keep the namespaced task id next to the URL; real Tripo tasks are "tripo-…").
+// Returns the bare id, or null when the model wasn't made with Tripo.
+async function tripoTaskIdForModel(modelUrl) {
+  let taskId = listMemory().find((e) => e.modelUrl === modelUrl)?.taskId || null
+  if (!taskId && dbReady()) {
+    try {
+      taskId = (await GeneratedModel.findOne({ modelUrl }).lean())?.meshyTaskId || null
+    } catch {
+      /* non-fatal */
+    }
+  }
+  return taskId && taskId.startsWith('tripo-') ? taskId.slice('tripo-'.length) : null
+}
+
 // POST /api/generate/retexture — P2 surface edit: recolor / re-material an
 // EXISTING model by prompt, geometry untouched (no drift). Tripo texture_model;
 // mock-safe (no key → mock model, free). → { taskId, mock }, poll GET /:taskId.
@@ -348,12 +363,21 @@ router.post('/retexture', optionalAuth, async (req, res) => {
 
   let taskId
   try {
-    let bytes = null
-    if (!mock) {
-      bytes = await readModelBytes(modelUrl)
-      if (!bytes) return res.status(400).json({ error: 'could not read the model to retexture' })
+    // Prefer the NATIVE chain for Tripo-made models: recolor by task_id, no
+    // /upload — big GLBs (this robot is ~15MB) 413 on upload. Fall back to the
+    // upload path only for non-Tripo models (e.g. Meshy), which have no task_id.
+    const tripoId = mock ? null : await tripoTaskIdForModel(modelUrl)
+    let id
+    if (tripoId) {
+      id = await createTripoRetextureByTaskId(tripoId, prompt)
+    } else {
+      let bytes = null
+      if (!mock) {
+        bytes = await readModelBytes(modelUrl)
+        if (!bytes) return res.status(400).json({ error: 'could not read the model to retexture' })
+      }
+      id = await createTripoRetextureTask({ bytes, prompt })
     }
-    const id = await createTripoRetextureTask({ bytes, prompt })
     taskId = isTripoMock() ? id : `tripo-${id}`
   } catch (err) {
     await refundGeneration(req, { kind: 'preview', aiModel: 'meshy-5', mock })

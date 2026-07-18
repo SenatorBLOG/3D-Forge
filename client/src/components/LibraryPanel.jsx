@@ -1,12 +1,14 @@
 import { useEffect, useState } from 'react'
 import { useAuth } from '../auth/AuthContext.jsx'
 import { getThumbnail } from '../lib/thumbnailer.js'
+import { downloadModel } from '../lib/download.js'
 
 const PAGE = 12
 
-/** One library card: real thumbnail, prompt label, favorite star. */
-function LibraryCard({ m, onLoad, onFavorite, canFavorite }) {
+/** One library card: real thumbnail, prompt label, favorite star, download, delete. */
+function LibraryCard({ m, onLoad, onFavorite, canFavorite, onDelete }) {
   const [thumb, setThumb] = useState(null)
+  const [downloading, setDownloading] = useState(false)
   useEffect(() => {
     let cancelled = false
     if (!m.modelUrl) return undefined
@@ -17,6 +19,18 @@ function LibraryCard({ m, onLoad, onFavorite, canFavorite }) {
       cancelled = true
     }
   }, [m.modelUrl])
+
+  const download = async () => {
+    if (!m.modelUrl || downloading) return
+    setDownloading(true)
+    try {
+      await downloadModel(m.modelUrl, m.prompt || 'model')
+    } catch {
+      /* non-fatal */
+    } finally {
+      setDownloading(false)
+    }
+  }
 
   return (
     <div className={`lib-card ${m.modelUrl ? '' : 'lib-card--pending'}`}>
@@ -29,6 +43,21 @@ function LibraryCard({ m, onLoad, onFavorite, canFavorite }) {
       >
         {thumb ? <img src={thumb} alt={m.prompt || 'model'} loading="lazy" /> : <span className="lib-thumb-ph" />}
       </button>
+      {m.modelUrl && (
+        <div className="lib-card-actions">
+          <button type="button" onClick={download} disabled={downloading} title="Download .glb">
+            {downloading ? '…' : '⤓'}
+          </button>
+          <button
+            type="button"
+            className="lib-del"
+            onClick={() => onDelete(m)}
+            title="Delete from library"
+          >
+            ✕
+          </button>
+        </div>
+      )}
       <div className="lib-card-foot">
         <span className="lib-prompt" title={m.prompt}>
           {m.prompt || 'Untitled'}
@@ -108,6 +137,25 @@ export default function LibraryPanel({ refreshKey = 0, busy = false, onLoad }) {
     }
   }
 
+  const deleteModel = async (m) => {
+    if (!window.confirm(`Delete "${m.prompt || 'this model'}" from the library?`)) return
+    const headers = token ? { Authorization: `Bearer ${token}` } : {}
+    try {
+      const res = await fetch(`/api/models/${encodeURIComponent(m.taskId)}`, {
+        method: 'DELETE',
+        headers,
+      })
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}))
+        throw new Error(d.error || `HTTP ${res.status}`)
+      }
+      setModels((prev) => (prev || []).filter((x) => x.taskId !== m.taskId))
+      setTotal((t) => Math.max(0, t - 1))
+    } catch (e) {
+      setError(e.message)
+    }
+  }
+
   const toggleStar = async (m) => {
     if (!token) return
     try {
@@ -172,6 +220,7 @@ export default function LibraryPanel({ refreshKey = 0, busy = false, onLoad }) {
               m={m}
               canFavorite={!!user}
               onFavorite={toggleStar}
+              onDelete={deleteModel}
               onLoad={(x) => !busy && onLoad?.({ prompt: x.prompt, modelUrl: x.modelUrl })}
             />
           ))}

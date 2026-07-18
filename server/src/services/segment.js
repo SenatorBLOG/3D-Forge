@@ -6,6 +6,7 @@ import { dbReady } from '../db.js'
 import { load, flush } from './persistence.js'
 import { resolveLocalModel } from './convert.js'
 import { readCloudFile, cloudFilesEnabled, saveCloudFile } from './files.js'
+import { createTripoSegmentByTaskId, getTripoTaskRaw, tripoStatus, isTripoMock } from './tripo.js'
 
 // Region editing (B-H): segment a model into named parts, hit-test a spatial
 // point to a part, and "part-swap" that region. In mock mode (no BANG!/Tripo
@@ -190,6 +191,73 @@ export async function segmentModel(modelUrl) {
   return { modelUrl, parts, cached: false }
 }
 
+// --- P3 real: Tripo semantic segmentation ----------------------------------
+
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
+
+// Pull the first plausible model URL out of a Tripo segmentation `output`. The
+// exact field name is doc-based/untested — try the likely keys, then any http
+// value — and the raw output is logged on the first real call so we can pin it.
+function findSegmentedModelUrl(output) {
+  if (!output || typeof output !== 'object') return null
+  const keys = ['segmented_model', 'model', 'pbr_model', 'base_model', 'glb', 'result']
+  for (const k of keys) {
+    const v = output[k]
+    if (typeof v === 'string' && /^https?:\/\//.test(v)) return v
+    if (v && typeof v === 'object' && typeof v.url === 'string') return v.url
+  }
+  for (const v of Object.values(output)) {
+    if (typeof v === 'string' && /^https?:\/\//.test(v)) return v
+  }
+  return null
+}
+
+/**
+ * REAL segmentation via Tripo (native chain, spends ~40 credits). Segments a
+ * model that ALREADY lives in Tripo by its generation task_id — no upload/import
+ * (verified 2026-07-18: `mesh_segmentation` → `output.model` = GLB with one
+ * node/mesh per part, `tripo_part_N`). Downloads that GLB, stores it, and derives
+ * parts with the SAME extractParts we already use — so real parts + a working
+ * explode come for free. Returns the stored segmented model URL + parts.
+ * `originalModelUrl` (optional) is cached to resolve to the same parts.
+ * Throws NO_KEY when TRIPO_API_KEY isn't set.
+ */
+export async function segmentTripoByTaskId(tripoTaskId, originalModelUrl = null) {
+  if (isTripoMock()) throw Object.assign(new Error('TRIPO_API_KEY not set on the server'), { code: 'NO_KEY' })
+
+  const taskId = await createTripoSegmentByTaskId(tripoTaskId)
+  let raw = null
+  for (let i = 0; i < 200; i++) {
+    raw = await getTripoTaskRaw(taskId)
+    const st = tripoStatus(raw?.status)
+    if (st === 'SUCCEEDED') break
+    if (st === 'FAILED' || st === 'CANCELED') {
+      throw new Error(`Tripo segmentation ${st}: ${JSON.stringify(raw?.output || raw).slice(0, 200)}`)
+    }
+    await sleep(2500)
+  }
+  console.log('[tripo segmentation] task', taskId, 'output:', JSON.stringify(raw?.output))
+
+  const remoteUrl = findSegmentedModelUrl(raw?.output)
+  if (!remoteUrl) {
+    throw Object.assign(
+      new Error(`no segmented model URL in Tripo output: ${JSON.stringify(raw?.output).slice(0, 300)}`),
+      { code: 'BAD_OUTPUT' },
+    )
+  }
+  const segRes = await fetch(remoteUrl)
+  if (!segRes.ok) throw new Error(`failed to download the segmented model (HTTP ${segRes.status})`)
+  const segBytes = Buffer.from(await segRes.arrayBuffer())
+  // name it with "tripo" so the viewer's Tripo-facing camera flip applies here too
+  const storedUrl = await storeModelBytes(segBytes, 'model-tripo-seg')
+  const doc = await new NodeIO().readBinary(new Uint8Array(segBytes))
+  const parts = extractParts(doc)
+  memCache.set(storedUrl, parts)
+  if (originalModelUrl) memCache.set(originalModelUrl, parts)
+  saveCache()
+  return { modelUrl: storedUrl, parts, cached: false, engine: 'tripo', taskId }
+}
+
 // --- B-H2: hit-test a spatial point to a part ------------------------------
 
 const inside = (box, p) =>
@@ -268,8 +336,8 @@ function boxMesh(doc, buffer, min, max) {
 
 const newId = () => `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
 
-async function storeModelBytes(bytes) {
-  const name = `edit-${newId()}.glb`
+async function storeModelBytes(bytes, prefix = 'edit') {
+  const name = `${prefix}-${newId()}.glb`
   if (cloudFilesEnabled()) return saveCloudFile(name, Buffer.from(bytes), 'model/gltf-binary')
   mkdirSync(UPLOADS_DIR, { recursive: true })
   writeFileSync(join(UPLOADS_DIR, name), Buffer.from(bytes))

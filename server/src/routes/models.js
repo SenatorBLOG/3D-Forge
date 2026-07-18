@@ -2,7 +2,7 @@ import express, { Router } from 'express'
 import { mkdirSync, writeFileSync, readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { join, basename } from 'node:path'
-import { recordTask, updateTask } from '../services/history.js'
+import { recordTask, updateTask, removeTask, listMemory } from '../services/history.js'
 import { optionalAuth, requireAuth } from '../middleware/auth.js'
 import { listLibrary } from '../services/library.js'
 import { toggleFavorite } from '../services/favorites.js'
@@ -46,23 +46,30 @@ router.post('/upload', optionalAuth, express.raw({ type: '*/*', limit: '60mb' })
     return res.status(500).json({ error: 'failed to store the uploaded model' })
   }
   const taskId = `upload-${id}`
-  // mirror a finished generation so it shows as a History card with Load/Download
-  recordTask({ kind: 'generate', taskId, prompt: label, mock: true, ownerId: req.user?.id ?? null })
-  updateTask(taskId, 'SUCCEEDED', url)
-  // with Mongo the library reads GeneratedModel — record the upload there too,
-  // otherwise uploads never appear in the library (only in-memory history)
-  if (dbReady()) {
-    try {
-      await GeneratedModel.create({
-        prompt: label,
-        meshyTaskId: taskId,
-        status: 'SUCCEEDED',
-        modelUrl: url,
-        mock: true,
-        ownerId: req.user?.id ?? null,
-      })
-    } catch (err) {
-      console.error('upload library record failed:', err)
+  // ?record=0 → store the bytes only, DON'T list it in the Library. Used for
+  // edit/recolor VERSIONS: they live in the version strip and only reach the
+  // Library when the user explicitly clicks "send to Library" (which re-uploads
+  // without this flag). Default (record on) keeps normal uploads visible.
+  const record = req.query.record !== '0'
+  if (record) {
+    // mirror a finished generation so it shows as a History card with Load/Download
+    recordTask({ kind: 'generate', taskId, prompt: label, mock: true, ownerId: req.user?.id ?? null })
+    updateTask(taskId, 'SUCCEEDED', url)
+    // with Mongo the library reads GeneratedModel — record the upload there too,
+    // otherwise uploads never appear in the library (only in-memory history)
+    if (dbReady()) {
+      try {
+        await GeneratedModel.create({
+          prompt: label,
+          meshyTaskId: taskId,
+          status: 'SUCCEEDED',
+          modelUrl: url,
+          mock: true,
+          ownerId: req.user?.id ?? null,
+        })
+      } catch (err) {
+        console.error('upload library record failed:', err)
+      }
     }
   }
   res.status(201).json({ url, taskId })
@@ -167,6 +174,36 @@ router.get('/convert', async (req, res) => {
   } catch (err) {
     console.error('model conversion failed:', err)
     res.status(422).json({ error: 'could not convert this model (unsupported GLB features)' })
+  }
+})
+
+// DELETE /api/models/:taskId — remove a model from the library. Owner-guarded:
+// a model that recorded an ownerId can only be deleted by that user; anonymous
+// (ownerId null) models are freely deletable. The stored file is left in place
+// (harmless, and remote/Meshy assets aren't ours to delete).
+router.delete('/:taskId', optionalAuth, async (req, res) => {
+  const taskId = req.params.taskId
+  const uid = req.user?.id ?? null
+  try {
+    if (dbReady()) {
+      const doc = await GeneratedModel.findOne({ meshyTaskId: taskId })
+      if (!doc) return res.status(404).json({ error: 'model not found' })
+      if (doc.ownerId && String(doc.ownerId) !== String(uid)) {
+        return res.status(403).json({ error: 'not your model to delete' })
+      }
+      await GeneratedModel.deleteOne({ meshyTaskId: taskId })
+      return res.json({ deleted: taskId })
+    }
+    const entry = listMemory().find((e) => e.taskId === taskId)
+    if (!entry) return res.status(404).json({ error: 'model not found' })
+    if (entry.ownerId && entry.ownerId !== uid) {
+      return res.status(403).json({ error: 'not your model to delete' })
+    }
+    removeTask(taskId)
+    res.json({ deleted: taskId })
+  } catch (err) {
+    console.error('model delete failed:', err)
+    res.status(500).json({ error: 'failed to delete the model' })
   }
 })
 

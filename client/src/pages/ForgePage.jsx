@@ -12,27 +12,51 @@ import PartButtons from '../components/PartButtons.jsx'
 import PartEditPanel from '../components/PartEditPanel.jsx'
 import MicButton from '../components/MicButton.jsx'
 import useGenerationTask from '../hooks/useGenerationTask.js'
+import { downloadModel } from '../lib/download.js'
+import { toLoadableUrl } from '../lib/modelUrl.js'
 
 const SAMPLE_MODEL_URL = '/models/robotic_hand.glb'
 const isLoadableUrl = (u) => typeof u === 'string' && /^(https?:\/\/|\/)/.test(u)
+
+// Persist the working model + its version strip across page reloads (F5), so an
+// accidental refresh doesn't wipe the version history. Only stored URLs survive
+// a reload — object URLs (blob:) are dropped, since they die with the page.
+const SESSION_KEY = 'forge:session'
+const persistable = (u) => isLoadableUrl(u) && !String(u).startsWith('blob:')
+const loadSession = () => {
+  try {
+    const s = JSON.parse(localStorage.getItem(SESSION_KEY) || 'null')
+    return s && persistable(s.modelUrl) ? s : null
+  } catch {
+    return null
+  }
+}
 
 /** The forging tool: generate, click-select regions, edit, history, compare. */
 export default function ForgePage() {
   const [searchParams] = useSearchParams()
   // deep-link from Explore: /forge?model=<url> opens that model. Otherwise the
   // canvas starts EMPTY — the create surface, not a pre-loaded hand.
+  // ?model= (deep link) wins; otherwise restore the last session (survives F5).
+  // Computed once (ref) so we don't re-read localStorage on every render.
+  const restoredRef = useRef(undefined)
+  if (restoredRef.current === undefined) {
+    restoredRef.current = isLoadableUrl(searchParams.get('model')) ? null : loadSession()
+  }
+  const restored = restoredRef.current
   const [modelUrl, setModelUrl] = useState(() => {
     const m = searchParams.get('model')
-    return isLoadableUrl(m) ? m : null
+    if (isLoadableUrl(m)) return m
+    return restored?.modelUrl || null
   })
   const [modelStatus, setModelStatus] = useState(() =>
-    isLoadableUrl(searchParams.get('model')) ? 'loading' : 'idle',
+    isLoadableUrl(searchParams.get('model')) || restored?.modelUrl ? 'loading' : 'idle',
   ) // idle | loading | ready | error
   const [modelError, setModelError] = useState(null)
   // text description that produced the current model — context for edits
-  const [baseModelPrompt, setBaseModelPrompt] = useState(null)
+  const [baseModelPrompt, setBaseModelPrompt] = useState(restored?.baseModelPrompt || null)
   // how the current model was generated ('text' | 'image' | null) — published as `kind`
-  const [modelKind, setModelKind] = useState(null)
+  const [modelKind, setModelKind] = useState(restored?.modelKind || null)
   // selected points on the mesh: [{ point: {x,y,z}, meshName, prompt }]
   const [points, setPoints] = useState([])
   // which point's inline editor is open (index, or null) — shared by the model
@@ -61,13 +85,44 @@ export default function ForgePage() {
   const [highlightBox, setHighlightBox] = useState(null)
   // P4: the part being edited in the part-edit panel (click a part chip to open)
   const [activePart, setActivePart] = useState(null)
+  // Tripo native segmentation (real parts) — only for Tripo-generated models
+  const [segBusy, setSegBusy] = useState(false)
+  const [segMsg, setSegMsg] = useState(null)
   // 3D model version history: every generate/edit/part-swap appends a version
   // (branch by parentId), so an edit you dislike never loses the model you kept.
-  const [modelVersions, setModelVersions] = useState([]) // [{ id, modelUrl, label, parentId, kind }]
-  const [currentVersionId, setCurrentVersionId] = useState(null)
-  const versionSeq = useRef(0)
+  const [modelVersions, setModelVersions] = useState(
+    () => (restored?.modelVersions || []).filter((v) => persistable(v.modelUrl)),
+  ) // [{ id, modelUrl, label, parentId, kind }]
+  const [currentVersionId, setCurrentVersionId] = useState(restored?.currentVersionId || null)
+  const versionSeq = useRef(restored?.versionSeq || 0)
   const currentVersionIdRef = useRef(null)
+  // imperative handle into the live viewer (recolor/exportModel), populated by
+  // ModelViewer via its apiOut prop; used by the local (free) recolor flow
+  const viewerApiRef = useRef({})
   currentVersionIdRef.current = currentVersionId
+
+  // persist the working model + version strip so an F5 doesn't wipe the history
+  useEffect(() => {
+    try {
+      if (!persistable(modelUrl)) {
+        localStorage.removeItem(SESSION_KEY)
+        return
+      }
+      localStorage.setItem(
+        SESSION_KEY,
+        JSON.stringify({
+          modelUrl,
+          modelVersions: modelVersions.filter((v) => persistable(v.modelUrl)),
+          currentVersionId,
+          versionSeq: versionSeq.current,
+          baseModelPrompt,
+          modelKind,
+        }),
+      )
+    } catch {
+      /* storage full / private mode — non-fatal */
+    }
+  }, [modelUrl, modelVersions, currentVersionId, baseModelPrompt, modelKind])
 
   // switch the on-screen model, and optionally record it as a version:
   //   version:{ as:'root' }  — start a fresh chain (a loaded/generated base)
@@ -115,6 +170,67 @@ export default function ForgePage() {
     setLastEditPrompt(null)
     setCurrentVersionId(v.id)
     swapModel(v.modelUrl) // no version option → history untouched
+  }
+
+  // ✕ on a version card → prune it (keep only the ones worth keeping, e.g. V1 +
+  // the final). Deleting the loaded version falls back to the newest remaining.
+  const deleteVersion = (v) => {
+    const next = modelVersions.filter((x) => x.id !== v.id)
+    setModelVersions(next)
+    if (v.id === currentVersionId) {
+      const fallback = next[next.length - 1]
+      if (fallback) {
+        setLastEditPrompt(null)
+        setCurrentVersionId(fallback.id)
+        swapModel(fallback.modelUrl)
+      } else {
+        setCurrentVersionId(null)
+      }
+    }
+  }
+
+  // LOCAL recolor: tint the live model in the viewer (free, instant, shape 1:1),
+  // export the recoloured GLB, store it, and add it as a new child version — same
+  // UX as the old paid path, but it actually changes the colour and costs nothing.
+  const recolorLocal = async ({ hex, finish, label }) => {
+    const api = viewerApiRef.current
+    if (!api?.recolor || !api?.exportModel) throw new Error('Load a model first')
+    api.recolor(hex, finish)
+    const buf = await api.exportModel()
+    // record=0 → store as a version only, NOT in the Library (user sends it there
+    // explicitly via the version card's "to Library" button)
+    const res = await fetch(
+      `/api/models/upload?record=0&name=${encodeURIComponent(`recolor-${label}`)}`,
+      { method: 'POST', headers: { 'Content-Type': 'application/octet-stream' }, body: buf },
+    )
+    const data = await res.json()
+    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`)
+    setBaseModelPrompt(`Recolor: ${label}`)
+    setLastEditPrompt(null)
+    swapModel(data.url, { version: { as: 'child', label: `Recolor: ${label}` } })
+  }
+
+  // download a specific version's GLB to the computer
+  const downloadVersion = (v) => downloadModel(v.modelUrl, v.label || 'model-version')
+
+  // "send to Library": re-store the version's GLB so it shows as a Library card
+  const versionToLibrary = async (v) => {
+    try {
+      const got = await fetch(toLoadableUrl(v.modelUrl))
+      if (!got.ok) throw new Error(`HTTP ${got.status}`)
+      const blob = await got.blob()
+      const name = (v.label || 'Model version').slice(0, 60)
+      const up = await fetch(`/api/models/upload?name=${encodeURIComponent(name)}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/octet-stream' },
+        body: blob,
+      })
+      if (!up.ok) throw new Error(`HTTP ${up.status}`)
+      setHistoryKey((k) => k + 1) // refresh the Library to show the new card
+    } catch (e) {
+      setModelError(`Couldn't save to Library: ${e.message}`)
+      setModelStatus('error')
+    }
   }
 
   const editTask = useGenerationTask((url) => {
@@ -248,6 +364,31 @@ export default function ForgePage() {
     setActivePart(part)
   }
 
+  // Real Tripo semantic segmentation (~40 credits) — only Tripo-generated models
+  // have a native task_id to segment; others get a clear "Tripo only" message.
+  const segmentTripo = async (urlArg) => {
+    const url = typeof urlArg === 'string' ? urlArg : modelUrl
+    if (!url || segBusy) return
+    setSegBusy(true)
+    setSegMsg(null)
+    try {
+      const res = await fetch('/api/edit/segment-tripo', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ modelUrl: url }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`)
+      setSegMsg(`✓ Segmented into ${data.parts?.length ?? 0} parts`)
+      setHistoryKey((k) => k + 1)
+      swapModel(data.modelUrl, { version: { as: 'child', label: 'Segmented (Tripo)' } })
+    } catch (e) {
+      setSegMsg(e.message)
+    } finally {
+      setSegBusy(false)
+    }
+  }
+
   // upload = preview only (view-only object URL); History gets nothing until the
   // user explicitly clicks "Save to History" (keeps History uncluttered)
   const onFileChosen = (e) => {
@@ -340,11 +481,13 @@ export default function ForgePage() {
           initialTextured={searchParams.get('textured') === '1'}
           autostart={searchParams.get('autostart') === '1'}
           onGeneratingChange={setGenBusy}
-          onModelReady={(url, prompt, kind) => {
+          onModelReady={(url, prompt, kind, opts) => {
             setBaseModelPrompt(prompt)
             setModelKind(kind || null)
             setLastEditPrompt(null)
             swapModel(url, { version: { as: 'root', label: prompt || 'Generated', kind } })
+            // "Segment on create" (Tripo) → auto-run segmentation on the fresh model
+            if (opts?.segment) segmentTripo(url)
           }}
         />
         <section className="panel">
@@ -388,6 +531,19 @@ export default function ForgePage() {
             <button className="link-button" onClick={clearModel}>
               ✕ Clear canvas
             </button>
+          )}
+          {modelUrl && (
+            <>
+              <button
+                className="submit"
+                onClick={segmentTripo}
+                disabled={segBusy}
+                title="Real semantic segmentation via Tripo (~40 credits) — Tripo-generated models only"
+              >
+                {segBusy ? 'Segmenting…' : '⬗ Segment (Tripo)'}
+              </button>
+              {segMsg && <span className="hint">{segMsg}</span>}
+            </>
           )}
         </section>
         {modelUrl && (
@@ -474,24 +630,6 @@ export default function ForgePage() {
               ? `Applying edit… ${editTask.task.progress}%`
               : 'Send edit'}
           </button>
-          <button
-            className="ghost-button"
-            onClick={startCompare}
-            disabled={!hasPrompts || busy}
-            title="Run this edit both ways and compare the results"
-          >
-            Compare spatial vs plain
-          </button>
-          <button
-            className="ghost-button partswap-btn"
-            onClick={partSwap}
-            disabled={!canPartSwap || swapBusy || busy}
-            title="Hyper3D pipeline: segment the model, regenerate ONLY the pointed part, keep the rest byte-identical"
-          >
-            {swapBusy ? 'Swapping part…' : '⚡ Regenerate part (Hyper3D)'}
-          </button>
-          {swapMsg && <span className="hint partswap-note">✓ {swapMsg}</span>}
-          {swapErr && <span className="url-error">{swapErr}</span>}
           {editTask.generating && (
             <div className="progress" aria-hidden="true">
               <div
@@ -540,17 +678,7 @@ export default function ForgePage() {
             }}
           />
         )}
-        {modelUrl && (
-          <RecolorPanel
-            modelUrl={modelUrl}
-            onModelReady3D={(url, label) => {
-              setBaseModelPrompt(label)
-              setModelKind(null)
-              setLastEditPrompt(null)
-              swapModel(url, { version: { as: 'child', label } })
-            }}
-          />
-        )}
+        {modelUrl && <RecolorPanel onRecolor={recolorLocal} />}
       </aside>
 
       {/* CENTER — canvas, or the create-first surface when empty */}
@@ -566,6 +694,7 @@ export default function ForgePage() {
             <ModelViewer
               key={`${modelUrl}#${loadKey}`}
               modelUrl={modelUrl}
+              apiOut={viewerApiRef}
               points={points}
               onAddPoint={addPoint}
               selectedIndex={selectedIndex}
@@ -577,8 +706,9 @@ export default function ForgePage() {
                 setModelStatus('error')
               }}
               onExportModel={async (buf) => {
-                // manual paint/sculpt/kitbash edits → stored model → new child version
-                const res = await fetch('/api/models/upload?name=manual-edit', {
+                // manual paint/sculpt/kitbash edits → stored model → new child version.
+                // record=0: version-only, not auto-added to the Library.
+                const res = await fetch('/api/models/upload?record=0&name=manual-edit', {
                   method: 'POST',
                   headers: { 'Content-Type': 'application/octet-stream' },
                   body: buf,
@@ -587,8 +717,13 @@ export default function ForgePage() {
                 if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`)
                 setBaseModelPrompt('Manual edit')
                 setLastEditPrompt(null)
-                setHistoryKey((k) => k + 1)
                 swapModel(data.url, { version: { as: 'child', label: 'Manual edit' } })
+              }}
+              onRevertEdits={() => {
+                // discard unsaved manual edits by remounting the viewer on the
+                // same model (key includes loadKey) — a clean reload
+                setModelStatus('loading')
+                setLoadKey((k) => k + 1)
               }}
               highlightBox={highlightBox}
             />
@@ -599,6 +734,9 @@ export default function ForgePage() {
               versions={modelVersions}
               currentId={currentVersionId}
               onSelect={loadVersion}
+              onDelete={deleteVersion}
+              onDownload={downloadVersion}
+              onToLibrary={versionToLibrary}
             />
             {modelStatus === 'ready' && (
               <PartButtons

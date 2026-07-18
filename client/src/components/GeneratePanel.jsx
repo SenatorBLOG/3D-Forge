@@ -31,6 +31,9 @@ export default function GeneratePanel({
   const [aiModel, setAiModel] = useState('meshy-5')
   // add the refine (texture/color) stage after preview
   const [textured, setTextured] = useState(!!initialTextured)
+  // Tripo only: run semantic segmentation right after the model is built, so it
+  // comes back already split into editable parts (like Meshy's texturing toggle)
+  const [segmentOnCreate, setSegmentOnCreate] = useState(false)
   // image mode: the uploaded reference (server id) + a local preview URL
   const [image, setImage] = useState(initialImageId ? { id: initialImageId } : null)
   const [preview, setPreview] = useState(null) // object URL for instant preview
@@ -75,8 +78,10 @@ export default function GeneratePanel({
 
   const submittedRef = useRef(null)
   const kindRef = useRef(null) // 'text' | 'image' — how the current task was made
+  // captured at submit time so a late toggle change can't retarget the result
+  const wantsSegmentRef = useRef(false)
   const { task, error, generating, start } = useGenerationTask((url) =>
-    onModelReady(url, submittedRef.current, kindRef.current),
+    onModelReady(url, submittedRef.current, kindRef.current, { segment: wantsSegmentRef.current }),
   )
 
   const onGeneratingChangeRef = useRef(onGeneratingChange)
@@ -176,6 +181,7 @@ export default function GeneratePanel({
     if (!trimmed) return
     submittedRef.current = trimmed
     kindRef.current = 'text'
+    wantsSegmentRef.current = engine === 'tripo' && segmentOnCreate
     start(
       '/api/generate',
       { prompt: trimmed, model: aiModel, engine },
@@ -186,10 +192,25 @@ export default function GeneratePanel({
     if (!image) return
     submittedRef.current = 'image → 3D'
     kindRef.current = 'image'
+    wantsSegmentRef.current = engine === 'tripo' && segmentOnCreate
     start(
       '/api/generate',
       { mode: 'image', imageId: image.id, model: aiModel, engine },
       { refine: false, model: aiModel, prompt: 'image → 3D' }, // image→3D is already textured
+    )
+  }
+
+  // Imagine → 3D: build the current image version into a model with the SAME
+  // engine/segment options as the other modes (no detour through image mode).
+  const startImagineTo3D = () => {
+    if (!currentImage) return
+    submittedRef.current = 'image → 3D'
+    kindRef.current = 'image'
+    wantsSegmentRef.current = engine === 'tripo' && segmentOnCreate
+    start(
+      '/api/generate',
+      { mode: 'image', imageId: currentImage.id, model: aiModel, engine },
+      { refine: false, model: aiModel, prompt: 'image → 3D' },
     )
   }
 
@@ -266,7 +287,8 @@ export default function GeneratePanel({
     setEditInstruction((prev) => (prev.trim() ? `${prev.trim()} ${text}` : text))
 
   const previewSrc = preview || image?.url
-  const canGenerate = mode === 'text' ? !!prompt.trim() : !!image
+  const canGenerate =
+    mode === 'text' ? !!prompt.trim() : mode === 'imagine' ? !!currentImage : !!image
 
   return (
     <section className="panel" onPaste={mode === 'image' ? onPaste : undefined}>
@@ -389,9 +411,7 @@ export default function GeneratePanel({
                     {editing ? 'Editing…' : `Apply edit → new version`}
                   </button>
                   {editError && <span className="url-error">{editError}</span>}
-                  <button className="submit" onClick={useImageForModel} disabled={disabled}>
-                    Use V{currentImage.version} → 3D
-                  </button>
+                  <span className="hint">Pick an engine below, then Create 3D model.</span>
                 </div>
                 <div className="image-lab-versions">
                   {versions.map((v) => (
@@ -448,7 +468,7 @@ export default function GeneratePanel({
         </div>
       )}
 
-      {mode !== 'imagine' && (
+      {(mode !== 'imagine' || currentImage) && (
       <>
       <div className="model-select">
         <span className="model-label">Engine</span>
@@ -494,34 +514,48 @@ export default function GeneratePanel({
           </button>
         </div>
       )}
-      <label className={`toggle ${engine !== 'meshy' || mode === 'image' ? 'toggle--disabled' : ''}`}>
+      <label className={`toggle ${engine !== 'meshy' || mode !== 'text' ? 'toggle--disabled' : ''}`}>
         <input
           type="checkbox"
           checked={engine === 'meshy' && mode === 'text' && textured}
           onChange={(e) => setTextured(e.target.checked)}
-          disabled={busy || engine !== 'meshy' || mode === 'image'}
+          disabled={busy || engine !== 'meshy' || mode !== 'text'}
         />
         Add textures (color){' '}
         <span className="hint">
           {engine === 'tripo'
             ? '(Tripo builds a textured model in one step)'
-            : mode === 'image'
+            : mode !== 'text'
               ? '(image→3D is already textured)'
               : textured
                 ? `(+${costs?.refine ?? 20} tokens, colored)`
                 : '(off — gray preview)'}
         </span>
       </label>
+      {engine === 'tripo' && (
+        <label className="toggle">
+          <input
+            type="checkbox"
+            checked={segmentOnCreate}
+            onChange={(e) => setSegmentOnCreate(e.target.checked)}
+            disabled={busy}
+          />
+          Segment on create{' '}
+          <span className="hint">
+            {segmentOnCreate ? '(+~40 cr · splits into editable parts)' : '(off — plain model, segment later)'}
+          </span>
+        </label>
+      )}
       <button
         className="submit gen-go"
-        onClick={mode === 'text' ? startText : startImage}
+        onClick={mode === 'text' ? startText : mode === 'imagine' ? startImagineTo3D : startImage}
         disabled={generating || disabled || !canGenerate}
       >
         {generating ? (
           `Generating… ${task.progress}%`
         ) : (
           <>
-            {mode === 'image' ? 'Generate 3D from image' : 'Generate 3D model'}
+            {mode === 'text' ? 'Generate 3D model' : 'Create 3D model'}
             {estCost != null && <span className="gen-cost">{estCost} ⛁</span>}
           </>
         )}

@@ -15,15 +15,28 @@ export { IMAGE_DIR }
 
 const newId = () => `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
 
+// Gemini (image gen/edit) has no tight prompt cap like Meshy's 600 — allow long,
+// detailed prompts here since the text only drives the IMAGE (image→3D then works
+// from the picture, not the text).
+const IMAGE_PROMPT_LIMIT = 2000
+
 const writeImageFile = (name, data) => {
   mkdirSync(IMAGE_DIR, { recursive: true })
   writeFileSync(join(IMAGE_DIR, name), data)
 }
 
 // One write path for image bytes: GridFS (shared, permanent) when Mongo is
-// connected, local disk otherwise. Returns the public URL for the record.
+// connected, local disk otherwise. Returns the public URL for the record. A
+// cloud write that fails (Atlas hiccup, dropped connection) falls back to local
+// disk instead of 500-ing — capture/edit must never brick on a storage blip.
 async function storeImageBytes(name, data, mime) {
-  if (cloudFilesEnabled()) return saveCloudFile(name, data, mime)
+  if (cloudFilesEnabled()) {
+    try {
+      return await saveCloudFile(name, data, mime)
+    } catch (err) {
+      console.error('cloud image store failed, falling back to local disk:', err.message)
+    }
+  }
   writeImageFile(name, data)
   return `/images/${name}`
 }
@@ -109,8 +122,8 @@ router.post('/generate', optionalAuth, async (req, res) => {
   if (!prompt) {
     return res.status(400).json({ error: 'prompt (non-empty string) is required' })
   }
-  if (prompt.length > 600) {
-    return res.status(400).json({ error: 'prompt must be 600 characters or fewer' })
+  if (prompt.length > IMAGE_PROMPT_LIMIT) {
+    return res.status(400).json({ error: `prompt must be ${IMAGE_PROMPT_LIMIT} characters or fewer` })
   }
   const ownerId = req.user?.id ?? null
 
@@ -161,8 +174,8 @@ router.post('/:id/edit', optionalAuth, async (req, res) => {
   if (!instruction) {
     return res.status(400).json({ error: 'instruction (non-empty string) is required' })
   }
-  if (instruction.length > 600) {
-    return res.status(400).json({ error: 'instruction must be 600 characters or fewer' })
+  if (instruction.length > IMAGE_PROMPT_LIMIT) {
+    return res.status(400).json({ error: `instruction must be ${IMAGE_PROMPT_LIMIT} characters or fewer` })
   }
   const source = await getImage(req.params.id)
   if (!source) return res.status(404).json({ error: 'Unknown image id' })

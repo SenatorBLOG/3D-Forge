@@ -1,10 +1,16 @@
+import { mkdirSync, writeFileSync, existsSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
+import { join } from 'node:path'
 import { cloudFilesEnabled, saveCloudFile, openCloudFile } from './files.js'
 
-// Model archiving (E4): Meshy's result URLs are signed and EXPIRE after a
-// while, so a finished generation would eventually 404 for everyone. When a
-// task succeeds we download the GLB once and keep the bytes in GridFS next to
-// the rest of our data; records then point at our permanent /files URL.
-// Key-free/mock results (bundled local GLBs) and disk-only mode are untouched.
+// Model archiving (E4): provider (Meshy/Tripo) result URLs are signed and
+// EXPIRE, and the browser can't fetch them cross-origin anyway (CORS). So when a
+// task succeeds we download the GLB once and keep the bytes on OUR origin:
+// GridFS (/files) when Mongo storage is on, local disk (/uploads) otherwise —
+// so FILES_STORAGE=local still archives instead of leaking a CORS-blocked URL.
+// Mock/local GLBs (not provider URLs) are returned untouched.
+
+const UPLOAD_DIR = fileURLToPath(new URL('../../.devdata/uploads/', import.meta.url))
 
 // host allow-list — we only ever fetch our generation providers' assets
 const isProviderUrl = (url) => {
@@ -33,13 +39,19 @@ const inFlight = new Map() // taskId -> Promise<string archived url>
  * original URL still works for now, so never break the response over this).
  */
 export async function archiveModelUrl(taskId, modelUrl) {
-  if (!modelUrl || !cloudFilesEnabled() || !isProviderUrl(modelUrl)) return modelUrl
+  // only remote provider URLs need archiving; local/mock URLs are already ours
+  if (!modelUrl || !isProviderUrl(modelUrl)) return modelUrl
   const name = fileNameFor(taskId)
 
   if (inFlight.has(taskId)) return inFlight.get(taskId)
   const job = (async () => {
+    const cloud = cloudFilesEnabled()
     // already archived on a previous poll → reuse
-    if (await openCloudFile(name)) return `/files/${name}`
+    if (cloud) {
+      if (await openCloudFile(name)) return `/files/${name}`
+    } else if (existsSync(join(UPLOAD_DIR, name))) {
+      return `/uploads/${name}`
+    }
     const res = await fetch(modelUrl)
     if (!res.ok) throw new Error(`model download ${res.status}`)
     const bytes = Buffer.from(await res.arrayBuffer())
@@ -49,7 +61,10 @@ export async function archiveModelUrl(taskId, modelUrl) {
     if (bytes.subarray(0, 4).toString('ascii') !== 'glTF') {
       throw new Error('downloaded file is not a binary GLB')
     }
-    return saveCloudFile(name, bytes, 'model/gltf-binary')
+    if (cloud) return saveCloudFile(name, bytes, 'model/gltf-binary')
+    mkdirSync(UPLOAD_DIR, { recursive: true })
+    writeFileSync(join(UPLOAD_DIR, name), bytes)
+    return `/uploads/${name}`
   })()
     .catch((err) => {
       console.error(`model archive failed for ${taskId}:`, err.message)
