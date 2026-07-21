@@ -21,7 +21,7 @@ export default function RecolorPanel({ onRecolor }) {
     if (!p || busy) return
     const hit = parseRecolor(p)
     if (!hit) {
-      setError("Couldn't spot a colour — try e.g. “matte black”, “glossy red”, “gold”.")
+      setError("Couldn't spot a colour — try “matte black”, “glossy red”, or “white to black, blue to red”.")
       return
     }
     setError(null)
@@ -44,8 +44,9 @@ export default function RecolorPanel({ onRecolor }) {
         <h2>Recolor</h2>
       </div>
       <p className="spatial-blurb">
-        Change colour or material by prompt — the shape stays exactly the same (no reshape, no
-        drift). Instant &amp; free. Best for “matte black”, “glossy red”, “gold”, “navy blue”.
+        Change colour by prompt — shape stays 1:1, instant &amp; free. Tint the whole model
+        (“matte black”, “glossy red”) or <strong>swap specific colours</strong> and leave the rest:
+        “white to black, blue to red”.
       </p>
       <div className="input-with-mic">
         <textarea
@@ -53,17 +54,28 @@ export default function RecolorPanel({ onRecolor }) {
           rows={2}
           value={prompt}
           onChange={(e) => setPrompt(e.target.value)}
-          placeholder='e.g. "make it matte black" or "glossy deep red"'
+          placeholder='e.g. "matte black" or "white to black, blue to red"'
           disabled={busy}
         />
         <MicButton onTranscript={appendSpeech} disabled={busy} />
       </div>
-      {parsed && (
+      {parsed?.mode === 'single' && (
         <div className="recolor-preview">
           <span className="recolor-swatch" style={{ background: parsed.hex }} aria-hidden="true" />
           <span className="hint">
             will apply <strong>{parsed.label}</strong>
           </span>
+        </div>
+      )}
+      {parsed?.mode === 'swap' && (
+        <div className="recolor-preview recolor-swaps">
+          {parsed.swaps.map((s, i) => (
+            <span className="recolor-swap" key={i}>
+              <span className="recolor-swatch" style={{ background: s.from }} aria-hidden="true" />
+              <span aria-hidden="true">→</span>
+              <span className="recolor-swatch" style={{ background: s.to }} aria-hidden="true" />
+            </span>
+          ))}
         </div>
       )}
       <button className="submit" onClick={run} disabled={busy || !prompt.trim()}>

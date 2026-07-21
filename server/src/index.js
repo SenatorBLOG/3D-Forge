@@ -15,6 +15,7 @@ import notificationsRouter from './routes/notifications.js'
 import usersRouter from './routes/users.js'
 import walletRouter from './routes/wallet.js'
 import imagesRouter, { IMAGE_DIR } from './routes/images.js'
+import versionsRouter from './routes/versions.js'
 import searchRouter from './routes/search.js'
 import themesRouter from './routes/themes.js'
 import filesRouter from './routes/files.js'
@@ -46,6 +47,7 @@ app.use('/api/notifications', notificationsRouter)
 app.use('/api/users', usersRouter)
 app.use('/api/wallet', walletRouter)
 app.use('/api/images', imagesRouter)
+app.use('/api/versions', versionsRouter)
 app.use('/api/search', searchRouter)
 app.use('/api/themes', themesRouter)
 

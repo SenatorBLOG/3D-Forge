@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import * as THREE from 'three'
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
+import { TransformControls } from 'three/addons/controls/TransformControls.js'
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
 import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js'
 import MicButton from './MicButton.jsx'
@@ -70,7 +71,11 @@ export default function ModelViewer({
   // P5/P6 manual edit tools: paint (texture brush), sculpt (inflate/dent),
   // place (kitbash a prebuilt part). Values mirrored into refs so the pointer
   // handlers (bound once per model) always read the current setting.
-  const [tool, setTool] = useState(null) // null | 'paint' | 'sculpt' | 'place'
+  const [tool, setTool] = useState(null) // null | 'paint' | 'sculpt' | 'place' | 'move'
+  // #5 move tool: gizmo mode for transforming a selected part
+  const [gizmoMode, setGizmoMode] = useState('rotate') // 'translate' | 'rotate' | 'scale'
+  const gizmoModeRef = useRef('rotate')
+  gizmoModeRef.current = gizmoMode
   const [paintColor, setPaintColor] = useState('#e64545')
   const [brushSize, setBrushSize] = useState(0.5)
   const [sculptDir, setSculptDir] = useState(1) // +1 inflate, -1 dent
@@ -141,6 +146,19 @@ export default function ModelViewer({
     controls.enableDamping = true
     controls.autoRotateSpeed = 1.6
     controls.autoRotate = autoRotate
+
+    // #5 move tool: a transform gizmo to move / rotate / scale a selected part
+    // directly in 3D (real geometry — textures & shape kept). Only active while
+    // the "Move" tool is on; edits are saved via the normal export→version path.
+    const transform = new TransformControls(camera, renderer.domElement)
+    transform.setMode('rotate')
+    transform.setSpace('local')
+    const gizmo = transform.getHelper ? transform.getHelper() : transform
+    scene.add(gizmo)
+    transform.addEventListener('dragging-changed', (e) => {
+      controls.enabled = !e.value // don't orbit while dragging the gizmo
+    })
+    transform.addEventListener('objectChange', () => setDirtyRef.current())
 
     // three-point lighting: cool sky/ground ambient + warm key + steel rim, plus
     // a soft fill so very dark models (e.g. matte-black recolors) never go to a
@@ -313,6 +331,68 @@ export default function ModelViewer({
           if (modeRef.current === 'shaded' || modeRef.current === 'parts') o.material = applied
         })
       },
+      // SWAP recolor: remap ONLY the given source colours to targets, per-texel,
+      // leaving everything else untouched — so "white→black, blue→red" turns a
+      // white-with-blue-lines model black-with-red-lines. Matching keeps each
+      // pixel's own brightness (k) so panel shading survives the swap. Falls back
+      // to the flat material.color for untextured meshes.
+      recolorSwap: (swaps) => {
+        if (!model || !swaps?.length) return
+        const S = swaps.map((s) => ({ from: new THREE.Color(s.from), to: new THREE.Color(s.to) }))
+        const T2 = 0.10 // squared colour-distance threshold for "is this that colour?"
+        const lum = (r, g, b) => 0.299 * r + 0.587 * g + 0.114 * b
+        model.traverse((o) => {
+          if (!o.isMesh) return
+          const base = o.userData.origMat || o.material
+          const mats = (Array.isArray(base) ? base : [base]).map((m) => {
+            const nm = m.clone()
+            const img = nm.map?.image
+            if (img && (img.width || img.videoWidth)) {
+              const w = img.width || img.videoWidth
+              const h = img.height || img.videoHeight
+              const cv = document.createElement('canvas')
+              cv.width = w
+              cv.height = h
+              const ctx = cv.getContext('2d', { willReadFrequently: true })
+              ctx.drawImage(img, 0, 0, w, h)
+              const px = ctx.getImageData(0, 0, w, h)
+              const d = px.data
+              for (let i = 0; i < d.length; i += 4) {
+                const r = d[i] / 255, g = d[i + 1] / 255, b = d[i + 2] / 255
+                for (const s of S) {
+                  const dr = r - s.from.r, dg = g - s.from.g, db = b - s.from.b
+                  if (dr * dr + dg * dg + db * db < T2) {
+                    const sl = lum(s.from.r, s.from.g, s.from.b) || 0.001
+                    const k = Math.min(1.7, lum(r, g, b) / sl) // keep the pixel's shading
+                    d[i] = Math.min(255, s.to.r * 255 * k)
+                    d[i + 1] = Math.min(255, s.to.g * 255 * k)
+                    d[i + 2] = Math.min(255, s.to.b * 255 * k)
+                    break
+                  }
+                }
+              }
+              ctx.putImageData(px, 0, 0)
+              const tex = new THREE.CanvasTexture(cv)
+              tex.flipY = nm.map.flipY
+              tex.colorSpace = nm.map.colorSpace
+              tex.wrapS = nm.map.wrapS
+              tex.wrapT = nm.map.wrapT
+              nm.map = tex
+            } else if (nm.color) {
+              const c = nm.color
+              for (const s of S) {
+                const dr = c.r - s.from.r, dg = c.g - s.from.g, db = c.b - s.from.b
+                if (dr * dr + dg * dg + db * db < T2) { nm.color.copy(s.to); break }
+              }
+            }
+            nm.needsUpdate = true
+            return nm
+          })
+          const applied = Array.isArray(base) ? mats : mats[0]
+          o.userData.origMat = applied
+          if (modeRef.current === 'shaded' || modeRef.current === 'parts') o.material = applied
+        })
+      },
       undoLastPart: () => {
         const part = placedParts.pop()
         if (!part) return placedParts.length
@@ -321,6 +401,8 @@ export default function ModelViewer({
         part.material.dispose()
         return placedParts.length
       },
+      setGizmoMode: (m) => transform.setMode(m),
+      detachTransform: () => transform.detach(),
     }
     // hand the imperative API to the parent (RecolorPanel calls recolor/exportModel)
     if (apiOut) apiOut.current = apiRef.current
@@ -565,6 +647,17 @@ export default function ModelViewer({
     let stroking = false
     const onToolDown = (e) => {
       if (!toolRef.current || !model || e.button !== 0) return
+      // Move tool: click a part to select it; the gizmo (its own handles) then
+      // owns the drag. If the click landed on a gizmo handle, let it be.
+      if (toolRef.current === 'move') {
+        if (transform.axis || transform.dragging) return
+        const hit = pick(e)
+        if (hit?.object) {
+          transform.attach(hit.object)
+          transform.setMode(gizmoModeRef.current)
+        }
+        return
+      }
       const hit = pick(e)
       if (!hit) return
       controls.enabled = false // the stroke owns the drag, not the orbit
@@ -628,6 +721,9 @@ export default function ModelViewer({
       window.removeEventListener('pointerup', onToolUp)
       controls.removeEventListener('change', updateLabels)
       controls.dispose()
+      transform.detach()
+      transform.dispose()
+      gizmo.removeFromParent?.()
       if (highlightHelper) {
         highlightHelper.geometry?.dispose()
         highlightHelper.material?.dispose()
@@ -666,6 +762,15 @@ export default function ModelViewer({
   useEffect(() => {
     apiRef.current.setExposure?.(brightness)
   }, [brightness])
+
+  // #5 move tool: push the gizmo mode into the live controls; detach the gizmo
+  // whenever the Move tool is turned off (so it can't linger over the model)
+  useEffect(() => {
+    apiRef.current.setGizmoMode?.(gizmoMode)
+  }, [gizmoMode])
+  useEffect(() => {
+    if (tool !== 'move') apiRef.current.detachTransform?.()
+  }, [tool])
 
   // highlight the hovered part's bbox, and reflect the explode toggle
   useEffect(() => {
@@ -718,7 +823,7 @@ export default function ModelViewer({
       ref={containerRef}
       style={viewerBg ? { background: viewerBg } : undefined}
       onPointerMove={(e) => {
-        if (!tool) return
+        if (!tool || tool === 'move') return // move uses the gizmo, no brush ring
         // over a control panel → normal cursor, no brush ring (so you can click)
         if (e.target.closest?.(UI_SELECTOR)) {
           if (brushCursor) setBrushCursor(null)
@@ -729,7 +834,7 @@ export default function ModelViewer({
       }}
       onPointerLeave={() => brushCursor && setBrushCursor(null)}
     >
-      {tool && brushCursor && (
+      {tool && tool !== 'move' && brushCursor && (
         <div
           className="brush-cursor"
           style={{
@@ -785,6 +890,7 @@ export default function ModelViewer({
             ['paint', '🖌 Paint', 'Drag on the model to paint (covers decals too)'],
             ['sculpt', '↕ Sculpt', 'Drag to inflate or dent the surface'],
             ['place', '➕ Part', 'Click the surface to attach a prebuilt part'],
+            ['move', '↔ Move part', 'Click a part, then drag the gizmo to move / rotate / scale it'],
           ].map(([t, label, title]) => (
             <button
               key={t}
@@ -801,21 +907,41 @@ export default function ModelViewer({
           ))}
           {tool && (
             <>
-              <input
-                type="color"
-                value={paintColor}
-                onChange={(e) => setPaintColor(e.target.value)}
-                title="Brush / part color"
-              />
-              <input
-                type="range"
-                min="0.1"
-                max="1"
-                step="0.05"
-                value={brushSize}
-                onChange={(e) => setBrushSize(Number(e.target.value))}
-                title="Brush / part size"
-              />
+              {tool !== 'move' && (
+                <>
+                  <input
+                    type="color"
+                    value={paintColor}
+                    onChange={(e) => setPaintColor(e.target.value)}
+                    title="Brush / part color"
+                  />
+                  <input
+                    type="range"
+                    min="0.1"
+                    max="1"
+                    step="0.05"
+                    value={brushSize}
+                    onChange={(e) => setBrushSize(Number(e.target.value))}
+                    title="Brush / part size"
+                  />
+                </>
+              )}
+              {tool === 'move' &&
+                [
+                  ['translate', '⤢ Move'],
+                  ['rotate', '⟳ Rotate'],
+                  ['scale', '⇲ Scale'],
+                ].map(([m, label]) => (
+                  <button
+                    key={m}
+                    type="button"
+                    className={gizmoMode === m ? 'on' : ''}
+                    onClick={() => setGizmoMode(m)}
+                    title={`Gizmo mode: ${m}`}
+                  >
+                    {label}
+                  </button>
+                ))}
               {tool === 'sculpt' && (
                 <button
                   type="button"

@@ -5,6 +5,13 @@ import MicButton from './MicButton.jsx'
 // one-click starter prompts — fast onboarding and quick demos
 const QUICK_PROMPTS = ['a small dragon', 'a medieval sword', 'a sci-fi helmet', 'a wooden chair']
 
+// 4.2b — how to ask Gemini for the extra generation-time views from the front image
+const VIEW_PROMPT = {
+  left: 'the exact same subject viewed from its left side (90° profile), full body, identical design, materials and colours, plain neutral background',
+  back: 'the exact same subject viewed from directly behind (rear view), full body, identical design, materials and colours, plain neutral background',
+  right: 'the exact same subject viewed from its right side (90° profile), full body, identical design, materials and colours, plain neutral background',
+}
+
 /**
  * Generation panel with two modes:
  *   text  — describe a model (text-to-3D)
@@ -34,6 +41,10 @@ export default function GeneratePanel({
   // Tripo only: run semantic segmentation right after the model is built, so it
   // comes back already split into editable parts (like Meshy's texturing toggle)
   const [segmentOnCreate, setSegmentOnCreate] = useState(false)
+  // 4.2b — how many reference views to build the model from: 1 (single image→3D,
+  // cheap), 2 (front+side) or 4 (front/side/back/side). >1 synthesizes the extra
+  // views from the front image via Gemini, then feeds Tripo multi-view. Tripo only.
+  const [genViews, setGenViews] = useState(1)
   // image mode: the uploaded reference (server id) + a local preview URL
   const [image, setImage] = useState(initialImageId ? { id: initialImageId } : null)
   const [preview, setPreview] = useState(null) // object URL for instant preview
@@ -201,17 +212,42 @@ export default function GeneratePanel({
   }
 
   // Imagine → 3D: build the current image version into a model with the SAME
-  // engine/segment options as the other modes (no detour through image mode).
-  const startImagineTo3D = () => {
+  // engine/segment options as the other modes. With genViews>1 (Tripo only) we
+  // first synthesize the extra side/back views from the front image via Gemini,
+  // then feed all of them to Tripo multi-view so the model isn't guessed from a
+  // single angle. (Gemini's cross-view consistency isn't perfect — flagged in UI.)
+  const startImagineTo3D = async () => {
     if (!currentImage) return
     submittedRef.current = 'image → 3D'
     kindRef.current = 'image'
     wantsSegmentRef.current = engine === 'tripo' && segmentOnCreate
-    start(
-      '/api/generate',
-      { mode: 'image', imageId: currentImage.id, model: aiModel, engine },
-      { refine: false, model: aiModel, prompt: 'image → 3D' },
-    )
+    const count = engine === 'tripo' ? genViews : 1
+    if (count <= 1) {
+      start(
+        '/api/generate',
+        { mode: 'image', imageId: currentImage.id, model: aiModel, engine },
+        { refine: false, model: aiModel, prompt: 'image → 3D' },
+      )
+      return
+    }
+    setGenImgError(null)
+    try {
+      const order = count === 2 ? ['left'] : ['left', 'back', 'right']
+      const ids = [currentImage.id] // front stays slot 0
+      for (const side of order) {
+        const res = await fetch(`/api/images/${encodeURIComponent(currentImage.id)}/edit`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ instruction: VIEW_PROMPT[side] }),
+        })
+        const data = await res.json()
+        if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`)
+        ids.push(data.image.id)
+      }
+      start('/api/generate/multiview', { imageIds: ids }, { prompt: 'image → 3D (multi-view)' })
+    } catch (e) {
+      setGenImgError(e.message)
+    }
   }
 
   // load the whole version family for an image and focus it (used after a
@@ -545,6 +581,30 @@ export default function GeneratePanel({
             {segmentOnCreate ? '(+~40 cr · splits into editable parts)' : '(off — plain model, segment later)'}
           </span>
         </label>
+      )}
+      {engine === 'tripo' && mode === 'imagine' && (
+        <div className="mv-count" role="radiogroup" aria-label="Reference views">
+          <span className="hint">Views:</span>
+          {[
+            [1, '1 · quick'],
+            [2, '2 · front+side'],
+            [4, '4 · best'],
+          ].map(([n, label]) => (
+            <button
+              key={n}
+              type="button"
+              className={`mv-count-btn ${genViews === n ? 'on' : ''}`}
+              aria-pressed={genViews === n}
+              disabled={busy}
+              onClick={() => setGenViews(n)}
+            >
+              {label}
+            </button>
+          ))}
+          {genViews > 1 && (
+            <span className="hint">extra views drawn by Gemini → Tripo multi-view</span>
+          )}
+        </div>
       )}
       <button
         className="submit gen-go"
