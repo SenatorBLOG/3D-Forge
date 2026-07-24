@@ -32,6 +32,61 @@ const loadSession = () => {
   }
 }
 
+// left activity-bar tools; icons are custom line-glyphs in our house style (no emoji)
+const ICON = {
+  fill: 'none',
+  stroke: 'currentColor',
+  strokeWidth: 1.6,
+  strokeLinecap: 'round',
+  strokeLinejoin: 'round',
+  'aria-hidden': true,
+}
+const NAV_TABS = [
+  {
+    id: 'generate',
+    label: 'Generate',
+    needsModel: false,
+    icon: (
+      <svg viewBox="0 0 24 24" {...ICON}>
+        <path d="M12 3.4l1.9 5.2 5.2 1.9-5.2 1.9L12 17.6l-1.9-5.2L4.9 10.5l5.2-1.9L12 3.4Z" />
+        <path d="M18.8 3.6v2.8M20.2 5H17.4" />
+      </svg>
+    ),
+  },
+  {
+    id: 'model',
+    label: 'Model',
+    needsModel: false,
+    icon: (
+      <svg viewBox="0 0 24 24" {...ICON}>
+        <path d="M12 2.8 20 7.4v9.2L12 21.2 4 16.6V7.4L12 2.8Z" />
+        <path d="M4 7.4l8 4.6 8-4.6M12 12v9.2" />
+      </svg>
+    ),
+  },
+  {
+    id: 'edit',
+    label: 'Edit',
+    needsModel: true,
+    icon: (
+      <svg viewBox="0 0 24 24" {...ICON}>
+        <path d="M4 20h4L18.4 9.6a2 2 0 0 0-2.8-2.8L5 17.2 4 20Z" />
+        <path d="M14.4 8.4l2.8 2.8" />
+      </svg>
+    ),
+  },
+  {
+    id: 'recolor',
+    label: 'Recolor',
+    needsModel: true,
+    icon: (
+      <svg viewBox="0 0 24 24" {...ICON}>
+        <path d="M12 3.4c3 3.4 5.5 6.3 5.5 9.4A5.5 5.5 0 0 1 6.5 12.8C6.5 9.7 9 6.8 12 3.4Z" />
+      </svg>
+    ),
+  },
+]
+
 /** The forging tool: generate, click-select regions, edit, history, compare. */
 export default function ForgePage() {
   const [searchParams] = useSearchParams()
@@ -77,6 +132,8 @@ export default function ForgePage() {
   const [saving, setSaving] = useState(false)
   const [historyKey, setHistoryKey] = useState(0)
   const [compare, setCompare] = useState(null)
+  // which left activity-bar tool is open: generate | model | edit | recolor
+  const [activeTab, setActiveTab] = useState('generate')
   // Hyper3D part-swap state
   const [swapBusy, setSwapBusy] = useState(false)
   const [swapMsg, setSwapMsg] = useState(null)
@@ -136,6 +193,11 @@ export default function ForgePage() {
       }).catch(() => {})
     }
   }, [modelUrl, modelVersions, currentVersionId, baseModelPrompt, modelKind])
+
+  // model-dependent tools fall back to Generate when the canvas is cleared
+  useEffect(() => {
+    if (!modelUrl && (activeTab === 'edit' || activeTab === 'recolor')) setActiveTab('generate')
+  }, [modelUrl, activeTab])
 
   // switch the on-screen model, and optionally record it as a version:
   //   version:{ as:'root' }  — start a fresh chain (a loaded/generated base)
@@ -304,6 +366,7 @@ export default function ForgePage() {
   // a click on the mesh adds a point and opens its prompt editor right away
   const addPoint = (p) => {
     justAddedRef.current = true
+    setActiveTab('edit') // clicking the model reveals the Spatial edit tool
     setPoints((prev) => [...prev, { ...p, id: pointIdRef.current++, prompt: '' }])
   }
   // select the new point once the add has committed (avoids reading a stale
@@ -408,6 +471,7 @@ export default function ForgePage() {
   // P4: clicking a part chip opens the part-edit panel (photo loop + stitch)
   const openPartEdit = (part) => {
     setHighlightBox(null)
+    setActiveTab('edit') // surface the part-edit panel in the Edit tab
     setActivePart(part)
   }
 
@@ -517,8 +581,30 @@ export default function ForgePage() {
 
   return (
     <main className="app-main forge">
-      {/* LEFT — create input + options */}
-      <aside className="sidebar forge-rail">
+      {/* LEFT NAV RAIL — activity bar: Generate · Model · Edit · Recolor */}
+      <nav className="forge-nav" aria-label="Forge tools">
+        {NAV_TABS.map((t) => {
+          const locked = t.needsModel && !modelUrl
+          return (
+            <button
+              key={t.id}
+              type="button"
+              className={`forge-nav-item ${activeTab === t.id ? 'active' : ''}`}
+              onClick={() => setActiveTab(t.id)}
+              disabled={locked}
+              aria-current={activeTab === t.id ? 'page' : undefined}
+              title={locked ? `${t.label} — generate or load a model first` : t.label}
+            >
+              {t.icon}
+              <span>{t.label}</span>
+            </button>
+          )
+        })}
+      </nav>
+
+      {/* LEFT PANEL — shows only the active tool */}
+      <aside className="sidebar forge-panel">
+        <div className="tab-pane" style={{ display: activeTab === 'generate' ? 'flex' : 'none' }}>
         <GeneratePanel
           disabled={editTask.generating}
           initialMode={searchParams.get('mode') === 'image' ? 'image' : 'text'}
@@ -537,6 +623,9 @@ export default function ForgePage() {
             if (opts?.segment) segmentTripo(url)
           }}
         />
+        </div>
+
+        <div className="tab-pane" style={{ display: activeTab === 'model' ? 'flex' : 'none' }}>
         <section className="panel">
           <h2>Model</h2>
           <label className="file-button">
@@ -593,7 +682,11 @@ export default function ForgePage() {
             </>
           )}
         </section>
-        {modelUrl && (
+        </div>
+
+        <div className="tab-pane" style={{ display: activeTab === 'edit' ? 'flex' : 'none' }}>
+        {modelUrl ? (
+        <>
         <section className="panel spatial-panel">
           <div className="spatial-head">
             <span className="spatial-flag">✦ Flagship</span>
@@ -698,9 +791,7 @@ export default function ForgePage() {
             </div>
           )}
         </section>
-        )}
-        {modelUrl && (
-          <PhotoEditPanel
+        <PhotoEditPanel
             modelUrl={modelUrl}
             onModelReady3D={(url, label) => {
               setBaseModelPrompt(label)
@@ -709,8 +800,7 @@ export default function ForgePage() {
               swapModel(url, { version: { as: 'child', label } })
             }}
           />
-        )}
-        {modelUrl && activePart && (
+        {activePart && (
           <PartEditPanel
             key={activePart.id}
             modelUrl={modelUrl}
@@ -725,7 +815,21 @@ export default function ForgePage() {
             }}
           />
         )}
-        {modelUrl && <RecolorPanel onRecolor={recolorLocal} />}
+        </>
+        ) : (
+          <p className="pane-empty">
+            Generate or load a model first — then click any part of it to reshape, photo-edit, or swap that region.
+          </p>
+        )}
+        </div>
+
+        <div className="tab-pane" style={{ display: activeTab === 'recolor' ? 'flex' : 'none' }}>
+        {modelUrl ? (
+          <RecolorPanel onRecolor={recolorLocal} />
+        ) : (
+          <p className="pane-empty">Load or generate a model to recolor it.</p>
+        )}
+        </div>
       </aside>
 
       {/* CENTER — canvas, or the create-first surface when empty */}

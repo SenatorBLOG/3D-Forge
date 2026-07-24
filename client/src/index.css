@@ -4185,9 +4185,96 @@ button.tag:hover {
    canvas/create-surface · right library.
    ============================================================ */
 
-.forge-rail {
+/* left activity bar (VS Code-style rail): thin icon column on the wall */
+.forge-nav {
+  flex: none;
+  width: 76px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 14px 8px;
+  background: linear-gradient(180deg, var(--panel-2), var(--panel));
+  border-right: 1px solid var(--line);
+  overflow-y: auto;
+}
+
+.forge-nav-item {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 12px 4px;
+  border: 0;
+  border-radius: 12px;
+  background: transparent;
+  color: var(--text-faint);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  transition: color 0.15s ease, background 0.15s ease;
+}
+
+.forge-nav-item svg {
+  width: 24px;
+  height: 24px;
+  display: block;
+}
+
+.forge-nav-item span {
+  line-height: 1;
+}
+
+.forge-nav-item:hover:not(:disabled) {
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.forge-nav-item.active {
+  color: var(--forge);
+  background: rgba(34, 211, 238, 0.1);
+}
+
+/* the active indicator bar riding the left wall */
+.forge-nav-item.active::before {
+  content: '';
+  position: absolute;
+  left: -8px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 3px;
+  height: 28px;
+  border-radius: 0 3px 3px 0;
+  background: var(--forge);
+  box-shadow: 0 0 10px var(--forge-glow);
+}
+
+.forge-nav-item:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+/* the panel that swaps by active tab; sits right beside the rail */
+.forge-panel {
   border-left: none;
   border-right: 1px solid var(--line);
+}
+
+/* one tool's content; display toggled inline (flex/none) by the active tab */
+.tab-pane {
+  flex-direction: column;
+  gap: 18px;
+}
+
+.pane-empty {
+  font-size: 13.5px;
+  line-height: 1.55;
+  color: var(--text-dim);
+  padding: 16px;
+  border: 1px dashed var(--line);
+  border-radius: var(--radius);
+  background: var(--panel);
 }
 
 .forge-library {
@@ -4269,12 +4356,36 @@ button.tag:hover {
     flex-direction: column;
     overflow-y: auto;
   }
-  .forge-rail,
+  .forge-panel,
   .forge-library {
     width: 100%;
     border-right: none;
     border-left: none;
     border-bottom: 1px solid var(--line);
+  }
+  /* the rail lies flat as a top tab-bar */
+  .forge-nav {
+    flex-direction: row;
+    width: 100%;
+    justify-content: center;
+    gap: 4px;
+    border-right: none;
+    border-bottom: 1px solid var(--line);
+    overflow-x: auto;
+  }
+  .forge-nav-item {
+    flex-direction: row;
+    gap: 8px;
+    padding: 10px 14px;
+  }
+  .forge-nav-item.active::before {
+    left: 50%;
+    top: auto;
+    bottom: -8px;
+    transform: translateX(-50%);
+    width: 28px;
+    height: 3px;
+    border-radius: 3px 3px 0 0;
   }
   .app-main.forge .viewer-wrap {
     min-height: 60vh;
