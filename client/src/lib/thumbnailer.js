@@ -76,7 +76,13 @@ function renderThumbnail(modelUrl) {
           const center = box.getCenter(new THREE.Vector3())
           const size = box.getSize(new THREE.Vector3()).length()
           model.position.sub(center)
-          camera.position.set(size * 0.6, size * 0.45, size * 0.85)
+          // Tripo exports face the opposite way to Meshy, so with the same camera
+          // their card thumbnail faces the "wrong" way (toward the edge). Mirror
+          // the camera X for Tripo models so every card faces left/toward-centre
+          // like Misha's Meshy cards. (Card render only — the live viewer is
+          // unaffected.)
+          const sx = /tripo/i.test(modelUrl || '') ? -1 : 1
+          camera.position.set(size * 0.6 * sx, size * 0.45, size * 0.85)
           camera.near = size / 100
           camera.far = size * 10
           camera.lookAt(0, 0, 0)
@@ -90,7 +96,7 @@ function renderThumbnail(modelUrl) {
           // pass 2 — three more shaded angles, orbiting at the same radius and
           // elevation (feeds the hover-reveal multi-angle strip on cards)
           const radius = Math.hypot(0.6, 0.85) * size
-          const baseAz = Math.atan2(0.6, 0.85)
+          const baseAz = Math.atan2(0.6 * sx, 0.85)
           const views = []
           for (const quarter of [1, 2, 3]) {
             const az = baseAz + (quarter * Math.PI) / 2
@@ -100,7 +106,7 @@ function renderThumbnail(modelUrl) {
             views.push(canvas.toDataURL('image/png'))
           }
           // back to the front angle for the wireframe pass
-          camera.position.set(size * 0.6, size * 0.45, size * 0.85)
+          camera.position.set(size * 0.6 * sx, size * 0.45, size * 0.85)
           camera.lookAt(0, 0, 0)
 
           // pass 3 — cyan wireframe (stash originals so we can dispose them)
@@ -137,5 +143,111 @@ export function getThumbnail(modelUrl) {
   const p = queue.then(() => renderThumbnail(modelUrl))
   queue = p.catch(() => {}) // keep the queue alive even if one render fails
   cache.set(modelUrl, p)
+  return p
+}
+
+// --- 4.1 clean straight-on views for reconstruction (multiview / image→3D) ---
+// Unlike the card thumbnail's 3/4 angle, these are LEVEL shots at exact azimuths
+// in Tripo's [front, left, back, right] slot order — so multiview reconstructs
+// cleanly and the views don't diverge in style (the cause of the "mush"). Square
+// frames suit the providers better. count 1 → [front]; 2 → [front, side];
+// 4 → [front, left, back, right]. Returns { views: [{ label, dataUrl }] }.
+const VIEW_SIZE = 512
+
+const viewPlan = (count) =>
+  count <= 1
+    ? [{ label: 'Front', az: 0 }]
+    : count === 2
+      ? [{ label: 'Front', az: 0 }, { label: 'Side', az: Math.PI / 2 }]
+      : [
+          { label: 'Front', az: 0 },
+          { label: 'Left', az: -Math.PI / 2 },
+          { label: 'Back', az: Math.PI },
+          { label: 'Right', az: Math.PI / 2 },
+        ]
+
+function renderViews(modelUrl, count) {
+  return new Promise((resolve, reject) => {
+    const canvas = document.createElement('canvas')
+    canvas.width = VIEW_SIZE
+    canvas.height = VIEW_SIZE
+    const renderer = new THREE.WebGLRenderer({
+      canvas,
+      antialias: true,
+      alpha: true,
+      preserveDrawingBuffer: true,
+    })
+    renderer.setPixelRatio(1)
+    renderer.setSize(VIEW_SIZE, VIEW_SIZE, false)
+    renderer.toneMapping = THREE.ACESFilmicToneMapping
+    renderer.toneMappingExposure = 1.1
+
+    const scene = new THREE.Scene()
+    const camera = new THREE.PerspectiveCamera(45, 1, 0.01, 100)
+    scene.add(new THREE.HemisphereLight(0x8fb4d6, 0x1a1208, 0.9))
+    const key = new THREE.DirectionalLight(0xfff1e0, 2.2)
+    key.position.set(3, 5, 2)
+    scene.add(key)
+    const fill = new THREE.DirectionalLight(0xffffff, 0.6)
+    fill.position.set(-2, 1, 4)
+    scene.add(fill)
+
+    const cleanup = (model) => {
+      model?.traverse((o) => {
+        o.geometry?.dispose()
+        ;(Array.isArray(o.material) ? o.material : [o.material]).forEach((m) => {
+          if (!m) return
+          Object.values(m).forEach((v) => v?.isTexture && v.dispose())
+          m.dispose()
+        })
+      })
+      renderer.dispose()
+      renderer.forceContextLoss()
+    }
+
+    new GLTFLoader().load(
+      modelUrl,
+      (gltf) => {
+        try {
+          const model = gltf.scene
+          const box = new THREE.Box3().setFromObject(model)
+          const center = box.getCenter(new THREE.Vector3())
+          const size = box.getSize(new THREE.Vector3()).length()
+          model.position.sub(center)
+          scene.add(model)
+          camera.near = size / 100
+          camera.far = size * 10
+          const R = size * 0.72
+          const E = size * 0.06 // near-level → clean straight-on profiles
+          const views = []
+          for (const v of viewPlan(count)) {
+            camera.position.set(Math.sin(v.az) * R, E, Math.cos(v.az) * R)
+            camera.lookAt(0, 0, 0)
+            camera.updateProjectionMatrix()
+            renderer.render(scene, camera)
+            views.push({ label: v.label, dataUrl: canvas.toDataURL('image/png') })
+          }
+          cleanup(model)
+          resolve({ views })
+        } catch (err) {
+          cleanup()
+          reject(err)
+        }
+      },
+      undefined,
+      (err) => {
+        cleanup()
+        reject(err)
+      },
+    )
+  })
+}
+
+/** Render `count` (1|2|4) clean straight-on views of a model, queued like the
+ *  thumbnail renders so we never hold multiple WebGL contexts at once. */
+export function captureViews(modelUrl, count = 4) {
+  if (!modelUrl) return Promise.reject(new Error('no modelUrl'))
+  const p = queue.then(() => renderViews(modelUrl, count))
+  queue = p.catch(() => {})
   return p
 }

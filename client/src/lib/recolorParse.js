@@ -1,11 +1,11 @@
-// Parse a free-text recolor instruction ("matte charcoal black body", "make it
-// glossy red") into a concrete colour + surface finish the viewer can apply
-// LOCALLY — instant, free, shape untouched. This replaces the paid Tripo
-// texture_model path, which (verified live) ignores the colour prompt and just
-// reproduces the original texture. Returns null when no colour word is found.
+// Parse a free-text recolor instruction into something the viewer can apply
+// LOCALLY (instant, free, shape untouched). Two modes:
+//   single — "matte black" / "glossy red"           → tint the whole model
+//   swap   — "white to black, blue to red"           → remap ONLY those colours
+// Swap is the "change this colour to that, leave the rest" the user wanted, and
+// works per-texel on the texture so a white-with-blue-lines robot becomes
+// black-with-red-lines without touching anything else.
 
-// name → hex. Ordered loosely by how people phrase things; lookup is by word
-// position in the prompt, so "charcoal black" picks charcoal (appears first).
 const COLORS = {
   black: '#2a2a2d',
   charcoal: '#3c4650',
@@ -36,8 +36,6 @@ const COLORS = {
   copper: '#b87333',
 }
 
-// finish word → PBR feel. metal reads shiny + reflective; matte kills specular;
-// glossy is a smooth non-metal sheen.
 const FINISHES = {
   matte: 'matte',
   flat: 'matte',
@@ -51,13 +49,44 @@ const FINISHES = {
   steel: 'metal',
 }
 
+const COLOR_WORDS = Object.keys(COLORS).join('|')
+const FINISH_WORDS = Object.keys(FINISHES).join('|')
+const cap = (s) => s.replace(/^\w/, (c) => c.toUpperCase())
+
+// "<color> to|->|into [finish] <color>" — the swap phrasing, possibly several
+const SWAP_RE = new RegExp(
+  `\\b(${COLOR_WORDS})\\b\\s*(?:->|→|to|into)\\s*(?:(${FINISH_WORDS})\\s+)?\\b(${COLOR_WORDS})\\b`,
+  'gi',
+)
+
 /**
- * @param {string} prompt
- * @returns {{ hex:string, finish:('matte'|'glossy'|'metal'|null), colorWord:string, label:string } | null}
+ * @returns {null
+ *  | { mode:'single', hex:string, finish:string|null, colorWord:string, label:string }
+ *  | { mode:'swap', swaps:{from:string,to:string,finish:string|null,fromWord:string,toWord:string}[], label:string }}
  */
 export function parseRecolor(prompt) {
   const text = String(prompt || '').toLowerCase()
-  // pick the colour word that appears EARLIEST in the sentence (the primary one)
+
+  // 1) swap syntax wins if present ("white to black", "blue to red")
+  const swaps = []
+  let m
+  SWAP_RE.lastIndex = 0
+  while ((m = SWAP_RE.exec(text))) {
+    const [, from, finishWord, to] = m
+    if (from === to) continue
+    swaps.push({
+      from: COLORS[from],
+      to: COLORS[to],
+      finish: finishWord ? FINISHES[finishWord] : null,
+      fromWord: from,
+      toWord: to,
+    })
+  }
+  if (swaps.length) {
+    return { mode: 'swap', swaps, label: swaps.map((s) => `${cap(s.fromWord)}→${cap(s.toWord)}`).join(', ') }
+  }
+
+  // 2) single colour (earliest colour word wins) + optional finish
   let best = null
   for (const word of Object.keys(COLORS)) {
     const idx = text.search(new RegExp(`\\b${word}\\b`))
@@ -74,8 +103,7 @@ export function parseRecolor(prompt) {
       finish = FINISHES[word]
     }
   }
-
   const colorWord = best.word
-  const label = `${finish ? `${finish} ` : ''}${colorWord}`.replace(/^\w/, (c) => c.toUpperCase())
-  return { hex: COLORS[colorWord], finish, colorWord, label }
+  const label = cap(`${finish ? `${finish} ` : ''}${colorWord}`)
+  return { mode: 'single', hex: COLORS[colorWord], finish, colorWord, label }
 }

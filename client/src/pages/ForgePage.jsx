@@ -101,8 +101,11 @@ export default function ForgePage() {
   const viewerApiRef = useRef({})
   currentVersionIdRef.current = currentVersionId
 
-  // persist the working model + version strip so an F5 doesn't wipe the history
+  // persist the working model + version strip so an F5 doesn't wipe the history:
+  // localStorage (instant, this browser) PLUS the server (durable — survives a
+  // Library detour, restart, and re-login; keyed to the user + root model).
   useEffect(() => {
+    const persistedVersions = modelVersions.filter((v) => persistable(v.modelUrl))
     try {
       if (!persistable(modelUrl)) {
         localStorage.removeItem(SESSION_KEY)
@@ -112,7 +115,7 @@ export default function ForgePage() {
         SESSION_KEY,
         JSON.stringify({
           modelUrl,
-          modelVersions: modelVersions.filter((v) => persistable(v.modelUrl)),
+          modelVersions: persistedVersions,
           currentVersionId,
           versionSeq: versionSeq.current,
           baseModelPrompt,
@@ -121,6 +124,16 @@ export default function ForgePage() {
       )
     } catch {
       /* storage full / private mode — non-fatal */
+    }
+    // server sync (best-effort; ignore failures so the UI never blocks on it)
+    if (persistedVersions.length) {
+      const rootModelUrl = (persistedVersions.find((v) => !v.parentId) || persistedVersions[0])
+        .modelUrl
+      fetch('/api/versions', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ rootModelUrl, versions: persistedVersions, currentVersionId }),
+      }).catch(() => {})
     }
   }, [modelUrl, modelVersions, currentVersionId, baseModelPrompt, modelKind])
 
@@ -172,6 +185,34 @@ export default function ForgePage() {
     swapModel(v.modelUrl) // no version option → history untouched
   }
 
+  // Open a model AND restore its durable version tree from the server if one
+  // exists (so returning to a model via the Library brings back its whole strip,
+  // not a bare root). Falls back to starting a fresh root chain when there's no
+  // saved history. Used by the Library-load path.
+  const openModelWithHistory = async (url, { label, kind = null } = {}) => {
+    let tree = null
+    try {
+      const res = await fetch(`/api/versions?modelUrl=${encodeURIComponent(url)}`)
+      if (res.ok) tree = (await res.json()).tree
+    } catch {
+      /* offline / no server — fall back to a fresh root */
+    }
+    if (tree?.versions?.length) {
+      // restore the full strip; select the node matching the opened url
+      const node = tree.versions.find((v) => v.modelUrl === url) || tree.versions[0]
+      const maxSeq = tree.versions.reduce((m, v) => {
+        const n = Number(String(v.id).replace(/^v/, ''))
+        return Number.isFinite(n) && n > m ? n : m
+      }, 0)
+      versionSeq.current = Math.max(versionSeq.current, maxSeq)
+      setModelVersions(tree.versions)
+      setCurrentVersionId(node.id)
+      swapModel(url) // plain switch — we set the strip ourselves
+    } else {
+      swapModel(url, { version: { as: 'root', label: label || 'Model', kind } })
+    }
+  }
+
   // ✕ on a version card → prune it (keep only the ones worth keeping, e.g. V1 +
   // the final). Deleting the loaded version falls back to the newest remaining.
   const deleteVersion = (v) => {
@@ -192,10 +233,16 @@ export default function ForgePage() {
   // LOCAL recolor: tint the live model in the viewer (free, instant, shape 1:1),
   // export the recoloured GLB, store it, and add it as a new child version — same
   // UX as the old paid path, but it actually changes the colour and costs nothing.
-  const recolorLocal = async ({ hex, finish, label }) => {
+  const recolorLocal = async (parsed) => {
     const api = viewerApiRef.current
     if (!api?.recolor || !api?.exportModel) throw new Error('Load a model first')
-    api.recolor(hex, finish)
+    const label = parsed.label
+    if (parsed.mode === 'swap') {
+      if (!api.recolorSwap) throw new Error('Load a model first')
+      api.recolorSwap(parsed.swaps)
+    } else {
+      api.recolor(parsed.hex, parsed.finish)
+    }
     const buf = await api.exportModel()
     // record=0 → store as a version only, NOT in the Library (user sends it there
     // explicitly via the version card's "to Library" button)
@@ -784,9 +831,11 @@ export default function ForgePage() {
           onLoad={(entry) => {
             setBaseModelPrompt(entry.prompt ?? null)
             // library entries label image runs as "image → 3D" — recover the kind
-            setModelKind(entry.prompt === 'image → 3D' ? 'image' : entry.prompt ? 'text' : null)
+            const kind = entry.prompt === 'image → 3D' ? 'image' : entry.prompt ? 'text' : null
+            setModelKind(kind)
             setLastEditPrompt(null)
-            swapModel(entry.modelUrl, { version: { as: 'root', label: entry.prompt || 'Library model' } })
+            // restore this model's saved version tree if it has one, else fresh root
+            openModelWithHistory(entry.modelUrl, { label: entry.prompt || 'Library model', kind })
           }}
         />
       </aside>
