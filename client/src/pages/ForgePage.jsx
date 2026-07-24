@@ -599,24 +599,10 @@ export default function ForgePage() {
             <span className="spatial-flag">✦ Flagship</span>
             <h2>Spatial edit</h2>
           </div>
-          <p className="spatial-blurb">
-            Click any part of the model and describe a local change — region-grounded edits a
-            plain text prompt can’t target. This is what makes 3D&nbsp;Forge different.
-          </p>
           <div className="field">
             <label>Selected points ({points.length})</label>
             {points.length === 0 ? (
-              <ol className="spatial-steps">
-                <li>
-                  <strong>Click</strong> a spot on the model
-                </li>
-                <li>
-                  <strong>Describe</strong> the change for that point
-                </li>
-                <li>
-                  <strong>Send edit</strong> — or Compare it against a plain prompt
-                </li>
-              </ol>
+              <p className="spatial-tip">👆 Click the model, then describe the change.</p>
             ) : (
               <div className="point-list">
                 {points.map((p, i) => (
