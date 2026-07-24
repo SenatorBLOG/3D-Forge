@@ -5,6 +5,23 @@ import MicButton from './MicButton.jsx'
 // one-click starter prompts — fast onboarding and quick demos
 const QUICK_PROMPTS = ['a small dragon', 'a medieval sword', 'a sci-fi helmet', 'a wooden chair']
 
+// longer phrases the empty prompt box "types out" (Meshy-style live placeholder)
+const TYPE_SEEDS = [
+  'a small dragon with big wings',
+  'a medieval sword, ornate hilt',
+  'a sci-fi helmet with a glossy visor',
+  'a hand-carved wooden chair',
+  'a chunky retro robot, worn paint',
+]
+
+// human-labelled quality tiers — hide the Meshy/Tripo/M5/M6 jargon behind a plain
+// choice. Each maps to a real (engine, model) pair under the hood.
+const MODEL_OPTIONS = [
+  { id: 'fast', engine: 'meshy', model: 'meshy-5', name: 'Fast', desc: 'quick draft' },
+  { id: 'detailed', engine: 'meshy', model: 'meshy-6', name: 'Detailed', desc: 'sharper mesh' },
+  { id: 'colour', engine: 'tripo', model: 'meshy-5', name: 'Colour', desc: 'textured · 1-step' },
+]
+
 // 4.2b — how to ask Gemini for the extra generation-time views from the front image
 const VIEW_PROMPT = {
   left: 'the exact same subject viewed from its left side (90° profile), full body, identical design, materials and colours, plain neutral background',
@@ -64,6 +81,8 @@ export default function GeneratePanel({
   const [editInstruction, setEditInstruction] = useState('')
   const [editing, setEditing] = useState(false)
   const [editError, setEditError] = useState(null)
+  // the live "typing" text shown as the prompt placeholder while the box is empty
+  const [typed, setTyped] = useState('')
 
   const currentImage = versions.find((v) => v.id === currentId) || null
 
@@ -103,6 +122,35 @@ export default function GeneratePanel({
 
   // revoke the last preview object URL when it changes / on unmount
   useEffect(() => () => preview && URL.revokeObjectURL(preview), [preview])
+
+  // typewriter placeholder — cycles TYPE_SEEDS while the box is empty & idle, so
+  // the primary input feels alive (this is where users spend tokens). Pauses the
+  // moment they start typing (prompt non-empty) and skips image mode (no textbox).
+  useEffect(() => {
+    if (prompt || generating || disabled || mode === 'image') return
+    let seed = 0
+    let ch = 0
+    let dir = 1
+    let timer
+    const tick = () => {
+      const word = TYPE_SEEDS[seed % TYPE_SEEDS.length]
+      ch += dir
+      setTyped(word.slice(0, ch))
+      let delay = dir > 0 ? 55 : 26
+      if (ch >= word.length) {
+        dir = -1
+        delay = 1500
+      } else if (ch <= 0) {
+        dir = 1
+        seed += 1
+        delay = 320
+      }
+      timer = setTimeout(tick, delay)
+    }
+    timer = setTimeout(tick, 500)
+    return () => clearTimeout(timer)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [prompt, generating, disabled, mode])
 
   // hand-off from the homepage console: kick the generation once on mount using
   // the deep-linked prompt / imageId (payload built directly so we don't race state)
@@ -326,6 +374,31 @@ export default function GeneratePanel({
   const canGenerate =
     mode === 'text' ? !!prompt.trim() : mode === 'imagine' ? !!currentImage : !!image
 
+  // which quality tier is selected (maps engine+model back to a plain card)
+  const activeModel = MODEL_OPTIONS.find((o) =>
+    o.engine === 'tripo' ? engine === 'tripo' : engine === 'meshy' && aiModel === o.model,
+  )
+  const pickModel = (o) => {
+    setEngine(o.engine)
+    if (o.engine === 'meshy') setAiModel(o.model)
+  }
+  const costLabel = (o) => {
+    if (o.engine === 'tripo') return 'free'
+    const c = costs?.tiers?.[o.model]
+    return c != null ? `${c} ⛁` : '—'
+  }
+  const primaryAction = mode === 'text' ? startText : mode === 'imagine' ? startImagineTo3D : startImage
+  // disabled-state label that tells the user WHAT to do (the button never just
+  // sits dead with no explanation)
+  const ctaHint =
+    mode === 'text'
+      ? 'Describe your model to start'
+      : mode === 'image'
+        ? 'Add a reference image'
+        : 'Generate an image first'
+  // live placeholder: the typewriter text (with a caret) while empty
+  const placeholder = typed ? `${typed}▍` : 'Describe your model…'
+
   return (
     <section className="panel" onPaste={mode === 'image' ? onPaste : undefined}>
       <h2>Generate</h2>
@@ -359,57 +432,72 @@ export default function GeneratePanel({
       </div>
 
       {mode === 'text' && (
-        <>
-          <div className="field">
-            <label htmlFor="gen-prompt">Describe a model</label>
-            <div className="input-with-mic">
-              <textarea
-                id="gen-prompt"
-                rows={3}
-                value={prompt}
-                onChange={(e) => setPrompt(e.target.value)}
-                placeholder='e.g. "a small dragon with big wings"'
-                disabled={busy}
-              />
-              <MicButton onTranscript={appendSpeech} disabled={busy} />
-            </div>
+        <div className="tool-block">
+          <span className="tool-label">Describe</span>
+          <div className="reactor">
+            <textarea
+              id="gen-prompt"
+              className="reactor-input"
+              value={prompt}
+              onChange={(e) => setPrompt(e.target.value)}
+              placeholder={placeholder}
+              disabled={busy}
+            />
+            <MicButton onTranscript={appendSpeech} disabled={busy} />
           </div>
           {!generating && (
-            <div className="chips">
+            <div className="seed-row">
+              <span className="seed-label">Try</span>
               {QUICK_PROMPTS.map((p) => (
-                <button key={p} type="button" className="chip" onClick={() => setPrompt(p)} disabled={disabled}>
+                <button key={p} type="button" className="seed" onClick={() => setPrompt(p)} disabled={disabled}>
                   {p}
                 </button>
               ))}
+              <button
+                type="button"
+                className="seed seed--dice"
+                onClick={() => setPrompt(QUICK_PROMPTS[Math.floor(Math.random() * QUICK_PROMPTS.length)])}
+                disabled={disabled}
+                title="Surprise me"
+                aria-label="Surprise me"
+              >
+                🎲
+              </button>
             </div>
           )}
-        </>
+        </div>
       )}
 
       {mode === 'imagine' && (
         <>
-          <div className="field">
-            <label htmlFor="gen-imagine">Describe the image</label>
-            <div className="input-with-mic">
+          <div className="tool-block">
+            <span className="tool-label">Imagine an image</span>
+            <div className="reactor">
               <textarea
                 id="gen-imagine"
-                rows={3}
+                className="reactor-input"
                 value={prompt}
                 onChange={(e) => setPrompt(e.target.value)}
-                placeholder='e.g. "a red sports car, studio lighting"'
+                placeholder={placeholder}
                 disabled={genImgLoading || disabled}
               />
               <MicButton onTranscript={appendSpeech} disabled={genImgLoading || disabled} />
             </div>
+            <button
+              className="tool-cta"
+              onClick={generatePhoto}
+              disabled={genImgLoading || disabled || !prompt.trim()}
+            >
+              {genImgLoading
+                ? 'Generating image…'
+                : !prompt.trim()
+                  ? 'Describe the image to start'
+                  : versions.length
+                    ? 'Generate new image'
+                    : 'Generate image'}
+            </button>
+            {genImgError && <span className="url-error">{genImgError}</span>}
           </div>
-          <button
-            className="submit gen-go"
-            onClick={generatePhoto}
-            disabled={genImgLoading || disabled || !prompt.trim()}
-          >
-            {genImgLoading ? 'Generating image…' : versions.length ? 'Generate new image' : 'Generate image'}
-          </button>
-          {genImgError && <span className="url-error">{genImgError}</span>}
 
           {currentImage && (
             <div className="field">
@@ -505,133 +593,117 @@ export default function GeneratePanel({
       )}
 
       {(mode !== 'imagine' || currentImage) && (
-      <>
-      <div className="model-select">
-        <span className="model-label">Engine</span>
-        <button
-          type="button"
-          className={`chip ${engine === 'meshy' ? 'chip--on' : ''}`}
-          onClick={() => setEngine('meshy')}
-          disabled={busy}
-          title="Meshy — tiered previews, optional texturing stage"
-        >
-          Meshy
-        </button>
-        <button
-          type="button"
-          className={`chip ${engine === 'tripo' ? 'chip--on' : ''}`}
-          onClick={() => setEngine('tripo')}
-          disabled={busy}
-          title="Tripo — builds a finished, already-textured model in one step"
-        >
-          Tripo
-        </button>
-      </div>
-      {engine === 'meshy' && (
-        <div className="model-select">
-          <span className="model-label">Model</span>
-          <button
-            type="button"
-            className={`chip ${aiModel === 'meshy-5' ? 'chip--on' : ''}`}
-            onClick={() => setAiModel('meshy-5')}
-            disabled={busy}
-            title="Meshy-5 — faster, lower token cost"
-          >
-            M5 · Fast{costs ? ` · ${costs.tiers?.['meshy-5']}` : ''}
-          </button>
-          <button
-            type="button"
-            className={`chip ${aiModel === 'meshy-6' ? 'chip--on' : ''}`}
-            onClick={() => setAiModel('meshy-6')}
-            disabled={busy}
-            title="Meshy-6 — highest quality"
-          >
-            M6 · Quality{costs ? ` · ${costs.tiers?.['meshy-6']}` : ''}
-          </button>
+      <div className="tool-block">
+        <span className="tool-label">Model</span>
+        <div className="opt-grid">
+          {MODEL_OPTIONS.map((o) => {
+            const on = activeModel?.id === o.id
+            return (
+              <button
+                key={o.id}
+                type="button"
+                className={`opt-card ${on ? 'on' : ''}`}
+                onClick={() => pickModel(o)}
+                disabled={busy}
+                title={o.engine === 'tripo' ? 'Tripo — one-step textured model' : `Meshy ${o.model}`}
+              >
+                <span className="opt-card-name">{o.name}</span>
+                <span className="opt-card-desc">{o.desc}</span>
+                <span className="opt-card-cost">{costLabel(o)}</span>
+              </button>
+            )
+          })}
         </div>
-      )}
-      <label className={`toggle ${engine !== 'meshy' || mode !== 'text' ? 'toggle--disabled' : ''}`}>
-        <input
-          type="checkbox"
-          checked={engine === 'meshy' && mode === 'text' && textured}
-          onChange={(e) => setTextured(e.target.checked)}
-          disabled={busy || engine !== 'meshy' || mode !== 'text'}
-        />
-        Add textures (color){' '}
-        <span className="hint">
-          {engine === 'tripo'
-            ? '(Tripo builds a textured model in one step)'
-            : mode !== 'text'
-              ? '(image→3D is already textured)'
-              : textured
-                ? `(+${costs?.refine ?? 20} tokens, colored)`
-                : '(off — gray preview)'}
-        </span>
-      </label>
-      {engine === 'tripo' && (
-        <label className="toggle">
-          <input
-            type="checkbox"
-            checked={segmentOnCreate}
-            onChange={(e) => setSegmentOnCreate(e.target.checked)}
-            disabled={busy}
-          />
-          Segment on create{' '}
-          <span className="hint">
-            {segmentOnCreate ? '(+~40 cr · splits into editable parts)' : '(off — plain model, segment later)'}
-          </span>
-        </label>
-      )}
-      {engine === 'tripo' && mode === 'imagine' && (
-        <div className="mv-count" role="radiogroup" aria-label="Reference views">
-          <span className="hint">Views:</span>
-          {[
-            [1, '1 · quick'],
-            [2, '2 · front+side'],
-            [4, '4 · best'],
-          ].map(([n, label]) => (
-            <button
-              key={n}
-              type="button"
-              className={`mv-count-btn ${genViews === n ? 'on' : ''}`}
-              aria-pressed={genViews === n}
+
+        {engine === 'meshy' && mode === 'text' && (
+          <label className="switch-row">
+            <span className="switch-text">
+              <span className="switch-name">Colour textures</span>
+              <span className="switch-sub">
+                {textured ? `full-colour PBR · +${costs?.refine ?? 20} ⛁` : 'grey clay preview'}
+              </span>
+            </span>
+            <input
+              type="checkbox"
+              className="switch"
+              checked={textured}
+              onChange={(e) => setTextured(e.target.checked)}
               disabled={busy}
-              onClick={() => setGenViews(n)}
-            >
-              {label}
-            </button>
-          ))}
-          {genViews > 1 && (
-            <span className="hint">extra views drawn by Gemini → Tripo multi-view</span>
-          )}
-        </div>
-      )}
-      <button
-        className="submit gen-go"
-        onClick={mode === 'text' ? startText : mode === 'imagine' ? startImagineTo3D : startImage}
-        disabled={generating || disabled || !canGenerate}
-      >
-        {generating ? (
-          `Generating… ${task.progress}%`
-        ) : (
-          <>
-            {mode === 'text' ? 'Generate 3D model' : 'Create 3D model'}
-            {estCost != null && <span className="gen-cost">{estCost} ⛁</span>}
-          </>
+            />
+          </label>
         )}
-      </button>
-      {generating && (
-        <div className="progress" aria-hidden="true">
-          <div className="progress-fill" style={{ width: `${task.progress}%` }} />
-        </div>
-      )}
-      {generating && task.mock && (
-        <span className="hint">
-          mock mode — set {engine === 'tripo' ? 'TRIPO_API_KEY' : 'MESHY_API_KEY'} on the server for real
-          generation
-        </span>
-      )}
-      </>
+
+        {engine === 'tripo' && (
+          <label className="switch-row">
+            <span className="switch-text">
+              <span className="switch-name">Split into parts</span>
+              <span className="switch-sub">
+                {segmentOnCreate ? 'editable segments · +~40 ⛁' : 'one solid mesh'}
+              </span>
+            </span>
+            <input
+              type="checkbox"
+              className="switch"
+              checked={segmentOnCreate}
+              onChange={(e) => setSegmentOnCreate(e.target.checked)}
+              disabled={busy}
+            />
+          </label>
+        )}
+
+        {engine === 'tripo' && mode === 'imagine' && (
+          <div className="mv-count" role="radiogroup" aria-label="Reference views">
+            <span className="switch-sub">Views</span>
+            {[
+              [1, '1 · quick'],
+              [2, '2 · front+side'],
+              [4, '4 · best'],
+            ].map(([n, label]) => (
+              <button
+                key={n}
+                type="button"
+                className={`mv-count-btn ${genViews === n ? 'on' : ''}`}
+                aria-pressed={genViews === n}
+                disabled={busy}
+                onClick={() => setGenViews(n)}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        )}
+        {engine === 'tripo' && mode === 'imagine' && genViews > 1 && (
+          <span className="hint">Extra views drawn by Gemini → Tripo multi-view.</span>
+        )}
+
+        <button
+          className="tool-cta"
+          onClick={primaryAction}
+          disabled={generating || disabled || !canGenerate}
+        >
+          {generating ? (
+            `Forging… ${task.progress}%`
+          ) : !canGenerate ? (
+            ctaHint
+          ) : (
+            <>
+              {mode === 'text' ? 'Forge 3D model' : 'Create 3D model'}
+              {estCost != null && <span className="tool-cta-cost">{estCost} ⛁</span>}
+            </>
+          )}
+        </button>
+        {generating && (
+          <div className="progress" aria-hidden="true">
+            <div className="progress-fill" style={{ width: `${task.progress}%` }} />
+          </div>
+        )}
+        {generating && task.mock && (
+          <span className="hint">
+            mock mode — set {engine === 'tripo' ? 'TRIPO_API_KEY' : 'MESHY_API_KEY'} on the server for real
+            generation
+          </span>
+        )}
+      </div>
       )}
       {error && <span className="url-error">{error}</span>}
     </section>
