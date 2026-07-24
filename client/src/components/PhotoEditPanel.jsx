@@ -255,14 +255,7 @@ export default function PhotoEditPanel({ modelUrl, onModelReady3D }) {
 
   return (
     <section className="panel photo-edit">
-      <div className="spatial-head">
-        <span className="spatial-flag">✎ Edit</span>
-        <h2>Edit this model</h2>
-      </div>
-      <p className="spatial-blurb">
-        Capture the model as a photo, describe the change, then rebuild it in 3D — the
-        original stays as a version, so an edit you dislike never loses it.
-      </p>
+      <span className="tool-label">Photo edit</span>
 
       {versions.length === 0 ? (
         <button className="submit" onClick={capture} disabled={!modelUrl || capturing}>

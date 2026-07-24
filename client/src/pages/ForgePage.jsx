@@ -134,6 +134,8 @@ export default function ForgePage() {
   const [compare, setCompare] = useState(null)
   // which left activity-bar tool is open: generate | model | edit | recolor
   const [activeTab, setActiveTab] = useState('generate')
+  // DOM node in the Edit tab where ModelViewer portals its manual tools + brightness
+  const [manualHost, setManualHost] = useState(null)
   // Hyper3D part-swap state
   const [swapBusy, setSwapBusy] = useState(false)
   const [swapMsg, setSwapMsg] = useState(null)
@@ -688,10 +690,7 @@ export default function ForgePage() {
         {modelUrl ? (
         <>
         <section className="panel spatial-panel">
-          <div className="spatial-head">
-            <span className="spatial-flag">✦ Flagship</span>
-            <h2>Spatial edit</h2>
-          </div>
+          <span className="tool-label">Spatial edit</span>
           <div className="field">
             <label>Selected points ({points.length})</label>
             {points.length === 0 ? (
@@ -791,6 +790,8 @@ export default function ForgePage() {
             </div>
           )}
         </section>
+        {/* manual edit tools + brightness portal in here from ModelViewer */}
+        <div className="edit-manual-host" ref={setManualHost} />
         <PhotoEditPanel
             modelUrl={modelUrl}
             onModelReady3D={(url, label) => {
@@ -877,10 +878,8 @@ export default function ForgePage() {
                 setLoadKey((k) => k + 1)
               }}
               highlightBox={highlightBox}
+              manualHost={manualHost}
             />
-            {modelStatus === 'ready' && points.length === 0 && (
-              <div className="viewer-hint">✦ Spatial edit — click any part to reshape it</div>
-            )}
             <ModelVersionStrip
               versions={modelVersions}
               currentId={currentVersionId}
