@@ -828,8 +828,11 @@ body::before {
 }
 
 /* brush ring that shows the paint/sculpt area; native cursor hidden over canvas */
+/* keep the real cursor VISIBLE while a tool is active (crosshair for precise
+   aiming) — the brush ring is only a size hint and isn't drawn for the Move
+   tool, so hiding the OS cursor left Move with no pointer at all */
 .viewer.tool-active canvas {
-  cursor: none;
+  cursor: crosshair;
 }
 .brush-cursor {
   position: absolute;
@@ -838,7 +841,21 @@ body::before {
   border-radius: 50%;
   pointer-events: none;
   z-index: 6;
-  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.5);
+  /* light + dark outline so the ring reads on any model colour */
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.55), inset 0 0 0 1px rgba(255, 255, 255, 0.5);
+}
+/* a small centre dot marks the exact aim point inside the ring */
+.brush-cursor::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 3px;
+  height: 3px;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.6);
 }
 
 /* ---- P3 part buttons (under the model) ---- */
