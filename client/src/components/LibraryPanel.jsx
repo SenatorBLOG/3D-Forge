@@ -177,7 +177,7 @@ export default function LibraryPanel({ refreshKey = 0, busy = false, onLoad }) {
 
   return (
     <section className="panel library-panel">
-      <h2>Library</h2>
+      <span className="tool-label">Library</span>
 
       {user && (
         <div className="lib-tabs">

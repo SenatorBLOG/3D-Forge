@@ -138,6 +138,8 @@ export default function ForgePage() {
   const [manualHost, setManualHost] = useState(null)
   // collapse the left tool panel to just the icon rail
   const [navCollapsed, setNavCollapsed] = useState(false)
+  // collapse the right library/publish panel
+  const [libCollapsed, setLibCollapsed] = useState(false)
   // Hyper3D part-swap state
   const [swapBusy, setSwapBusy] = useState(false)
   const [swapMsg, setSwapMsg] = useState(null)
@@ -948,7 +950,19 @@ export default function ForgePage() {
       </div>
 
       {/* RIGHT — library + publish */}
-      <aside className="sidebar forge-library">
+      <aside className={`sidebar forge-library ${libCollapsed ? 'forge-library--collapsed' : ''}`}>
+        <button
+          type="button"
+          className="lib-collapse"
+          onClick={() => setLibCollapsed(true)}
+          title="Hide this panel"
+          aria-label="Hide this panel"
+        >
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor"
+            strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <path d="M10 6l6 6-6 6" />
+          </svg>
+        </button>
         {modelUrl && (
           <PublishPanel modelUrl={modelUrl} description={baseModelPrompt} kind={modelKind} />
         )}
@@ -966,6 +980,20 @@ export default function ForgePage() {
           }}
         />
       </aside>
+      {libCollapsed && (
+        <button
+          type="button"
+          className="lib-reopen"
+          onClick={() => setLibCollapsed(false)}
+          title="Show library"
+          aria-label="Show library"
+        >
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor"
+            strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <path d="M14 6l-6 6 6 6" />
+          </svg>
+        </button>
+      )}
     </main>
   )
 }

@@ -4922,8 +4922,67 @@ button.tag:hover {
   background: var(--panel);
 }
 
+/* anchor for the absolutely-positioned library re-open handle */
+.app-main.forge {
+  position: relative;
+}
+
 .forge-library {
-  width: 300px;
+  width: 312px;
+  transition: width 0.22s ease, padding 0.22s ease, opacity 0.18s ease;
+}
+
+/* collapsed: the right panel slides away, canvas takes the space */
+.forge-library--collapsed {
+  width: 0;
+  padding-left: 0;
+  padding-right: 0;
+  border-left-width: 0;
+  opacity: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+/* collapse chevron, top-right of the panel */
+.lib-collapse {
+  align-self: flex-end;
+  margin: -4px -4px 2px 0;
+  display: flex;
+  padding: 6px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-faint);
+  cursor: pointer;
+  transition: color 0.15s, background 0.15s;
+}
+.lib-collapse:hover {
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+/* re-open handle: a small tab on the right wall when the panel is hidden */
+.lib-reopen {
+  position: absolute;
+  top: 50%;
+  right: 0;
+  transform: translateY(-50%);
+  z-index: 4;
+  display: flex;
+  align-items: center;
+  padding: 14px 6px;
+  border: 1px solid var(--line);
+  border-right: 0;
+  border-radius: 10px 0 0 10px;
+  background: linear-gradient(180deg, var(--panel-2), var(--panel));
+  color: var(--forge);
+  cursor: pointer;
+  box-shadow: -4px 0 16px rgba(0, 0, 0, 0.35);
+  transition: color 0.15s, background 0.15s;
+}
+.lib-reopen:hover {
+  background: var(--panel-2);
+  box-shadow: -4px 0 20px var(--forge-glow);
 }
 
 /* center create-first / forging state */
@@ -5844,25 +5903,33 @@ button.tag:hover {
 .library-panel .lib-tabs {
   display: flex;
   gap: 4px;
+  padding: 3px;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: 9px;
 }
 
 .lib-tab {
   flex: 1;
-  padding: 7px 0;
-  border: 1px solid var(--line);
-  border-radius: 7px;
-  background: var(--panel-2);
+  padding: 6px 0;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
   color: var(--text-dim);
-  font-family: var(--font-display);
-  font-size: 13px;
+  font-family: var(--font-ui);
+  font-size: 12.5px;
   cursor: pointer;
-  transition: color 0.15s, border-color 0.15s, background 0.15s;
+  transition: color 0.15s, background 0.15s, box-shadow 0.15s;
+}
+
+.lib-tab:hover {
+  color: var(--text);
 }
 
 .lib-tab.active {
   color: var(--forge);
-  border-color: var(--forge);
-  background: rgba(34, 211, 238, 0.08);
+  background: var(--panel);
+  box-shadow: inset 0 0 0 1px rgba(34, 211, 238, 0.4);
 }
 
 .lib-grid {
