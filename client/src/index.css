@@ -1943,25 +1943,65 @@ body::before {
   margin: 0;
 }
 
-/* ---- scrollbars ---- */
+/* ---- neon scrollbars (Neon-Noir: a cyan pill that floats in the track) ---- */
 
-.sidebar::-webkit-scrollbar,
-.history-list::-webkit-scrollbar,
-.prompt-preview::-webkit-scrollbar {
-  width: 8px;
+/* every scrollable surface in the workspace shares one look */
+.sidebar,
+.forge-nav,
+.history-list,
+.prompt-preview,
+.point-list,
+.image-lab-versions,
+.mversion-strip {
+  scrollbar-width: thin; /* Firefox */
+  scrollbar-color: var(--forge-deep) transparent;
 }
 
+.sidebar::-webkit-scrollbar,
+.forge-nav::-webkit-scrollbar,
+.history-list::-webkit-scrollbar,
+.prompt-preview::-webkit-scrollbar,
+.point-list::-webkit-scrollbar,
+.image-lab-versions::-webkit-scrollbar,
+.mversion-strip::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+.sidebar::-webkit-scrollbar-track,
+.forge-nav::-webkit-scrollbar-track,
+.history-list::-webkit-scrollbar-track,
+.prompt-preview::-webkit-scrollbar-track,
+.point-list::-webkit-scrollbar-track,
+.image-lab-versions::-webkit-scrollbar-track,
+.mversion-strip::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* transparent border + padding-box clip = the pill floats, inset from the edge */
 .sidebar::-webkit-scrollbar-thumb,
+.forge-nav::-webkit-scrollbar-thumb,
 .history-list::-webkit-scrollbar-thumb,
-.prompt-preview::-webkit-scrollbar-thumb {
-  background: var(--line);
-  border-radius: 4px;
+.prompt-preview::-webkit-scrollbar-thumb,
+.point-list::-webkit-scrollbar-thumb,
+.image-lab-versions::-webkit-scrollbar-thumb,
+.mversion-strip::-webkit-scrollbar-thumb {
+  min-height: 32px;
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background: linear-gradient(180deg, var(--forge-deep), rgba(34, 211, 238, 0.35));
+  background-clip: padding-box;
 }
 
 .sidebar::-webkit-scrollbar-thumb:hover,
+.forge-nav::-webkit-scrollbar-thumb:hover,
 .history-list::-webkit-scrollbar-thumb:hover,
-.prompt-preview::-webkit-scrollbar-thumb:hover {
-  background: var(--text-faint);
+.prompt-preview::-webkit-scrollbar-thumb:hover,
+.point-list::-webkit-scrollbar-thumb:hover,
+.image-lab-versions::-webkit-scrollbar-thumb:hover,
+.mversion-strip::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(180deg, var(--forge-2), var(--forge));
+  background-clip: padding-box;
 }
 
 /* ---- quick-prompt chips ---- */
