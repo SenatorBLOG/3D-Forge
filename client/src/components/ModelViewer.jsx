@@ -49,6 +49,7 @@ export default function ModelViewer({
   onRevertEdits,
   apiOut,
   highlightBox = null,
+  highlightNames = null,
   showcase = false,
 }) {
   const containerRef = useRef(null)
@@ -76,6 +77,10 @@ export default function ModelViewer({
   const [gizmoMode, setGizmoMode] = useState('rotate') // 'translate' | 'rotate' | 'scale'
   const gizmoModeRef = useRef('rotate')
   gizmoModeRef.current = gizmoMode
+  // Task 6: animation clips carried by a rigged/animated GLB, + which one plays.
+  // Populated from gltf.animations on load; the bottom switcher swaps between them.
+  const [clips, setClips] = useState([])
+  const [activeClip, setActiveClip] = useState(null)
   const [paintColor, setPaintColor] = useState('#e64545')
   const [brushSize, setBrushSize] = useState(0.5)
   const [sculptDir, setSculptDir] = useState(1) // +1 inflate, -1 dent
@@ -284,10 +289,25 @@ export default function ModelViewer({
       }
     }
 
+    // Task 6 — animation playback. A rigged/animated GLB (from Tripo) carries
+    // clips; drive them with an AnimationMixer and let the bottom switcher pick.
+    let mixer = null
+    const animClock = new THREE.Clock()
+    const clipActions = {} // display name -> AnimationAction
+    const playClip = (name) => {
+      const next = clipActions[name]
+      if (!next) return
+      for (const [n, a] of Object.entries(clipActions)) if (n !== name) a.fadeOut(0.25)
+      next.reset().setEffectiveWeight(1).fadeIn(0.25).play()
+      setActiveClip(name)
+    }
+
     apiRef.current = {
       controls,
       syncMarkers,
       updateLabels,
+      playClip,
+      getClips: () => Object.keys(clipActions),
       resetView: () => {
         if (!homePosition) return
         camera.position.copy(homePosition)
@@ -299,6 +319,23 @@ export default function ModelViewer({
         renderer.toneMappingExposure = BASE_EXPOSURE * mult
       },
       setHighlight,
+      // Task 8 — glow the SELECTED part/group meshes (by name) so the current
+      // scope is unmistakable, instead of relying only on the bbox outline (which
+      // visually passes through neighbours). Others get emissive back to black.
+      setPartHighlight: (names) => {
+        if (!model) return
+        const set = names?.length ? new Set(names) : null
+        model.traverse((o) => {
+          if (!o.isMesh) return
+          const on = set && (set.has(o.name) || set.has(o.parent?.name))
+          for (const m of Array.isArray(o.material) ? o.material : [o.material]) {
+            if (m?.emissive) {
+              m.emissive.setHex(on ? 0x0a3a4a : 0x000000)
+              m.needsUpdate = true
+            }
+          }
+        })
+      },
       setExploded,
       // serialize the (edited) model back to a GLB — manual edits become a new version
       exportModel: () =>
@@ -328,6 +365,32 @@ export default function ModelViewer({
           const applied = Array.isArray(base) ? mats : mats[0]
           o.userData.origMat = applied
           // reflect immediately unless a non-shaded overlay (solid/wire) is active
+          if (modeRef.current === 'shaded' || modeRef.current === 'parts') o.material = applied
+        })
+      },
+      // Task 8 — recolor ONLY the meshes of a grouped region (e.g. a whole arm
+      // that segmentation split into 3-4 parts), matched by node/mesh name. Same
+      // material logic as recolor, gated to the group's names — so "make the whole
+      // arm black/metal" hits every piece at once, free, with the rest untouched.
+      recolorParts: (names, hex, finish) => {
+        if (!model || !names?.length) return
+        const set = new Set(names)
+        const col = new THREE.Color(hex)
+        model.traverse((o) => {
+          if (!o.isMesh) return
+          if (!(set.has(o.name) || set.has(o.parent?.name))) return
+          const base = o.userData.origMat || o.material
+          const mats = (Array.isArray(base) ? base : [base]).map((m) => {
+            const nm = m.clone()
+            if (nm.color) nm.color.copy(col)
+            if (finish === 'matte') { nm.roughness = 0.9; nm.metalness = 0.0 }
+            else if (finish === 'metal') { nm.roughness = 0.25; nm.metalness = 0.9 }
+            else if (finish === 'glossy') { nm.roughness = 0.15; nm.metalness = 0.1 }
+            nm.needsUpdate = true
+            return nm
+          })
+          const applied = Array.isArray(base) ? mats : mats[0]
+          o.userData.origMat = applied
           if (modeRef.current === 'shaded' || modeRef.current === 'parts') o.material = applied
         })
       },
@@ -469,6 +532,21 @@ export default function ModelViewer({
         applyDisplayMode(modeRef.current)
 
         scene.add(model)
+        // Task 6: wire up any animation clips the GLB carries (Tripo rig+retarget
+        // bakes one clip per animation; names come through as "preset:walk").
+        if (gltf.animations?.length) {
+          mixer = new THREE.AnimationMixer(model)
+          gltf.animations.forEach((clip, i) => {
+            const nm = (clip.name || `clip ${i + 1}`).replace(/^preset:/, '')
+            clipActions[nm] = mixer.clipAction(clip)
+          })
+          const names = Object.keys(clipActions)
+          setClips(names)
+          playClip(names[0])
+        } else {
+          setClips([])
+          setActiveClip(null)
+        }
         syncMarkers(pointsRef.current)
         updateLabels()
         callbacksRef.current.onLoaded?.()
@@ -704,6 +782,8 @@ export default function ModelViewer({
     const animate = () => {
       raf = requestAnimationFrame(animate)
       controls.update()
+      const dt = animClock.getDelta()
+      if (mixer) mixer.update(dt)
       renderer.render(scene, camera)
     }
     animate()
@@ -712,6 +792,7 @@ export default function ModelViewer({
       disposed = true
       apiRef.current = {}
       if (apiOut) apiOut.current = {}
+      mixer?.stopAllAction()
       cancelAnimationFrame(raf)
       resizeObserver.disconnect()
       renderer.domElement.removeEventListener('pointerdown', onPointerDown)
@@ -776,6 +857,10 @@ export default function ModelViewer({
   useEffect(() => {
     apiRef.current.setHighlight?.(highlightBox)
   }, [highlightBox])
+  // glow the selected part/group meshes (by name) so the scope is obvious
+  useEffect(() => {
+    apiRef.current.setPartHighlight?.(highlightNames)
+  }, [highlightNames])
   useEffect(() => {
     apiRef.current.setExploded?.(exploded)
   }, [exploded])
@@ -819,7 +904,7 @@ export default function ModelViewer({
 
   return (
     <div
-      className={`viewer${tool ? ' tool-active' : ''}`}
+      className={`viewer${tool && tool !== 'move' ? ' tool-active' : ''}${tool === 'move' ? ' tool-move' : ''}`}
       ref={containerRef}
       style={viewerBg ? { background: viewerBg } : undefined}
       onPointerMove={(e) => {
@@ -1123,6 +1208,22 @@ export default function ModelViewer({
               aria-label="Scene brightness"
             />
           </div>
+        </div>
+      )}
+      {!showcase && clips.length > 0 && (
+        <div className="viewer-anim" role="group" aria-label="Animation clips">
+          <span className="viewer-anim-label" aria-hidden="true">🎬</span>
+          {clips.map((name) => (
+            <button
+              key={name}
+              type="button"
+              className={activeClip === name ? 'on' : ''}
+              onClick={() => apiRef.current.playClip?.(name)}
+              title={`Play "${name}"`}
+            >
+              {name}
+            </button>
+          ))}
         </div>
       )}
     </div>

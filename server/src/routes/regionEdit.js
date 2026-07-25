@@ -1,5 +1,5 @@
 import { Router } from 'express'
-import { segmentModel, segmentTripoByTaskId, hitTestPart, partSwap, extractPart, stitchPart } from '../services/segment.js'
+import { segmentModel, segmentTripoByTaskId, hitTestPart, partSwap, extractPart, extractRegion, stitchPart, stitchRegion } from '../services/segment.js'
 import { optionalAuth } from '../middleware/auth.js'
 import { recordTask, updateTask, listMemory } from '../services/history.js'
 import { dbReady } from '../db.js'
@@ -145,18 +145,37 @@ router.post('/partswap', optionalAuth, async (req, res) => {
   }
 })
 
-// POST /api/edit/extract { modelUrl, partId?|point? } — P4 step 1: pull ONE part
-// out into its own stored GLB, so the client can photograph it for the edit loop.
-// → { partUrl, part: { id, name } }
+// union of several parts' bboxes → one enclosing box
+function unionBBox(list) {
+  const min = [Infinity, Infinity, Infinity]
+  const max = [-Infinity, -Infinity, -Infinity]
+  for (const p of list) {
+    for (let i = 0; i < 3; i++) {
+      min[i] = Math.min(min[i], p.bbox.min[i])
+      max[i] = Math.max(max[i], p.bbox.max[i])
+    }
+  }
+  return { min, max }
+}
+
+// POST /api/edit/extract { modelUrl, partId?|partIds?|point? } — P4/Task8 step 1:
+// pull ONE part (or a GROUP of parts, via partIds) out into its own stored GLB so
+// the client can photograph it for the edit loop. → { partUrl, part: { id, name } }
 router.post('/extract', async (req, res) => {
   const modelUrl = typeof req.body?.modelUrl === 'string' ? req.body.modelUrl : ''
   const partId = typeof req.body?.partId === 'string' ? req.body.partId : ''
+  const partIds = Array.isArray(req.body?.partIds) ? req.body.partIds : null
   const point = req.body?.point
-  if (!modelUrl || (!partId && !point)) {
-    return res.status(400).json({ error: 'modelUrl and one of partId / point are required' })
+  if (!modelUrl || (!partId && !partIds && !point)) {
+    return res.status(400).json({ error: 'modelUrl and one of partId / partIds / point are required' })
   }
   try {
     const { parts } = await segmentModel(modelUrl)
+    if (partIds?.length) {
+      const list = parts.filter((p) => partIds.includes(p.id))
+      if (!list.length) return res.status(404).json({ error: 'no matching parts for the given partIds' })
+      return res.json(await extractRegion(modelUrl, list, 'region', req.body?.name || 'region'))
+    }
     const part = partId ? parts.find((p) => p.id === partId) : hitTestPart(parts, point)
     if (!part) return res.status(404).json({ error: 'no matching part for the given partId/point' })
     res.json(await extractPart(modelUrl, part))
@@ -173,15 +192,24 @@ router.post('/extract', async (req, res) => {
 router.post('/stitch', optionalAuth, async (req, res) => {
   const modelUrl = typeof req.body?.modelUrl === 'string' ? req.body.modelUrl : ''
   const partId = typeof req.body?.partId === 'string' ? req.body.partId : ''
+  const partIds = Array.isArray(req.body?.partIds) ? req.body.partIds : null
   const partModelUrl = typeof req.body?.partModelUrl === 'string' ? req.body.partModelUrl : ''
-  if (!modelUrl || !partId || !partModelUrl) {
-    return res.status(400).json({ error: 'modelUrl, partId and partModelUrl are required' })
+  if (!modelUrl || (!partId && !partIds) || !partModelUrl) {
+    return res.status(400).json({ error: 'modelUrl, partId|partIds and partModelUrl are required' })
   }
   try {
     const { parts } = await segmentModel(modelUrl)
-    const part = parts.find((p) => p.id === partId)
-    if (!part) return res.status(404).json({ error: 'unknown partId for this model' })
-    const result = await stitchPart(modelUrl, part, partModelUrl)
+    let result, part
+    if (partIds?.length) {
+      const list = parts.filter((p) => partIds.includes(p.id))
+      if (!list.length) return res.status(404).json({ error: 'unknown partIds for this model' })
+      part = { name: req.body?.name || 'region' }
+      result = await stitchRegion(modelUrl, list, partModelUrl, unionBBox(list), 'region', part.name)
+    } else {
+      part = parts.find((p) => p.id === partId)
+      if (!part) return res.status(404).json({ error: 'unknown partId for this model' })
+      result = await stitchPart(modelUrl, part, partModelUrl)
+    }
 
     // mirror a finished generation so the stitch lands in History + Library
     const label = `part-stitch: ${part.name}`.slice(0, 120)

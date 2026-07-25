@@ -450,26 +450,40 @@ const primsBBox = (prims) => {
  * limitation of the geometric fallback.
  */
 export async function extractPart(modelUrl, part) {
+  return extractRegion(modelUrl, [part], part.id, part.name)
+}
+
+/**
+ * Extract a REGION (one or several parts — e.g. a whole arm grouped from 3-4
+ * segments) into its own stored GLB, so it can be photographed / rebuilt as ONE.
+ * Combines the world-space primitives of every listed part.
+ */
+export async function extractRegion(modelUrl, partList, id = 'region', name = 'region') {
   const bytes = await readModelBytes(modelUrl)
   if (!bytes) throw Object.assign(new Error('model not found'), { code: 'NOT_FOUND' })
   const srcDoc = await new NodeIO().readBinary(new Uint8Array(bytes))
-  const prims = collectWorldPrimitives(
-    srcDoc,
-    part.index,
-    Number.isInteger(part.primIndex) ? part.primIndex : null,
-  )
-  if (!prims.length) throw Object.assign(new Error('part has no geometry'), { code: 'NOT_FOUND' })
+  const prims = []
+  for (const part of partList) {
+    prims.push(
+      ...collectWorldPrimitives(
+        srcDoc,
+        part.index,
+        Number.isInteger(part.primIndex) ? part.primIndex : null,
+      ),
+    )
+  }
+  if (!prims.length) throw Object.assign(new Error('region has no geometry'), { code: 'NOT_FOUND' })
 
   const doc = new Document()
   const buffer = doc.createBuffer()
   const mesh = doc.createMesh('part')
-  const node = doc.createNode(part.name || 'part').setMesh(mesh)
+  const node = doc.createNode(name || 'part').setMesh(mesh)
   doc.createScene().addChild(node)
   addPrimsToMesh(doc, buffer, mesh, prims)
 
   const out = await new NodeIO().writeBinary(doc)
   const url = await storeModelBytes(out)
-  return { partUrl: url, part: { id: part.id, name: part.name } }
+  return { partUrl: url, part: { id, name } }
 }
 
 /**
@@ -480,6 +494,16 @@ export async function extractPart(modelUrl, part) {
  * show; that's the accepted tradeoff versus regenerating everything.
  */
 export async function stitchPart(modelUrl, part, partModelUrl) {
+  return stitchRegion(modelUrl, [part], partModelUrl, part.bbox, part.id, part.name)
+}
+
+/**
+ * Stitch a rebuilt REGION (one or several parts) back into the original at the
+ * region's union bbox: uniform-scale + centre the new geometry, detach every
+ * original part in the region, and add the fitted geometry. The rest of the model
+ * stays byte-identical. Experimental (no CSG weld, orientation from the rebuild).
+ */
+export async function stitchRegion(modelUrl, partList, partModelUrl, targetBbox, id = 'region', name = 'region') {
   const baseBytes = await readModelBytes(modelUrl)
   if (!baseBytes) throw Object.assign(new Error('model not found'), { code: 'NOT_FOUND' })
   const newBytes = await readModelBytes(partModelUrl)
@@ -490,45 +514,63 @@ export async function stitchPart(modelUrl, part, partModelUrl) {
   const partDoc = await io.readBinary(new Uint8Array(newBytes))
   const newPrims = collectWorldPrimitives(partDoc)
   if (!newPrims.length) throw Object.assign(new Error('part model has no geometry'), { code: 'NOT_FOUND' })
+  const part = { bbox: targetBbox } // region fits the union bbox of all its parts
 
-  // per-axis fit of the new geometry into the original part's bbox
+  // Fit the new geometry into the original part's bbox with a UNIFORM scale +
+  // centre alignment — NOT a per-axis stretch. Per-axis fitting warped/disfigured
+  // the rebuilt part whenever its proportions differed from the bbox (and made a
+  // rotated rebuild worse). Uniform scale keeps the rebuilt part's own shape; we
+  // match overall SIZE by the bbox diagonal (rotation-invariant) and drop it in at
+  // the original centre. Orientation still comes from the rebuild itself (feed it
+  // clean axis-aligned views); a corrective rotation is the next refinement.
   const src = primsBBox(newPrims)
   const t = part.bbox
   const eps = 1e-9
-  const scale = [0, 1, 2].map((a) => (t.max[a] - t.min[a]) / Math.max(src.max[a] - src.min[a], eps))
-  const mapPoint = (p) => [0, 1, 2].map((a) => t.min[a] + (p[a] - src.min[a]) * scale[a])
+  const size = (b) => [b.max[0] - b.min[0], b.max[1] - b.min[1], b.max[2] - b.min[2]]
+  const diag = (s) => Math.max(Math.hypot(s[0], s[1], s[2]), eps)
+  const uni = diag(size(t)) / diag(size(src))
+  const srcC = [0, 1, 2].map((a) => (src.min[a] + src.max[a]) / 2)
+  const tC = [0, 1, 2].map((a) => (t.min[a] + t.max[a]) / 2)
+  const mapPoint = (p) => [0, 1, 2].map((a) => tC[a] + (p[a] - srcC[a]) * uni)
 
-  // detach the replaced part (same traversal order segmentModel used): the whole
-  // node mesh for node-level parts, or just that primitive for primitive-level ones
-  let nodeIndex = 0
-  let target = null
+  // detach EVERY original part in the region (same traversal order segmentModel
+  // used): whole node mesh for node-level parts, one primitive for primitive-level
+  // ones. Collect prim references FIRST, then remove — so removing an earlier
+  // primitive can't reindex a later one in the same mesh.
+  const nodes = []
   for (const scene of doc.getRoot().listScenes()) {
     scene.traverse((node) => {
-      if (!node.getMesh()) return
-      if (nodeIndex === part.index) target = node
-      nodeIndex++
+      if (node.getMesh()) nodes.push(node)
     })
   }
-  if (!target) throw Object.assign(new Error('part node not found'), { code: 'NOT_FOUND' })
-  if (Number.isInteger(part.primIndex)) {
-    const withPos = target.getMesh().listPrimitives().filter((p) => p.getAttribute('POSITION'))
-    const prim = withPos[part.primIndex]
-    if (!prim) throw Object.assign(new Error('part primitive not found'), { code: 'NOT_FOUND' })
-    target.getMesh().removePrimitive(prim)
-  } else {
-    target.setMesh(null)
+  const toRemove = []
+  for (const p of partList) {
+    const target = nodes[p.index]
+    if (!target || !target.getMesh()) continue
+    if (Number.isInteger(p.primIndex)) {
+      const withPos = target.getMesh().listPrimitives().filter((pr) => pr.getAttribute('POSITION'))
+      const prim = withPos[p.primIndex]
+      if (prim) toRemove.push({ node: target, prim })
+    } else {
+      toRemove.push({ node: target, whole: true })
+    }
+  }
+  if (!toRemove.length) throw Object.assign(new Error('region nodes not found'), { code: 'NOT_FOUND' })
+  for (const r of toRemove) {
+    if (r.whole) r.node.setMesh(null)
+    else r.node.getMesh()?.removePrimitive(r.prim)
   }
 
-  // the fitted new part joins at the scene root (identity transform, world coords)
+  // the fitted new region joins at the scene root (identity transform, world coords)
   const buffer = doc.getRoot().listBuffers()[0] || doc.createBuffer()
   const mesh = doc.createMesh('stitched-part')
   addPrimsToMesh(doc, buffer, mesh, newPrims, mapPoint)
   const scene0 = doc.getRoot().listScenes()[0]
-  scene0.addChild(doc.createNode(`stitched-${part.id}`).setMesh(mesh))
+  scene0.addChild(doc.createNode(`stitched-${id}`).setMesh(mesh))
 
   const out = await io.writeBinary(doc)
   const url = await storeModelBytes(out)
-  return { modelUrl: url, stitchedPart: { id: part.id, name: part.name } }
+  return { modelUrl: url, stitchedPart: { id, name } }
 }
 
 /**

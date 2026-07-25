@@ -1,18 +1,76 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 
 /**
- * P3 — part buttons under the model. Segments the model (POST /api/edit/segment)
- * and shows a button per part: hover highlights that part's bbox in the viewer,
- * click regenerates ONLY that part (part-swap), keeping the rest. Works key-free
- * on the built-in geometric segmentation; real Tripo segmentation slots in later.
+ * P3 + Task 7 — part buttons under the model. Segments the model
+ * (POST /api/edit/segment) and shows a chip per part: hover highlights that
+ * part's bbox in the viewer, click SELECTS it (the left panel adapts to that
+ * scope; click again to deselect — back to the whole model).
+ *
+ * Task 7 (grouping): segmentation often splits one real region (an arm) into
+ * 3-4 pieces. "Group" mode lets you tick several pieces and merge them into ONE
+ * named group that acts as a single part. Only pieces that actually TOUCH can be
+ * grouped (a whole arm — yes; a left arm + right leg — no), checked by bbox
+ * adjacency so a group is always one connected region.
  */
-export default function PartButtons({ modelUrl, onHoverPart, onPickPart, busy }) {
+
+// union of several {min,max} bboxes → one enclosing box + its center
+function unionBox(boxes) {
+  const min = [Infinity, Infinity, Infinity]
+  const max = [-Infinity, -Infinity, -Infinity]
+  for (const b of boxes) {
+    if (!b) continue
+    for (let i = 0; i < 3; i++) {
+      min[i] = Math.min(min[i], b.min[i])
+      max[i] = Math.max(max[i], b.max[i])
+    }
+  }
+  return { min, max }
+}
+const centerOf = (b) => [(b.min[0] + b.max[0]) / 2, (b.min[1] + b.max[1]) / 2, (b.min[2] + b.max[2]) / 2]
+
+// two boxes touch/overlap when their intervals overlap on every axis (within a
+// per-axis tolerance derived from the model size — segmentation leaves tiny gaps)
+function boxesTouch(a, b, tol) {
+  for (let i = 0; i < 3; i++) {
+    if (a.min[i] > b.max[i] + tol[i]) return false
+    if (b.min[i] > a.max[i] + tol[i]) return false
+  }
+  return true
+}
+
+// is the selected set ONE connected cluster (every member reachable from any
+// other through touching members only)? Prevents grouping detached regions.
+function allConnected(members, tol) {
+  if (members.length < 2) return true
+  const seen = new Set([0])
+  const stack = [0]
+  while (stack.length) {
+    const i = stack.pop()
+    for (let j = 0; j < members.length; j++) {
+      if (seen.has(j)) continue
+      if (boxesTouch(members[i].bbox, members[j].bbox, tol)) {
+        seen.add(j)
+        stack.push(j)
+      }
+    }
+  }
+  return seen.size === members.length
+}
+
+export default function PartButtons({ modelUrl, onHoverPart, onPickPart, selectedId = null, busy }) {
   const [parts, setParts] = useState([])
   const [loading, setLoading] = useState(false)
+  const [groups, setGroups] = useState([]) // [{ id, name, partIds:[], names:[], bbox, center }]
+  const [grouping, setGrouping] = useState(false)
+  const [selected, setSelected] = useState(() => new Set())
+  const [nameDraft, setNameDraft] = useState('')
 
   useEffect(() => {
     let cancelled = false
     setParts([])
+    setGroups([])
+    setGrouping(false)
+    setSelected(new Set())
     onHoverPart?.(null)
     if (!modelUrl) return
     setLoading(true)
@@ -31,26 +89,167 @@ export default function PartButtons({ modelUrl, onHoverPart, onPickPart, busy })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [modelUrl])
 
+  // per-axis adjacency tolerance = 6% of the model's overall extent
+  const tol = useMemo(() => {
+    if (parts.length < 2) return [0, 0, 0]
+    const u = unionBox(parts.map((p) => p.bbox))
+    return [0, 1, 2].map((i) => Math.max(1e-4, (u.max[i] - u.min[i]) * 0.06))
+  }, [parts])
+
+  const groupedIds = useMemo(() => new Set(groups.flatMap((g) => g.partIds)), [groups])
+  const looseParts = parts.filter((p) => !groupedIds.has(p.id))
+
+  const selMembers = parts.filter((p) => selected.has(p.id))
+  const connected = allConnected(selMembers, tol)
+
+  const toggleSelect = (id) => {
+    setSelected((prev) => {
+      const next = new Set(prev)
+      next.has(id) ? next.delete(id) : next.add(id)
+      return next
+    })
+  }
+
+  const makeGroup = () => {
+    const members = parts.filter((p) => selected.has(p.id))
+    if (members.length < 2 || !allConnected(members, tol)) return
+    const bbox = unionBox(members.map((m) => m.bbox))
+    const name = nameDraft.trim() || `Group ${groups.length + 1}`
+    setGroups((prev) => [
+      ...prev,
+      {
+        id: `grp-${Date.now()}`,
+        name,
+        partIds: members.map((m) => m.id),
+        names: members.map((m) => m.name), // mesh/node names — used to recolor the group
+        bbox,
+        center: centerOf(bbox),
+      },
+    ])
+    setSelected(new Set())
+    setNameDraft('')
+    setGrouping(false)
+  }
+
+  const ungroup = (id) => setGroups((prev) => prev.filter((g) => g.id !== id))
+
   if (loading) return <div className="part-buttons part-buttons--loading">Finding parts…</div>
   if (parts.length < 2) return null // nothing useful to split
 
   return (
     <div className="part-buttons" onMouseLeave={() => onHoverPart?.(null)}>
       <span className="part-buttons-label">Parts</span>
-      {parts.map((p) => (
+
+      {/* group chips — merged regions; click selects (scope), ✕ ungroups */}
+      {groups.map((g) => {
+        const active = selectedId === g.id
+        return (
+          <span
+            key={g.id}
+            className={`part-chip part-chip--group ${active ? 'part-chip--active' : ''}`}
+            title={`Group "${g.name}"`}
+          >
+            <button
+              type="button"
+              className="part-chip-main"
+              disabled={busy || grouping}
+              onMouseEnter={() => onHoverPart?.(g.bbox)}
+              onFocus={() => onHoverPart?.(g.bbox)}
+              onClick={() => onPickPart?.(active ? null : { ...g, isGroup: true })}
+            >
+              ⧉ {g.name} · {g.partIds.length}
+            </button>
+            <button
+              type="button"
+              className="part-chip-x"
+              disabled={busy}
+              onClick={() => {
+                if (active) onPickPart?.(null)
+                ungroup(g.id)
+              }}
+              title="Ungroup"
+              aria-label={`Ungroup ${g.name}`}
+            >
+              ✕
+            </button>
+          </span>
+        )
+      })}
+
+      {/* loose parts */}
+      {looseParts.map((p) => {
+        const isSel = selected.has(p.id) // group-mode tick
+        const active = selectedId === p.id // scope selection
+        return (
+          <button
+            key={p.id}
+            type="button"
+            className={`part-chip ${grouping && isSel ? 'part-chip--sel' : ''} ${
+              !grouping && active ? 'part-chip--active' : ''
+            }`}
+            disabled={busy}
+            aria-pressed={grouping ? isSel : active}
+            onMouseEnter={() => onHoverPart?.(p.bbox)}
+            onFocus={() => onHoverPart?.(p.bbox)}
+            onClick={() => (grouping ? toggleSelect(p.id) : onPickPart?.(active ? null : p))}
+            title={grouping ? 'Tick to add/remove from the group' : `Select the "${p.name}" part`}
+          >
+            {p.name}
+          </button>
+        )
+      })}
+
+      {/* group toolbar */}
+      {!grouping ? (
         <button
-          key={p.id}
           type="button"
-          className="part-chip"
-          disabled={busy}
-          onMouseEnter={() => onHoverPart?.(p.bbox)}
-          onFocus={() => onHoverPart?.(p.bbox)}
-          onClick={() => onPickPart?.(p)}
-          title={`Regenerate the "${p.name}" part, keep the rest`}
+          className="part-group-toggle"
+          disabled={busy || looseParts.length < 2}
+          onClick={() => setGrouping(true)}
+          title="Merge several touching parts into one region (e.g. a whole arm)"
         >
-          {p.name}
+          ⧉ Group
         </button>
-      ))}
+      ) : (
+        <span className="part-group-bar">
+          <input
+            className="part-group-name"
+            value={nameDraft}
+            onChange={(e) => setNameDraft(e.target.value)}
+            placeholder="name e.g. FullArm"
+            maxLength={24}
+          />
+          <button
+            type="button"
+            className="part-group-make"
+            disabled={selected.size < 2 || !connected}
+            onClick={makeGroup}
+            title={
+              selected.size < 2
+                ? 'Tick at least two parts'
+                : connected
+                  ? 'Create the group from the selected parts'
+                  : 'These parts are not all connected'
+            }
+          >
+            Group ({selected.size})
+          </button>
+          <button
+            type="button"
+            className="part-group-cancel"
+            onClick={() => {
+              setGrouping(false)
+              setSelected(new Set())
+              setNameDraft('')
+            }}
+          >
+            Cancel
+          </button>
+          {selected.size >= 2 && !connected && (
+            <span className="part-group-warn">⚠ parts aren’t all connected — pick a touching region</span>
+          )}
+        </span>
+      )}
     </div>
   )
 }

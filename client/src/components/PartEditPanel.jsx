@@ -38,7 +38,11 @@ export default function PartEditPanel({ modelUrl, part, onClose, onStitched }) {
         const res = await fetch('/api/edit/extract', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ modelUrl, partId: part.id }),
+          // a group edits its combined region as one (partIds); a single part by id
+          body: JSON.stringify({
+            modelUrl,
+            ...(part.isGroup ? { partIds: part.partIds, name: part.name } : { partId: part.id }),
+          }),
         })
         const data = await res.json()
         if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`)
@@ -105,7 +109,11 @@ export default function PartEditPanel({ modelUrl, part, onClose, onStitched }) {
       const res = await fetch('/api/edit/stitch', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ modelUrl, partId: partIdRef.current, partModelUrl }),
+        body: JSON.stringify({
+          modelUrl,
+          partModelUrl,
+          ...(part.isGroup ? { partIds: part.partIds, name: part.name } : { partId: partIdRef.current }),
+        }),
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`)

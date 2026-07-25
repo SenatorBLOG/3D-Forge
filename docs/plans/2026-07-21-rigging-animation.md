@@ -31,6 +31,16 @@ non-humanoid ones (quadruped_walk, hexapod_walk, serpentine_march, aquatic_march
 
 Pricing reference: **$1.00 = 100 credits**. So rig (25) + one animation (10) = **35 credits ≈ $0.35**.
 
+### Verified live (2026-07-21) on robot `3db12cd8`
+- prerigcheck → `{riggable:true, rig_type:'biped'}`, 0 credits (free).
+- rig → `consumed_credit:25`; retarget walk → `consumed_credit:10` (balance 410→375).
+- Output GLB inspected: 1 animation `preset:walk`, 1 skin, **41 bones**, 41 anim channels — real
+  game-ready GLB (opens in Unity/Unreal/Godot/Blender).
+- **retarget chains off the RIG task id** (not the base model): `original_model_task_id = <rig task_id>`.
+- **Multiple animations in ONE GLB:** `animation` accepts a LIST
+  `["preset:walk","preset:run","preset:jump"]` → one GLB with N clips (switch by name in-engine),
+  10 credits per clip. Rig once; add clips anytime on the rigged model (no need to animate at creation).
+
 ## Steps
 
 ### Phase A — recon (no code)
@@ -50,15 +60,35 @@ Pricing reference: **$1.00 = 100 credits**. So rig (25) + one animation (10) = *
 - **6.4** Poll via the existing task flow; save the rigged / animated result as a **version**
   (not auto-added to Library), reusing the version-tree work.
 
-### Phase C — client
-- **6.5** "🦴 Add skeleton" button in the viewer tools. Shows prerigcheck result
-  ("riggable" / "not a good fit"), then rigs. Disabled / explained for non-Tripo models.
-- **6.6** Animation picker — dropdown of presets (walk / run / jump / idle …). Pick → apply.
-- **6.7** Play the animation in the viewer with Three.js `AnimationMixer`: load the animated
-  GLB, loop the clip in the render loop, play/pause + clip switch. (All Three.js scene logic
-  stays inside ModelViewer.)
-- **6.8** "⬇ Download animated GLB" — export/download the rigged+animated GLB so the user can
-  open it in their own engine. This is the core deliverable.
+### Phase C — client (FINAL UI, agreed 2026-07-21)
+No two-step "add skeleton then animate" — too many buttons. Rigging is implicit inside Animate.
+
+- **6.5 — ONE "🎬 Animate" button on the LEFT toolbar.** Acts on the currently-loaded model
+  (current version). Non-Tripo / non-biped → disabled with a clear reason (prerigcheck is free
+  and can gate this).
+- **6.6 — Centered in-app MODAL** (not a browser popup, not a new window) over the model area.
+  Default size: a centered dialog ~min(760px, 70vw) wide, covering part of the canvas, model
+  still visible behind/around. Contents = a grid of ~10 animation CARDS (idle / walk / run /
+  jump / dive / climb / turn / …). Multi-select; selected cards get a blue "selected" border.
+  Cards already baked into THIS model are **greyed-out / non-clickable** ("already added").
+  One live-priced button "Animate · N · N0 cr" (only NEW clips are counted).
+- **6.6a — Implicit rig, charged once.** On Animate: if the model has NO skeleton yet, rig first
+  (25 cr) then retarget the selected clips (10 each). If it ALREADY has a skeleton, skip the rig
+  — detected **locally** (we store the rig task_id on the model's version node), NOT via an API
+  call — so the 25 cr is never paid twice. So: 1st time 25 + N×10; later +10 per new clip only.
+- **6.6b — Incremental clips merge client-side.** retarget off the same rig → each new clip is a
+  GLB on the SAME skeleton (identical bone/node names), so we append its AnimationClip into the
+  running multi-clip model client-side (GLTFLoader + rebind-by-name + GLTFExporter). This is why
+  old clips are never re-charged. Save each result as a **version**.
+- **6.7 — Bottom playback switcher** (not left/right bar): a small dropdown/strip at the
+  BOTTOM-CENTER under the model (below the versions area). Pick a clip → Three.js `AnimationMixer`
+  plays it live; switch → character swaps animation. Play/pause/loop.
+- **6.8 — "⬇ Download animated GLB"** near the versions (bottom of the version strip): the
+  rigged, multi-clip GLB for an external engine. Core deliverable.
+
+Card-preview polish (agreed): each card shows a small looping gif; on HOVER show a LARGER
+zoomed gif (to the side) so motion is actually visible (small cards don't show movement). The
+2×–3× extra zoom is a later refinement.
 
 ### Phase D — later (non-blocking)
 - **6.9** Non-humanoid / rig-check-fail handling: clear message + fallback (e.g. Mixamo as a
