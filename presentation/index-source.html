@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>3D Forge — MJ Team</title>
+<style>
+  :root{
+    --bg:#06070d; --panel:#0c0f18; --panel-2:#141a26;
+    --text:#f2f4fa; --text-dim:#c4ccdb; --text-faint:#99a2b6;
+    --cyan:#22d3ee; --cyan-2:#67e8f9; --cyan-deep:#0891b2;
+    --mag:#ff2d9b; --mag-soft:rgba(255,45,155,.14);
+    --cyan-glow:rgba(34,211,238,.45); --mag-glow:rgba(255,45,155,.45);
+    --line:#20283a;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{background:#000;color:var(--text);
+    font-family:"Segoe UI",system-ui,-apple-system,sans-serif;-webkit-font-smoothing:antialiased}
+  .mono{font-family:"JetBrains Mono",Consolas,"Courier New",monospace}
+
+  /* ---- slide frame: 16:9 ---- */
+  .slide{
+    position:relative;width:1280px;height:720px;overflow:hidden;
+    background:
+      radial-gradient(900px 500px at 78% -8%, rgba(34,211,238,.10), transparent 60%),
+      radial-gradient(760px 520px at 8% 112%, rgba(255,45,155,.10), transparent 60%),
+      var(--bg);
+    margin:0 auto;padding:56px 64px;
+  }
+  @media screen{ .slide{margin:24px auto;border:1px solid var(--line);border-radius:14px} }
+  @media print{
+    @page{size:1280px 720px;margin:0}
+    html,body{background:#fff}
+    .slide{margin:0;border-radius:0;break-after:page;page-break-after:always}
+    .slide:last-child{break-after:auto}
+  }
+
+  /* corner grid accent */
+  .slide::before{content:"";position:absolute;inset:0;pointer-events:none;
+    background-image:linear-gradient(var(--line) 1px,transparent 1px),
+                     linear-gradient(90deg,var(--line) 1px,transparent 1px);
+    background-size:48px 48px;opacity:.14;mask:radial-gradient(120% 120% at 100% 0,#000,transparent 55%)}
+
+  .kicker{font-size:14px;letter-spacing:.32em;text-transform:uppercase;color:var(--cyan);font-weight:600}
+  .foot{position:absolute;left:64px;right:64px;bottom:26px;display:flex;justify-content:space-between;
+    align-items:center;font-size:13px;color:var(--text-faint);letter-spacing:.04em}
+  .foot .mono{color:var(--text-dim)}
+  .pill{display:inline-block;padding:6px 12px;border:1px solid var(--line);border-radius:999px;
+    font-size:13px;color:var(--text-dim);background:var(--panel)}
+  .pill b{color:var(--cyan);font-weight:600}
+
+  /* ============ SLIDE 1 — TITLE ============ */
+  .s1{display:grid;grid-template-columns:1.15fr .85fr;gap:40px;align-items:center}
+  .brandmark{font-size:22px;font-weight:700;letter-spacing:.02em}
+  .brandmark .dot{color:var(--mag)}
+  .wordmark{font-size:104px;line-height:.92;font-weight:800;letter-spacing:-.02em;margin:18px 0 10px;
+    background:linear-gradient(100deg,var(--cyan) 8%,var(--cyan-2) 34%,#fff 52%,var(--mag) 92%);
+    -webkit-background-clip:text;background-clip:text;color:transparent;
+    filter:drop-shadow(0 6px 30px rgba(34,211,238,.28))}
+  .tagline{font-size:23px;line-height:1.42;color:var(--text);max-width:600px;font-weight:400}
+  .tagline b{color:var(--cyan-2);font-weight:600}
+  .team{margin-top:30px;display:flex;gap:14px;flex-wrap:wrap}
+  .member{padding:12px 18px;border-radius:12px;background:var(--panel);border:1px solid var(--line)}
+  .member .role{font-size:12px;letter-spacing:.2em;text-transform:uppercase;color:var(--mag)}
+  .member .name{font-size:19px;font-weight:600;margin-top:2px}
+  .chips{margin-top:26px;display:flex;gap:9px;flex-wrap:wrap}
+  .chip{font-size:13px;padding:6px 13px;border-radius:8px;background:var(--panel-2);
+    border:1px solid var(--line);color:var(--text-dim)}
+  .chip b{color:var(--cyan)}
+  .hero{position:relative;height:560px;border-radius:18px;overflow:hidden;
+    border:1px solid rgba(34,211,238,.35);background:var(--panel);
+    box-shadow:0 0 0 1px rgba(255,45,155,.12),0 30px 80px rgba(0,0,0,.6),inset 0 0 90px rgba(34,211,238,.06)}
+  .hero .glow{position:absolute;inset:0;background:radial-gradient(60% 50% at 50% 42%,rgba(34,211,238,.18),transparent 70%)}
+
+  /* image slots (auto-fallback if file missing) */
+  .shot{position:relative;background:var(--panel);overflow:hidden}
+  .shot img{display:block;width:100%;height:100%;object-fit:cover}
+  .shot.missing{display:flex;align-items:center;justify-content:center}
+  .shot.missing img{display:none}
+  .shot.missing::after{content:attr(data-fallback);white-space:pre-line;text-align:center;
+    color:var(--text-faint);font-size:13px;line-height:1.5;padding:16px;
+    border:1.5px dashed rgba(34,211,238,.4);border-radius:12px;margin:14px;
+    display:flex;align-items:center;justify-content:center;width:calc(100% - 28px);height:calc(100% - 28px)}
+
+  /* ============ SLIDE 2 — PIPELINE ============ */
+  .head{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:6px}
+  h2.title{font-size:40px;font-weight:800;letter-spacing:-.01em;margin-top:8px}
+  h2.title span{color:var(--cyan)}
+  .sub{color:var(--text-dim);font-size:16px;margin-top:6px;max-width:840px;line-height:1.5}
+
+  .flow{margin-top:26px}
+  .rail{display:flex;align-items:stretch;gap:0}
+  .node{flex:1;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:16px 16px;
+    position:relative;min-height:104px}
+  .node .n{font-size:12px;color:var(--cyan);font-weight:700;letter-spacing:.14em}
+  .node h3{font-size:18px;margin:7px 0 4px;font-weight:700}
+  .node p{font-size:13px;color:var(--text-dim);line-height:1.42}
+  .node.accent{border-color:rgba(34,211,238,.5);box-shadow:0 0 0 1px rgba(34,211,238,.15),0 0 40px rgba(34,211,238,.08)}
+  .arrow{display:flex;align-items:center;justify-content:center;width:44px;color:var(--cyan-2);font-size:26px;font-weight:700}
+  .verify{display:inline-block;margin-top:8px;font-size:12px;color:var(--mag);
+    border:1px solid rgba(255,45,155,.45);background:var(--mag-soft);border-radius:999px;padding:3px 10px;font-weight:600}
+
+  .branches{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-top:20px}
+  .bcard{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:16px 18px}
+  .bcard .tag{font-size:12px;letter-spacing:.14em;font-weight:700;text-transform:uppercase}
+  .bcard.c1 .tag{color:var(--cyan)} .bcard.c2 .tag{color:var(--mag)} .bcard.c3 .tag{color:var(--cyan-2)}
+  .bcard h4{font-size:16px;margin:6px 0 6px;font-weight:700}
+  .bcard .steps{font-size:12.5px;color:var(--text-dim);line-height:1.55}
+  .bcard .steps b{color:var(--text)}
+  .note{margin-top:16px;font-size:13px;color:var(--text-faint)}
+  .note b{color:var(--mag)}
+  .end{margin-top:2px;display:flex;justify-content:flex-end}
+  .end .pub{font-size:14px;color:var(--bg);font-weight:700;background:linear-gradient(90deg,var(--cyan),var(--mag));
+    padding:9px 18px;border-radius:999px}
+
+  /* ============ SLIDE 3 — GALLERY ============ */
+  .grid{margin-top:22px;display:grid;grid-template-columns:repeat(4,1fr);grid-template-rows:repeat(2,238px);gap:14px}
+  .cell{border-radius:12px;overflow:hidden;border:1px solid var(--line);position:relative;background:var(--panel)}
+  .cell .cap{position:absolute;left:0;right:0;bottom:0;padding:9px 12px;font-size:12.5px;
+    background:linear-gradient(0deg,rgba(6,7,13,.92),rgba(6,7,13,.55) 60%,transparent);color:var(--text)}
+  .cell .cap b{color:var(--cyan)}
+  .cell.span2{grid-column:span 2}
+  .step-badge{position:absolute;top:9px;left:9px;z-index:2;font-size:11px;font-weight:700;
+    padding:3px 9px;border-radius:999px;background:var(--panel-2);border:1px solid rgba(34,211,238,.5);color:var(--cyan)}
+</style>
+</head>
+<body>
+
+<!-- ============================ SLIDE 1 ============================ -->
+<section class="slide s1">
+  <div>
+    <div class="brandmark">MJ Team<span class="dot"> ●</span> <span class="mono" style="color:var(--text-faint);font-weight:400">CSIS 4495</span></div>
+    <div class="wordmark">3D&nbsp;Forge</div>
+    <div class="tagline">Type an idea, get a <b>3D model</b> — then <b>texture</b>, <b>segment</b>, and <b>edit it part-by-part</b>, all in the browser.</div>
+
+    <div class="team">
+      <div class="member"><div class="role">Developer</div><div class="name">Mikhail Senatorov</div></div>
+      <div class="member"><div class="role">Developer</div><div class="name">Javid Aliyev</div></div>
+    </div>
+
+    <div class="chips">
+      <span class="chip"><b>Gemini</b> · image</span>
+      <span class="chip"><b>Tripo</b> · text→3D · segment</span>
+      <span class="chip"><b>Three.js</b> · viewer</span>
+      <span class="chip"><b>React</b> + <b>Express</b></span>
+      <span class="chip"><b>MongoDB</b></span>
+    </div>
+  </div>
+
+  <div class="hero shot" data-fallback="HERO IMAGE&#10;img/01-segmented.png&#10;(segmented rainbow robot)">
+    <div class="glow"></div>
+    <img src="img/01-segmented.png" alt="segmented model" onerror="this.parentElement.classList.add('missing')">
+  </div>
+
+  <div class="foot">
+    <span>Douglas College · Computing Studies &amp; Information Systems</span>
+    <span class="mono">github.com/SenatorBLOG/3D-Forge</span>
+  </div>
+</section>
+
+<!-- ============================ SLIDE 2 ============================ -->
+<section class="slide">
+  <div class="head">
+    <div>
+      <div class="kicker">How it works</div>
+      <h2 class="title">One <span>pipeline</span>: prompt → image → 3D → edit</h2>
+    </div>
+  </div>
+  <div class="sub">The user always sees — and <b>approves the picture</b> — before spending a 3D generation. Verify on the image, then commit to the model.</div>
+
+  <div class="flow">
+    <!-- main linear rail -->
+    <div class="rail">
+      <div class="node">
+        <div class="n">01 · USER</div><h3>Prompt</h3>
+        <p>Type what you want in plain language.</p>
+      </div>
+      <div class="arrow">▶</div>
+      <div class="node accent">
+        <div class="n">02 · GEMINI</div><h3>Reference image</h3>
+        <p>A picture is generated from the prompt.</p>
+        <span class="verify">✓ preview &amp; verify before 3D</span>
+      </div>
+      <div class="arrow">▶</div>
+      <div class="node accent">
+        <div class="n">03 · TRIPO</div><h3>3D model</h3>
+        <p>The approved image becomes a real GLB mesh.</p>
+      </div>
+      <div class="arrow">▶</div>
+      <div class="node">
+        <div class="n">04 · VIEWER</div><h3>Model in browser</h3>
+        <p>Orbit, inspect, and keep every version.</p>
+      </div>
+    </div>
+
+    <!-- capability branches -->
+    <div class="branches">
+      <div class="bcard c1">
+        <div class="tag">Re-imagine · multi-view</div>
+        <h4>Refine the whole model</h4>
+        <div class="steps"><b>Snapshot 4 sides</b> → Gemini → <b>verify new image</b> → Tripo → fresh model.</div>
+      </div>
+      <div class="bcard c3">
+        <div class="tag">Texture</div>
+        <h4>Recolor &amp; retexture</h4>
+        <div class="steps">Restyle the same mesh — e.g. glossy <b>red</b> or clean <b>white/blue</b> — no re-modeling.</div>
+      </div>
+      <div class="bcard c2">
+        <div class="tag">Segment · part edit</div>
+        <h4>Change one part only</h4>
+        <div class="steps">Tripo <b>splits into parts</b> → pick one → 4-view → Gemini → verify → <b>rebuild &amp; stitch back</b>.</div>
+      </div>
+    </div>
+
+    <div class="note">
+      <b>Honest note:</b> a rebuilt part is a new mesh, so re-inserting it can need a little alignment — an open research nuance we show live.
+    </div>
+    <div class="end"><span class="pub">▶ Publish to the community gallery</span></div>
+  </div>
+
+  <div class="foot">
+    <span>3D Forge — pipeline &amp; user flow</span>
+    <span class="mono">MJ Team · Senatorov · Aliyev</span>
+  </div>
+</section>
+
+<!-- ============================ SLIDE 3 ============================ -->
+<section class="slide">
+  <div class="head">
+    <div>
+      <div class="kicker">Live demo highlights</div>
+      <h2 class="title">From raw mesh to <span>editable parts</span></h2>
+    </div>
+    <span class="pill"><b>Gemini + Tripo</b> are real · running on our keys</span>
+  </div>
+
+  <div class="grid">
+    <div class="cell span2 shot" data-fallback="img/05-raw-mesh.png&#10;(grey untextured robot)">
+      <span class="step-badge">1 · Generate</span>
+      <img src="img/05-raw-mesh.png" onerror="this.parentElement.classList.add('missing')">
+      <div class="cap"><b>Generate</b> — prompt → image → raw 3D mesh</div>
+    </div>
+    <div class="cell shot" data-fallback="img/03-texture-red.png&#10;(red robot)">
+      <img src="img/03-texture-red.png" onerror="this.parentElement.classList.add('missing')">
+      <div class="cap"><b>Recolor</b> — glossy red</div>
+    </div>
+    <div class="cell shot" data-fallback="img/04-texture-white.png&#10;(white/blue robot)">
+      <img src="img/04-texture-white.png" onerror="this.parentElement.classList.add('missing')">
+      <div class="cap"><b>Recolor</b> — clean white</div>
+    </div>
+
+    <div class="cell shot" data-fallback="img/06-parts-pane.png&#10;(parts list panel)">
+      <span class="step-badge">2 · Segment</span>
+      <img src="img/06-parts-pane.png" onerror="this.parentElement.classList.add('missing')">
+      <div class="cap"><b>Segment</b> — Tripo splits into parts</div>
+    </div>
+    <div class="cell shot" data-fallback="img/02-exploded.png&#10;(exploded parts)">
+      <img src="img/02-exploded.png" onerror="this.parentElement.classList.add('missing')">
+      <div class="cap"><b>Explode</b> — inspect each part</div>
+    </div>
+    <div class="cell shot" data-fallback="img/07-part-before.png&#10;(part isolated)">
+      <span class="step-badge">3 · Edit part</span>
+      <img src="img/07-part-before.png" onerror="this.parentElement.classList.add('missing')">
+      <div class="cap"><b>Isolate</b> — one segment</div>
+    </div>
+    <div class="cell shot" data-fallback="img/08-part-after.png&#10;(part re-edited)">
+      <img src="img/08-part-after.png" onerror="this.parentElement.classList.add('missing')">
+      <div class="cap"><b>Rebuild</b> — edited &amp; stitched</div>
+    </div>
+  </div>
+
+  <div class="foot">
+    <span>Everything key-free in <span class="mono" style="color:var(--text-dim)">mock mode</span> · real generation on our API keys</span>
+    <span class="mono">3D Forge · 2026</span>
+  </div>
+</section>
+
+</body>
+</html>

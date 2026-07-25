@@ -1,4 +1,4 @@
-/* 3D Forge — "Neon Noir" cyberpunk identity.
+﻿/* 3D Forge — "Neon Noir" cyberpunk identity.
    Near-black instrument surface: electric-cyan action, hot-magenta data accent,
    violet tertiary. Token *names* are legacy (--forge / --steel) but their values
    now carry the neon palette, so recolouring flows from this one block. */
@@ -10,9 +10,9 @@
   --line: #1c2740;
   --line-soft: #141a28;
 
-  --text: #eceff6;
-  --text-dim: #98a2b8;
-  --text-faint: #6f7890;
+  --text: #f2f4fa;
+  --text-dim: #c4ccdb; /* secondary text — readable light grey, not muddy */
+  --text-faint: #99a2b6; /* only for the least important labels */
 
   --forge: #22d3ee; /* electric cyan — brand + primary action */
   --forge-2: #67e8f9;
@@ -57,6 +57,7 @@ body,
 
 body {
   font-family: var(--font-ui);
+  font-size: 15px; /* base up from the browser default — small UI text was unreadable */
   color: var(--text);
   background-color: var(--bg);
   /* layered atmosphere: cyan plasma (top-left) + magenta depth (bottom-right) +
@@ -256,7 +257,7 @@ body::before {
 }
 
 .tagline {
-  font-size: 12px;
+  font-size: 13px;
   letter-spacing: 0.3px;
   color: var(--text-dim);
 }
@@ -331,7 +332,7 @@ body::before {
   background: rgba(11, 13, 18, 0.85);
   color: var(--forge);
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: 13.5px;
   font-weight: 600;
   cursor: pointer;
   pointer-events: auto;
@@ -381,13 +382,13 @@ body::before {
   background: var(--forge);
   color: var(--bg);
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: 13.5px;
   font-weight: 600;
 }
 
 .point-popup-region {
   flex: 1;
-  font-size: 11px;
+  font-size: 13.5px;
   color: var(--text-dim);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -413,7 +414,7 @@ body::before {
   width: 100%;
   resize: vertical;
   font-family: var(--font-ui);
-  font-size: 12.5px;
+  font-size: 13.5px;
   color: var(--text);
   background: var(--panel-2);
   border: 1px solid var(--line);
@@ -505,7 +506,7 @@ body::before {
   border: 1px solid var(--line);
   border-radius: 8px;
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: 13.5px;
   color: var(--text-dim);
 }
 
@@ -541,7 +542,7 @@ body::before {
   background: none;
   color: var(--text-dim);
   font-family: var(--font-display);
-  font-size: 11.5px;
+  font-size: 13.5px;
   letter-spacing: 0.5px;
   padding: 6px 12px;
   border-radius: 6px;
@@ -907,7 +908,7 @@ body::before {
   background: none;
   color: var(--text-dim);
   font-family: var(--font-display);
-  font-size: 11.5px;
+  font-size: 13.5px;
   letter-spacing: 0.4px;
   padding: 5px 9px;
   border-radius: 6px;
@@ -946,7 +947,7 @@ body::before {
   color: var(--text-dim);
   border: 1px solid var(--line);
   border-radius: 6px;
-  font-size: 12px;
+  font-size: 13px;
   padding: 3px 6px;
 }
 
@@ -1020,7 +1021,7 @@ body::before {
 
 .part-buttons--loading {
   color: var(--text-dim);
-  font-size: 12px;
+  font-size: 13px;
   padding: 6px 12px;
 }
 
@@ -1038,7 +1039,7 @@ body::before {
   background: var(--panel-2);
   color: var(--text-dim);
   font-family: var(--font-ui);
-  font-size: 12px;
+  font-size: 13px;
   cursor: pointer;
   transition: color 0.15s, border-color 0.15s, background 0.15s;
 }
@@ -1265,7 +1266,7 @@ body::before {
   backdrop-filter: blur(6px);
   border: 1px solid var(--line);
   border-radius: 20px;
-  font-size: 12px;
+  font-size: 13px;
   color: var(--text-dim);
   z-index: 2;
   pointer-events: none;
@@ -1363,7 +1364,7 @@ body::before {
 
 .compare-label {
   font-family: var(--font-display);
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 1.5px;
@@ -1449,7 +1450,7 @@ body::before {
   gap: 8px;
   font-family: var(--font-display);
   font-weight: 600;
-  font-size: 12px;
+  font-size: 13px;
   text-transform: uppercase;
   letter-spacing: 2.5px;
   color: var(--text);
@@ -1476,7 +1477,7 @@ body::before {
 .field label,
 .toggle,
 .rating > span {
-  font-size: 11px;
+  font-size: 13.5px;
   text-transform: uppercase;
   letter-spacing: 1px;
   color: var(--text-dim);
@@ -1484,7 +1485,7 @@ body::before {
 
 .field code {
   font-family: var(--font-mono);
-  font-size: 12.5px;
+  font-size: 13.5px;
   color: var(--steel);
   background: var(--panel-2);
   border: 1px solid var(--line);
@@ -1715,14 +1716,15 @@ body::before {
 /* ---- misc helpers ---- */
 
 .hint {
-  font-size: 12px;
-  color: var(--text-faint);
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-dim);
   text-transform: none;
   letter-spacing: 0;
 }
 
 .url-error {
-  font-size: 12px;
+  font-size: 13px;
   color: var(--danger);
 }
 
@@ -1775,7 +1777,7 @@ body::before {
   background: rgba(34, 211, 238, 0.14);
   color: var(--forge);
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: 13.5px;
   font-weight: 600;
   cursor: pointer;
 }
@@ -1789,7 +1791,7 @@ body::before {
   width: 100%;
   resize: vertical;
   font-family: var(--font-ui);
-  font-size: 12.5px;
+  font-size: 13.5px;
   color: var(--text);
   background: var(--panel);
   border: 1px solid var(--line);
@@ -1809,7 +1811,7 @@ body::before {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 11px;
+  font-size: 13.5px;
   color: var(--text-dim);
 }
 
@@ -1966,7 +1968,7 @@ body::before {
   background: transparent;
   color: var(--steel);
   font-family: var(--font-ui);
-  font-size: 11.5px;
+  font-size: 13.5px;
   cursor: pointer;
   transition: background 0.15s, border-color 0.15s, color 0.15s;
 }
@@ -2004,7 +2006,7 @@ body::before {
   background: transparent;
   color: var(--steel);
   font-family: var(--font-ui);
-  font-size: 12px;
+  font-size: 13px;
   cursor: pointer;
   transition: background 0.15s, border-color 0.15s;
 }
@@ -2051,7 +2053,7 @@ body::before {
   background: none;
   border: none;
   color: var(--text-faint);
-  font-size: 11px;
+  font-size: 13.5px;
   cursor: pointer;
 }
 
@@ -2157,7 +2159,7 @@ body::before {
 }
 
 .model-select .model-label {
-  font-size: 11px;
+  font-size: 13.5px;
   text-transform: uppercase;
   letter-spacing: 1px;
   color: var(--text-dim);
@@ -2292,7 +2294,7 @@ body::before {
   background: var(--panel-2);
   color: var(--text-dim);
   font-family: var(--font-ui);
-  font-size: 12px;
+  font-size: 13px;
   cursor: pointer;
   transition: color 0.15s, border-color 0.15s, background 0.15s;
 }
@@ -2559,7 +2561,7 @@ a.ghost-button {
 
 .gen-console-kicker {
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: 13.5px;
   letter-spacing: 3px;
   color: var(--forge);
   text-shadow: 0 0 12px var(--forge-glow);
@@ -2692,7 +2694,7 @@ a.ghost-button {
 
 .home-eyebrow {
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: 13px;
   letter-spacing: 1px;
   text-transform: uppercase;
   color: var(--steel);
@@ -2781,7 +2783,7 @@ a.ghost-button {
   align-self: flex-start;
   margin-top: 8px;
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: 13.5px;
   letter-spacing: 0.5px;
   color: var(--forge);
   border: 1px solid var(--forge);
@@ -2800,7 +2802,7 @@ a.ghost-button {
 
 .home-themes-label {
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: 13.5px;
   letter-spacing: 0.5px;
   text-transform: uppercase;
   color: var(--text-faint);
@@ -2944,7 +2946,7 @@ a.ghost-button {
   display: flex;
   flex-direction: column;
   gap: 6px;
-  font-size: 12px;
+  font-size: 13px;
   text-transform: uppercase;
   letter-spacing: 1px;
   color: var(--text-dim);
@@ -3091,7 +3093,7 @@ a.ghost-button {
 }
 
 .creator-count {
-  font-size: 11px;
+  font-size: 13.5px;
   color: var(--text-faint);
 }
 
@@ -3357,7 +3359,7 @@ a.ghost-button {
 }
 
 .post-card-desc {
-  font-size: 12.5px;
+  font-size: 13.5px;
   color: var(--text-dim);
   line-height: 1.45;
   display: -webkit-box;
@@ -3375,7 +3377,7 @@ a.ghost-button {
   padding-top: 10px;
   border-top: 1px solid var(--line-soft);
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: 13.5px;
   color: var(--text-faint);
 }
 
@@ -3434,7 +3436,7 @@ a.ghost-button {
   align-items: center;
   gap: 5px;
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: 13.5px;
   line-height: 1;
   padding: 4px 8px;
   border-radius: 999px;
@@ -3504,7 +3506,7 @@ button.tag:hover {
   padding: 0;
   color: var(--steel);
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: 13px;
   cursor: pointer;
 }
 
@@ -3571,7 +3573,7 @@ button.tag:hover {
 }
 
 .wallet-balance span {
-  font-size: 12px;
+  font-size: 13px;
   color: var(--text-dim);
 }
 
@@ -3585,7 +3587,7 @@ button.tag:hover {
 .wallet-row {
   display: flex;
   justify-content: space-between;
-  font-size: 12.5px;
+  font-size: 13.5px;
   color: var(--text-dim);
 }
 
@@ -3726,7 +3728,7 @@ button.tag:hover {
 .notif-head {
   padding: 12px 14px;
   font-family: var(--font-display);
-  font-size: 12px;
+  font-size: 13px;
   letter-spacing: 0.05em;
   text-transform: uppercase;
   color: var(--text-dim);
@@ -3890,7 +3892,7 @@ button.tag:hover {
   gap: 8px;
   margin-top: 6px;
   font-family: var(--font-mono);
-  font-size: 12.5px;
+  font-size: 13.5px;
   color: var(--text-faint);
 }
 
@@ -4132,7 +4134,7 @@ button.tag:hover {
 .edit-label {
   display: block;
   margin: 16px 0 8px;
-  font-size: 12px;
+  font-size: 13px;
   text-transform: uppercase;
   letter-spacing: 0.5px;
   color: var(--text-dim);
@@ -4185,7 +4187,7 @@ button.tag:hover {
   background: var(--panel-2);
   border: 1px solid var(--line);
   color: var(--text-dim);
-  font-size: 12px;
+  font-size: 13px;
 }
 
 .swatch-default.active {
@@ -4341,7 +4343,7 @@ button.tag:hover {
 
 .account-buy {
   padding: 8px 14px;
-  font-size: 12px;
+  font-size: 13px;
 }
 
 .account-balance {
@@ -4365,7 +4367,7 @@ button.tag:hover {
 }
 
 .account-subhead {
-  font-size: 12px;
+  font-size: 13px;
   text-transform: uppercase;
   letter-spacing: 1px;
   color: var(--text-faint);
@@ -4396,7 +4398,7 @@ button.tag:hover {
 
 .ledger-date {
   color: var(--text-faint);
-  font-size: 12px;
+  font-size: 13px;
   font-family: var(--font-mono);
 }
 
@@ -4621,7 +4623,7 @@ button.tag:hover {
 
 .gen-cost {
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: 13.5px;
   letter-spacing: 0.3px;
   background: rgba(4, 18, 26, 0.22);
   padding: 2px 8px;
@@ -4697,7 +4699,7 @@ button.tag:hover {
 
 .spotlight-kicker {
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: 13.5px;
   letter-spacing: 2px;
   text-transform: uppercase;
   color: var(--forge);
@@ -4732,7 +4734,7 @@ button.tag:hover {
 
 .spotlight-stats {
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: 13px;
   color: var(--text-faint);
 }
 
@@ -4903,7 +4905,7 @@ button.tag:hover {
 }
 
 .plan-blurb {
-  font-size: 12.5px;
+  font-size: 13.5px;
   color: var(--text-dim);
 }
 
@@ -4925,7 +4927,7 @@ button.tag:hover {
 }
 
 .plan-billed {
-  font-size: 11px;
+  font-size: 13.5px;
   color: var(--text-faint);
   font-family: var(--font-mono);
 }
@@ -4936,7 +4938,7 @@ button.tag:hover {
   gap: 7px;
   color: var(--forge);
   font-family: var(--font-mono);
-  font-size: 12.5px;
+  font-size: 13.5px;
   margin: 6px 0;
 }
 
@@ -4958,7 +4960,7 @@ button.tag:hover {
 .plan-features li {
   position: relative;
   padding-left: 20px;
-  font-size: 12.5px;
+  font-size: 13.5px;
   color: var(--text-dim);
 }
 
@@ -5336,7 +5338,7 @@ button.tag:hover {
 
 .download-label {
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: 13.5px;
   letter-spacing: 0.5px;
   text-transform: uppercase;
   color: var(--text-faint);
@@ -5345,7 +5347,7 @@ button.tag:hover {
 .download-fmt {
   padding: 7px 10px;
   font-family: var(--font-mono);
-  font-size: 11.5px;
+  font-size: 13.5px;
   text-decoration: none;
 }
 
@@ -5374,7 +5376,7 @@ button.tag:hover {
   list-style: none;
   display: inline-block;
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: 13.5px;
   letter-spacing: 1.5px;
   text-transform: uppercase;
   color: var(--text-faint);
@@ -5424,7 +5426,7 @@ button.tag:hover {
   background: var(--panel-2);
   color: var(--text-dim);
   font-family: var(--font-display);
-  font-size: 12px;
+  font-size: 13px;
   cursor: pointer;
   transition: color 0.15s, border-color 0.15s, background 0.15s;
 }
@@ -5531,7 +5533,7 @@ button.tag:hover {
 }
 
 .lib-prompt {
-  font-size: 11px;
+  font-size: 13.5px;
   color: var(--text-dim);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -5572,7 +5574,7 @@ button.tag:hover {
   border-radius: 999px;
   background: var(--panel);
   font-family: var(--font-mono);
-  font-size: 12.5px;
+  font-size: 13.5px;
   color: var(--text-dim);
 }
 
@@ -5617,7 +5619,7 @@ button.tag:hover {
 }
 
 .badge-tile p {
-  font-size: 12px;
+  font-size: 13px;
   color: var(--text-dim);
   line-height: 1.45;
 }
@@ -5631,7 +5633,7 @@ button.tag:hover {
 
 .token-pack-buy {
   padding: 8px 14px;
-  font-size: 11.5px;
+  font-size: 13.5px;
 }
 
 .plan-current {
@@ -5666,7 +5668,7 @@ button.tag:hover {
   background: var(--panel);
   color: var(--steel);
   font-family: var(--font-mono);
-  font-size: 12.5px;
+  font-size: 13.5px;
   text-decoration: none;
   transition: border-color 0.15s, box-shadow 0.15s;
 }
@@ -5736,7 +5738,7 @@ button.tag:hover {
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
   color: var(--text-dim);
-  font-size: 12.5px;
+  font-size: 13.5px;
   text-decoration: none;
   transition: border-color 0.18s, color 0.18s, box-shadow 0.18s, transform 0.18s;
 }
