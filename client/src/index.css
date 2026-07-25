@@ -2421,6 +2421,66 @@ body::before {
   accent-color: var(--forge);
 }
 
+/* 5-up display-mode row (Shaded / Solid / Wire / Parts / Explode) */
+.tool-seg--5 {
+  grid-template-columns: repeat(5, 1fr);
+}
+.tool-seg--5 .tool-seg-btn {
+  padding: 8px 2px;
+  font-size: 12px;
+}
+
+/* Parts section (segmentation chips, moved off the canvas into the Edit tab) */
+.part-block {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 16px;
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius);
+  background: var(--panel);
+}
+.part-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.part-chip {
+  padding: 6px 11px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--panel-2);
+  color: var(--text-dim);
+  font-family: var(--font-ui);
+  font-size: 12.5px;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s, background 0.15s, box-shadow 0.15s;
+}
+.part-chip:hover:not(:disabled) {
+  color: var(--forge);
+  border-color: var(--forge);
+  background: rgba(34, 211, 238, 0.1);
+  box-shadow: 0 0 10px var(--forge-glow);
+}
+.part-chip:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* part-edit header: label + close ✕ */
+.part-edit-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.part-edit-head .tool-label {
+  flex: 1;
+}
+.part-edit-head .point-popup-close {
+  position: static;
+  flex: none;
+}
+
 /* ---- entrance + interaction polish ---- */
 
 @keyframes rise {
@@ -4700,8 +4760,47 @@ button.tag:hover {
 
 /* the panel that swaps by active tab; sits right beside the rail */
 .forge-panel {
+  width: 384px;
   border-left: none;
   border-right: 1px solid var(--line);
+  transition: width 0.22s ease, padding 0.22s ease, opacity 0.18s ease;
+}
+
+/* collapsed: the panel slides away, leaving just the icon rail */
+.forge-panel--collapsed {
+  width: 0;
+  padding-left: 0;
+  padding-right: 0;
+  border-right-width: 0;
+  opacity: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+/* collapse / expand chevron at the foot of the rail */
+.forge-nav-collapse {
+  margin-top: auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 10px 4px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--text-faint);
+  cursor: pointer;
+  transition: color 0.15s, background 0.15s;
+}
+.forge-nav-collapse:hover {
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.04);
+}
+.forge-nav-collapse svg {
+  transition: transform 0.22s ease;
+}
+/* when collapsed the chevron points the other way (expand) */
+.forge-nav--collapsed .forge-nav-collapse svg {
+  transform: rotate(180deg);
 }
 
 /* one tool's content; display toggled inline (flex/none) by the active tab */

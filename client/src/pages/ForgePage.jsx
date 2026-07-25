@@ -136,6 +136,8 @@ export default function ForgePage() {
   const [activeTab, setActiveTab] = useState('generate')
   // DOM node in the Edit tab where ModelViewer portals its manual tools + brightness
   const [manualHost, setManualHost] = useState(null)
+  // collapse the left tool panel to just the icon rail
+  const [navCollapsed, setNavCollapsed] = useState(false)
   // Hyper3D part-swap state
   const [swapBusy, setSwapBusy] = useState(false)
   const [swapMsg, setSwapMsg] = useState(null)
@@ -584,15 +586,22 @@ export default function ForgePage() {
   return (
     <main className="app-main forge">
       {/* LEFT NAV RAIL — activity bar: Generate · Model · Edit · Recolor */}
-      <nav className="forge-nav" aria-label="Forge tools">
+      <nav className={`forge-nav ${navCollapsed ? 'forge-nav--collapsed' : ''}`} aria-label="Forge tools">
         {NAV_TABS.map((t) => {
           const locked = t.needsModel && !modelUrl
           return (
             <button
               key={t.id}
               type="button"
-              className={`forge-nav-item ${activeTab === t.id ? 'active' : ''}`}
-              onClick={() => setActiveTab(t.id)}
+              className={`forge-nav-item ${activeTab === t.id && !navCollapsed ? 'active' : ''}`}
+              onClick={() => {
+                // clicking the open tab collapses the panel; any other tab opens it
+                if (activeTab === t.id) setNavCollapsed((c) => !c)
+                else {
+                  setActiveTab(t.id)
+                  setNavCollapsed(false)
+                }
+              }}
               disabled={locked}
               aria-current={activeTab === t.id ? 'page' : undefined}
               title={locked ? `${t.label} — generate or load a model first` : t.label}
@@ -602,10 +611,23 @@ export default function ForgePage() {
             </button>
           )
         })}
+        <button
+          type="button"
+          className="forge-nav-collapse"
+          onClick={() => setNavCollapsed((c) => !c)}
+          title={navCollapsed ? 'Expand panel' : 'Collapse panel'}
+          aria-label={navCollapsed ? 'Expand panel' : 'Collapse panel'}
+          aria-expanded={!navCollapsed}
+        >
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor"
+            strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <path d="M14 6l-6 6 6 6" />
+          </svg>
+        </button>
       </nav>
 
       {/* LEFT PANEL — shows only the active tool */}
-      <aside className="sidebar forge-panel">
+      <aside className={`sidebar forge-panel ${navCollapsed ? 'forge-panel--collapsed' : ''}`}>
         <div className="tab-pane" style={{ display: activeTab === 'generate' ? 'flex' : 'none' }}>
         <GeneratePanel
           disabled={editTask.generating}
@@ -790,8 +812,14 @@ export default function ForgePage() {
             </div>
           )}
         </section>
-        {/* manual edit tools + brightness portal in here from ModelViewer */}
+        {/* display-mode + shape/paint tools + brightness portal in here from ModelViewer */}
         <div className="edit-manual-host" ref={setManualHost} />
+        <PartButtons
+          modelUrl={modelUrl}
+          busy={swapBusy || busy}
+          onHoverPart={setHighlightBox}
+          onPickPart={openPartEdit}
+        />
         <PhotoEditPanel
             modelUrl={modelUrl}
             onModelReady3D={(url, label) => {
@@ -888,14 +916,6 @@ export default function ForgePage() {
               onDownload={downloadVersion}
               onToLibrary={versionToLibrary}
             />
-            {modelStatus === 'ready' && (
-              <PartButtons
-                modelUrl={modelUrl}
-                busy={swapBusy || busy}
-                onHoverPart={setHighlightBox}
-                onPickPart={openPartEdit}
-              />
-            )}
           </>
         ) : busy ? (
           <div className="forge-empty">

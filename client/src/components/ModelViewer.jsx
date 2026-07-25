@@ -948,6 +948,33 @@ export default function ModelViewer({
       )}
       {toolError && <span className="url-error">{toolError}</span>}
 
+      <span className="tool-label">View</span>
+      <div className="tool-seg tool-seg--5">
+        {[
+          ['shaded', 'Shaded'],
+          ['solid', 'Solid'],
+          ['wireframe', 'Wire'],
+          ['parts', 'Parts'],
+        ].map(([m, label]) => (
+          <button
+            key={m}
+            type="button"
+            className={`tool-seg-btn ${mode === m ? 'on' : ''}`}
+            onClick={() => setMode(m)}
+          >
+            {label}
+          </button>
+        ))}
+        <button
+          type="button"
+          className={`tool-seg-btn ${exploded ? 'on' : ''}`}
+          onClick={() => setExploded((v) => !v)}
+          title="Explode the parts apart to reveal structure"
+        >
+          Explode
+        </button>
+      </div>
+
       <span className="tool-label">Brightness</span>
       <div className="bright-row">
         <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
@@ -1013,34 +1040,7 @@ export default function ModelViewer({
           </span>
         </div>
       )}
-      {!showcase && stats && (
-        <div className="viewer-modes" role="group" aria-label="Display mode">
-          {[
-            ['shaded', 'Shaded'],
-            ['solid', 'Solid'],
-            ['wireframe', 'Wire'],
-            ['parts', 'Parts'],
-          ].map(([m, label]) => (
-            <button
-              key={m}
-              type="button"
-              className={mode === m ? 'on' : ''}
-              onClick={() => setMode(m)}
-            >
-              {label}
-            </button>
-          ))}
-          <button
-            type="button"
-            className={exploded ? 'on' : ''}
-            onClick={() => setExploded((v) => !v)}
-            title="Explode the parts apart to reveal structure"
-          >
-            Explode
-          </button>
-        </div>
-      )}
-      {/* manual edit tools live in the Edit tab now — rendered via portal below */}
+      {/* display-mode + manual tools live in the Edit tab now — portaled below */}
       {manualHost && !showcase && stats && createPortal(manualToolsUI, manualHost)}
       {!showcase && (
         <div className="viewer-labels">
