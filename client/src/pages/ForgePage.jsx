@@ -650,23 +650,27 @@ export default function ForgePage() {
         </div>
 
         <div className="tab-pane" style={{ display: activeTab === 'model' ? 'flex' : 'none' }}>
-        <section className="panel">
-          <h2>Model</h2>
-          <label className="file-button">
-            Upload .glb
+        <div className="tool-block">
+          <span className="tool-label">Open a model</span>
+          <label className="upload-card">
+            <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor"
+              strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M12 16V4m0 0L7.5 8.5M12 4l4.5 4.5" />
+              <path d="M4 15v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3" />
+            </svg>
+            <strong>Upload a .glb</strong>
+            <span>click to choose a file</span>
             <input type="file" accept=".glb" hidden onChange={onFileChosen} />
           </label>
           {pendingFile && (
-            <>
-              <span className="hint">
-                Previewing “{pendingFile.name}” — not saved yet.
-              </span>
-              <button className="submit" onClick={saveUpload} disabled={saving}>
+            <div className="pending-save">
+              <span className="hint">Previewing “{pendingFile.name}” — not saved yet.</span>
+              <button className="tool-cta tool-cta--sm" onClick={saveUpload} disabled={saving}>
                 {saving ? 'Saving…' : 'Save to History'}
               </button>
-            </>
+            </div>
           )}
-          <div className="url-row">
+          <div className="url-load">
             <input
               type="text"
               value={urlInput}
@@ -675,37 +679,37 @@ export default function ForgePage() {
                 setUrlError(null)
               }}
               onKeyDown={(e) => e.key === 'Enter' && loadFromUrl()}
-              placeholder="https://example.com/model.glb"
+              placeholder="…or paste a .glb URL"
             />
-            <button onClick={loadFromUrl} disabled={!urlInput.trim()}>
+            <button className="mini-btn" onClick={loadFromUrl} disabled={!urlInput.trim()}>
               Load
             </button>
           </div>
           {urlError && <span className="url-error">{urlError}</span>}
           {modelUrl !== SAMPLE_MODEL_URL && (
-            <button className="link-button" onClick={loadSample}>
-              Load a sample model
+            <button type="button" className="seed seed--wide" onClick={loadSample}>
+              🎲 Try a sample model
             </button>
           )}
-          {modelUrl && (
-            <button className="link-button" onClick={clearModel}>
+        </div>
+
+        {modelUrl && (
+          <div className="tool-block">
+            <span className="tool-label">This model</span>
+            <button
+              className="tool-cta tool-cta--sm"
+              onClick={segmentTripo}
+              disabled={segBusy}
+              title="Real semantic segmentation via Tripo (~40 credits) — Tripo-generated models only"
+            >
+              {segBusy ? 'Segmenting…' : 'Segment into parts'}
+            </button>
+            {segMsg && <span className="hint">{segMsg}</span>}
+            <button type="button" className="ghost-button" onClick={clearModel}>
               ✕ Clear canvas
             </button>
-          )}
-          {modelUrl && (
-            <>
-              <button
-                className="submit"
-                onClick={segmentTripo}
-                disabled={segBusy}
-                title="Real semantic segmentation via Tripo (~40 credits) — Tripo-generated models only"
-              >
-                {segBusy ? 'Segmenting…' : '⬗ Segment (Tripo)'}
-              </button>
-              {segMsg && <span className="hint">{segMsg}</span>}
-            </>
-          )}
-        </section>
+          </div>
+        )}
         </div>
 
         <div className="tab-pane" style={{ display: activeTab === 'edit' ? 'flex' : 'none' }}>
