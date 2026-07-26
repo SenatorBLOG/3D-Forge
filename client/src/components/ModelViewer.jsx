@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import * as THREE from 'three'
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
 import { TransformControls } from 'three/addons/controls/TransformControls.js'
@@ -51,6 +52,7 @@ export default function ModelViewer({
   highlightBox = null,
   highlightNames = null,
   showcase = false,
+  manualHost = null, // DOM node in the Edit tab where the manual tools render
 }) {
   const containerRef = useRef(null)
   // keep latest callbacks/points without re-creating the whole scene on re-render
@@ -902,6 +904,187 @@ export default function ModelViewer({
     ? undefined
     : `radial-gradient(circle at 50% 46%, rgb(${g + 16},${g + 20},${g + 28}), rgb(${g + 4},${g + 5},${g + 10}) 78%)`
 
+  // Manual edit tools + brightness — rendered (via portal) into the Edit tab's
+  // panel instead of floating over the canvas. All state/handlers stay here.
+  const manualToolsUI = (
+    <div className="tool-block edit-manual">
+      <span className="tool-label">Shape &amp; paint</span>
+      <div className="tool-seg">
+        {[
+          ['paint', 'Paint'],
+          ['sculpt', 'Sculpt'],
+          ['place', 'Part'],
+          ['move', 'Move'],
+        ].map(([t, label]) => (
+          <button
+            key={t}
+            type="button"
+            className={`tool-seg-btn ${tool === t ? 'on' : ''}`}
+            onClick={() => {
+              setTool(tool === t ? null : t)
+              if (t === 'paint' && tool !== t) setMode('shaded') // paint needs real materials
+            }}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {tool && (
+        <div className="sub-opts">
+          {tool !== 'move' && (
+            <>
+              <label className="sub-opt">
+                <span>Colour</span>
+                <input
+                  type="color"
+                  value={paintColor}
+                  onChange={(e) => setPaintColor(e.target.value)}
+                />
+              </label>
+              <label className="sub-opt sub-opt--grow">
+                <span>Size</span>
+                <input
+                  type="range"
+                  min="0.1"
+                  max="1"
+                  step="0.05"
+                  value={brushSize}
+                  onChange={(e) => setBrushSize(Number(e.target.value))}
+                />
+              </label>
+            </>
+          )}
+          {tool === 'sculpt' && (
+            <button type="button" className="mini-btn" onClick={() => setSculptDir(-sculptDir)}>
+              {sculptDir > 0 ? '⬆ Inflate' : '⬇ Dent'}
+            </button>
+          )}
+          {tool === 'place' && (
+            <>
+              <label className="sub-opt sub-opt--grow">
+                <span>Shape</span>
+                <select value={preset} onChange={(e) => setPreset(e.target.value)}>
+                  {['horn', 'spike', 'ball', 'fin', 'plate'].map((p) => (
+                    <option key={p} value={p}>
+                      {p}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <button
+                type="button"
+                className="mini-btn"
+                onClick={() => apiRef.current.undoLastPart?.()}
+              >
+                ↩ Undo
+              </button>
+            </>
+          )}
+          {tool === 'move' && (
+            <div className="tool-seg tool-seg--sm">
+              {[
+                ['translate', 'Move'],
+                ['rotate', 'Rotate'],
+                ['scale', 'Scale'],
+              ].map(([m, label]) => (
+                <button
+                  key={m}
+                  type="button"
+                  className={`tool-seg-btn ${gizmoMode === m ? 'on' : ''}`}
+                  onClick={() => setGizmoMode(m)}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          )}
+          <button
+            type="button"
+            className="mini-btn mini-btn--exit"
+            onClick={() => setTool(null)}
+          >
+            Done
+          </button>
+        </div>
+      )}
+
+      {dirty && (
+        <div className="edit-actions">
+          <button
+            type="button"
+            className="ghost-button"
+            onClick={() => {
+              setTool(null)
+              onRevertEdits?.()
+            }}
+          >
+            ↺ Revert
+          </button>
+          <button
+            type="button"
+            className="tool-cta tool-cta--sm"
+            onClick={saveEdits}
+            disabled={savingEdits}
+          >
+            {savingEdits ? 'Saving…' : 'Save as version'}
+          </button>
+        </div>
+      )}
+      {toolError && <span className="url-error">{toolError}</span>}
+
+      <span className="tool-label">View</span>
+      <div className="tool-seg tool-seg--5">
+        {[
+          ['shaded', 'Shaded'],
+          ['solid', 'Solid'],
+          ['wireframe', 'Wire'],
+          ['parts', 'Parts'],
+        ].map(([m, label]) => (
+          <button
+            key={m}
+            type="button"
+            className={`tool-seg-btn ${mode === m ? 'on' : ''}`}
+            onClick={() => setMode(m)}
+          >
+            {label}
+          </button>
+        ))}
+        <button
+          type="button"
+          className={`tool-seg-btn ${exploded ? 'on' : ''}`}
+          onClick={() => setExploded((v) => !v)}
+          title="Explode the parts apart to reveal structure"
+        >
+          Explode
+        </button>
+      </div>
+
+      <span className="tool-label">Brightness</span>
+      <div className="bright-row">
+        <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+          <circle cx="12" cy="12" r="4.5" fill="currentColor" />
+          <path
+            d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M19.1 4.9L17 7M7 17l-2.1 2.1"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+          />
+        </svg>
+        <input
+          type="range"
+          min="0.6"
+          max="2.6"
+          step="0.05"
+          value={brightness}
+          onChange={(e) => setBrightness(Number(e.target.value))}
+          aria-label="Scene brightness"
+        />
+      </div>
+    </div>
+  )
+
   return (
     <div
       className={`viewer${tool && tool !== 'move' ? ' tool-active' : ''}${tool === 'move' ? ' tool-move' : ''}`}
@@ -942,155 +1125,8 @@ export default function ModelViewer({
           </span>
         </div>
       )}
-      {!showcase && stats && (
-        <div className="viewer-modes" role="group" aria-label="Display mode">
-          {[
-            ['shaded', 'Shaded'],
-            ['solid', 'Solid'],
-            ['wireframe', 'Wire'],
-            ['parts', 'Parts'],
-          ].map(([m, label]) => (
-            <button
-              key={m}
-              type="button"
-              className={mode === m ? 'on' : ''}
-              onClick={() => setMode(m)}
-            >
-              {label}
-            </button>
-          ))}
-          <button
-            type="button"
-            className={exploded ? 'on' : ''}
-            onClick={() => setExploded((v) => !v)}
-            title="Explode the parts apart to reveal structure"
-          >
-            Explode
-          </button>
-        </div>
-      )}
-      {!showcase && stats && (
-        <div className="viewer-tools" role="group" aria-label="Manual edit tools">
-          {[
-            ['paint', '🖌 Paint', 'Drag on the model to paint (covers decals too)'],
-            ['sculpt', '↕ Sculpt', 'Drag to inflate or dent the surface'],
-            ['place', '➕ Part', 'Click the surface to attach a prebuilt part'],
-            ['move', '↔ Move part', 'Click a part, then drag the gizmo to move / rotate / scale it'],
-          ].map(([t, label, title]) => (
-            <button
-              key={t}
-              type="button"
-              className={tool === t ? 'on' : ''}
-              title={title}
-              onClick={() => {
-                setTool(tool === t ? null : t)
-                if (t === 'paint' && tool !== t) setMode('shaded') // paint needs real materials
-              }}
-            >
-              {label}
-            </button>
-          ))}
-          {tool && (
-            <>
-              {tool !== 'move' && (
-                <>
-                  <input
-                    type="color"
-                    value={paintColor}
-                    onChange={(e) => setPaintColor(e.target.value)}
-                    title="Brush / part color"
-                  />
-                  <input
-                    type="range"
-                    min="0.1"
-                    max="1"
-                    step="0.05"
-                    value={brushSize}
-                    onChange={(e) => setBrushSize(Number(e.target.value))}
-                    title="Brush / part size"
-                  />
-                </>
-              )}
-              {tool === 'move' &&
-                [
-                  ['translate', '⤢ Move'],
-                  ['rotate', '⟳ Rotate'],
-                  ['scale', '⇲ Scale'],
-                ].map(([m, label]) => (
-                  <button
-                    key={m}
-                    type="button"
-                    className={gizmoMode === m ? 'on' : ''}
-                    onClick={() => setGizmoMode(m)}
-                    title={`Gizmo mode: ${m}`}
-                  >
-                    {label}
-                  </button>
-                ))}
-              {tool === 'sculpt' && (
-                <button
-                  type="button"
-                  onClick={() => setSculptDir(-sculptDir)}
-                  title="Toggle between inflating and denting"
-                >
-                  {sculptDir > 0 ? '⬆ Inflate' : '⬇ Dent'}
-                </button>
-              )}
-              {tool === 'place' && (
-                <>
-                  <select value={preset} onChange={(e) => setPreset(e.target.value)} title="Part shape">
-                    {['horn', 'spike', 'ball', 'fin', 'plate'].map((p) => (
-                      <option key={p} value={p}>
-                        {p}
-                      </option>
-                    ))}
-                  </select>
-                  <button
-                    type="button"
-                    onClick={() => apiRef.current.undoLastPart?.()}
-                    title="Remove the last placed part"
-                  >
-                    ↩ Undo part
-                  </button>
-                </>
-              )}
-              <button
-                type="button"
-                className="viewer-tools-exit"
-                onClick={() => setTool(null)}
-                title="Exit this tool (back to orbit)"
-              >
-                ✕
-              </button>
-            </>
-          )}
-          {dirty && (
-            <>
-              <button
-                type="button"
-                className="viewer-tools-revert"
-                onClick={() => {
-                  setTool(null)
-                  onRevertEdits?.()
-                }}
-                title="Discard ALL unsaved manual edits (parts, sculpt, paint) and reload the model"
-              >
-                ↺ Revert
-              </button>
-              <button
-                type="button"
-                className="viewer-tools-save"
-                onClick={saveEdits}
-                disabled={savingEdits}
-                title="Save the manual edits as a new model version"
-              >
-                {savingEdits ? 'Saving…' : '💾 Save as version'}
-              </button>
-            </>
-          )}
-          {toolError && <span className="url-error">{toolError}</span>}
-        </div>
-      )}
+      {/* display-mode + manual tools live in the Edit tab now — portaled below */}
+      {manualHost && !showcase && stats && createPortal(manualToolsUI, manualHost)}
       {!showcase && (
         <div className="viewer-labels">
           {labels.map((l, i) =>
@@ -1187,27 +1223,6 @@ export default function ModelViewer({
               />
             </svg>
           </button>
-          <div className="viewer-bright" title="Scene brightness">
-            <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true">
-              <circle cx="12" cy="12" r="4.5" fill="currentColor" />
-              <path
-                d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M19.1 4.9L17 7M7 17l-2.1 2.1"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-              />
-            </svg>
-            <input
-              type="range"
-              min="0.6"
-              max="2.6"
-              step="0.05"
-              value={brightness}
-              onChange={(e) => setBrightness(Number(e.target.value))}
-              aria-label="Scene brightness"
-            />
-          </div>
         </div>
       )}
       {!showcase && clips.length > 0 && (

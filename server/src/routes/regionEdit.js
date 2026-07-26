@@ -182,7 +182,7 @@ router.post('/extract', async (req, res) => {
   } catch (err) {
     if (err.code === 'NOT_FOUND') return res.status(404).json({ error: err.message })
     console.error('extract failed:', err)
-    res.status(500).json({ error: 'Failed to extract part' })
+    res.status(500).json({ error: `Failed to extract part: ${err.message}` })
   }
 })
 

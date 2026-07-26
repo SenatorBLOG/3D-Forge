@@ -177,17 +177,12 @@ export default function PartEditPanel({ modelUrl, part, onClose, onStitched }) {
 
   return (
     <section className="panel part-edit">
-      <div className="spatial-head">
-        <span className="spatial-flag">🧩 Part</span>
-        <h2>Edit “{part.name}”</h2>
+      <div className="part-edit-head">
+        <span className="tool-label">Edit part · {part.name}</span>
         <button type="button" className="point-popup-close" onClick={onClose} aria-label="Close">
           ✕
         </button>
       </div>
-      <p className="spatial-blurb">
-        Only this part gets rebuilt — the rest of the model stays exactly the same
-        (experimental: the seam may show).
-      </p>
 
       {phase === 'extracting' && <span className="hint">Extracting the part…</span>}
 

@@ -67,14 +67,21 @@ export default function RecolorPanel({ onRecolor, scope = null, onShape }) {
       </p>
       <div className="input-with-mic">
         <textarea
-          className="point-prompt"
-          rows={2}
+          className="reactor-input reactor-input--sm"
           value={prompt}
           onChange={(e) => setPrompt(e.target.value)}
           placeholder='e.g. "matte black" or "white to black, blue to red"'
           disabled={busy}
         />
         <MicButton onTranscript={appendSpeech} disabled={busy} />
+      </div>
+      <div className="seed-row">
+        <span className="seed-label">Try</span>
+        {['matte black', 'glossy red', 'white to black, blue to red'].map((p) => (
+          <button key={p} type="button" className="seed" onClick={() => setPrompt(p)} disabled={busy}>
+            {p}
+          </button>
+        ))}
       </div>
       {parsed?.mode === 'single' && (
         <div className="recolor-preview">

@@ -14,7 +14,7 @@ export default function PublishPanel({ modelUrl, description, kind = null }) {
   if (!user) {
     return (
       <section className="panel">
-        <h2>Publish</h2>
+        <span className="tool-label">Publish</span>
         <span className="hint">Log in to publish this model to the community gallery.</span>
         <Link className="ghost-button" to="/login">
           Log in
@@ -54,7 +54,7 @@ export default function PublishPanel({ modelUrl, description, kind = null }) {
 
   return (
     <section className="panel">
-      <h2>Publish</h2>
+      <span className="tool-label">Publish</span>
       <div className="field">
         <label htmlFor="post-title">Title</label>
         <input
@@ -83,8 +83,8 @@ export default function PublishPanel({ modelUrl, description, kind = null }) {
         />
         <span className="hint">Comma-separated · up to 6 · helps people find it on Explore.</span>
       </div>
-      <button className="submit" onClick={publish} disabled={!title.trim() || busy}>
-        {busy ? 'Publishing…' : 'Publish to gallery'}
+      <button className="tool-cta tool-cta--sm" onClick={publish} disabled={!title.trim() || busy}>
+        {busy ? 'Publishing…' : !title.trim() ? 'Add a title to publish' : 'Publish to gallery'}
       </button>
       {done && (
         <span className="hint">

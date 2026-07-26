@@ -980,8 +980,11 @@ body::before {
 }
 
 /* brush ring that shows the paint/sculpt area; native cursor hidden over canvas */
+/* keep the real cursor VISIBLE while a tool is active (crosshair for precise
+   aiming) — the brush ring is only a size hint and isn't drawn for the Move
+   tool, so hiding the OS cursor left Move with no pointer at all */
 .viewer.tool-active canvas {
-  cursor: none;
+  cursor: crosshair;
 }
 /* Move / Rotate / Scale use the gizmo — keep a precise crosshair cursor so you
    can see exactly where you point and which axis you're grabbing */
@@ -995,7 +998,21 @@ body::before {
   border-radius: 50%;
   pointer-events: none;
   z-index: 6;
-  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.5);
+  /* light + dark outline so the ring reads on any model colour */
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.55), inset 0 0 0 1px rgba(255, 255, 255, 0.5);
+}
+/* a small centre dot marks the exact aim point inside the ring */
+.brush-cursor::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 3px;
+  height: 3px;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.6);
 }
 
 /* ---- P3 part buttons (under the model) ---- */
@@ -2258,25 +2275,65 @@ body::before {
   margin: 0;
 }
 
-/* ---- scrollbars ---- */
+/* ---- neon scrollbars (Neon-Noir: a cyan pill that floats in the track) ---- */
 
-.sidebar::-webkit-scrollbar,
-.history-list::-webkit-scrollbar,
-.prompt-preview::-webkit-scrollbar {
-  width: 8px;
+/* every scrollable surface in the workspace shares one look */
+.sidebar,
+.forge-nav,
+.history-list,
+.prompt-preview,
+.point-list,
+.image-lab-versions,
+.mversion-strip {
+  scrollbar-width: thin; /* Firefox */
+  scrollbar-color: var(--forge-deep) transparent;
 }
 
+.sidebar::-webkit-scrollbar,
+.forge-nav::-webkit-scrollbar,
+.history-list::-webkit-scrollbar,
+.prompt-preview::-webkit-scrollbar,
+.point-list::-webkit-scrollbar,
+.image-lab-versions::-webkit-scrollbar,
+.mversion-strip::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+.sidebar::-webkit-scrollbar-track,
+.forge-nav::-webkit-scrollbar-track,
+.history-list::-webkit-scrollbar-track,
+.prompt-preview::-webkit-scrollbar-track,
+.point-list::-webkit-scrollbar-track,
+.image-lab-versions::-webkit-scrollbar-track,
+.mversion-strip::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* transparent border + padding-box clip = the pill floats, inset from the edge */
 .sidebar::-webkit-scrollbar-thumb,
+.forge-nav::-webkit-scrollbar-thumb,
 .history-list::-webkit-scrollbar-thumb,
-.prompt-preview::-webkit-scrollbar-thumb {
-  background: var(--line);
-  border-radius: 4px;
+.prompt-preview::-webkit-scrollbar-thumb,
+.point-list::-webkit-scrollbar-thumb,
+.image-lab-versions::-webkit-scrollbar-thumb,
+.mversion-strip::-webkit-scrollbar-thumb {
+  min-height: 32px;
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background: linear-gradient(180deg, var(--forge-deep), rgba(34, 211, 238, 0.35));
+  background-clip: padding-box;
 }
 
 .sidebar::-webkit-scrollbar-thumb:hover,
+.forge-nav::-webkit-scrollbar-thumb:hover,
 .history-list::-webkit-scrollbar-thumb:hover,
-.prompt-preview::-webkit-scrollbar-thumb:hover {
-  background: var(--text-faint);
+.prompt-preview::-webkit-scrollbar-thumb:hover,
+.point-list::-webkit-scrollbar-thumb:hover,
+.image-lab-versions::-webkit-scrollbar-thumb:hover,
+.mversion-strip::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(180deg, var(--forge-2), var(--forge));
+  background-clip: padding-box;
 }
 
 /* ---- quick-prompt chips ---- */
@@ -2308,6 +2365,595 @@ body::before {
 .chip:disabled {
   color: var(--text-faint);
   cursor: not-allowed;
+}
+
+/* ============================================================
+   TOOL DESIGN SYSTEM — shared language for the left-rail tools
+   (Generate today; Model / Edit / Recolor reuse these classes)
+   ============================================================ */
+.tool-block {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* section heading with a fading rule to its right */
+.tool-label {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-family: var(--font-display);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 2.5px;
+  text-transform: uppercase;
+  color: var(--forge);
+}
+.tool-label::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: linear-gradient(90deg, rgba(34, 211, 238, 0.4), transparent);
+}
+
+/* the prompt "reactor" — the star input: big, glowing, inline mic */
+.reactor {
+  position: relative;
+}
+.reactor-input {
+  display: block;
+  width: 100%;
+  min-height: 132px;
+  font-family: var(--font-ui);
+  font-size: 15px;
+  line-height: 1.5;
+  color: var(--text);
+  background: radial-gradient(130% 90% at 50% -20%, rgba(34, 211, 238, 0.08), transparent 62%),
+    var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 14px 16px 48px; /* bottom room reserved for the mic */
+  resize: vertical;
+  transition: border-color 0.18s, box-shadow 0.18s, background 0.18s;
+}
+.reactor-input::placeholder {
+  color: var(--text-faint);
+}
+.reactor-input:focus {
+  outline: none;
+  border-color: var(--forge);
+  box-shadow: 0 0 0 3px var(--forge-glow), inset 0 0 34px rgba(34, 211, 238, 0.05);
+}
+/* mic lives INSIDE the box (bottom-right) so it never shrinks the input */
+.reactor .mic-btn {
+  position: absolute;
+  right: 10px;
+  bottom: 10px;
+  width: 34px;
+  height: 34px;
+}
+
+/* "Try" suggestion pills — bigger, lifted, glow on hover */
+.seed-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 7px;
+}
+.seed-label {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+.seed {
+  padding: 6px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--line-soft);
+  background: linear-gradient(180deg, var(--panel-2), var(--panel));
+  color: var(--text-dim);
+  font-family: var(--font-ui);
+  font-size: 13px;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s, box-shadow 0.15s, transform 0.08s;
+}
+.seed:hover:not(:disabled) {
+  color: var(--forge);
+  border-color: var(--forge);
+  box-shadow: 0 0 12px var(--forge-glow);
+  transform: translateY(-1px);
+}
+.seed:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.seed--dice {
+  padding: 6px 9px;
+  font-size: 14px;
+}
+
+/* option cards — the plain-language model tiers (Fast / Detailed / Colour) */
+.opt-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+.opt-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: 10px 9px 9px;
+  text-align: left;
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  background: var(--panel-2);
+  color: var(--text-dim);
+  cursor: pointer;
+  transition: border-color 0.15s, box-shadow 0.15s, color 0.15s, transform 0.06s;
+}
+.opt-card:hover:not(:disabled) {
+  border-color: var(--forge);
+  color: var(--text);
+}
+.opt-card:active:not(:disabled) {
+  transform: translateY(1px);
+}
+.opt-card.on {
+  color: var(--text);
+  background: radial-gradient(130% 110% at 50% 0, rgba(34, 211, 238, 0.16), transparent 72%),
+    var(--panel-2);
+  border-color: var(--forge);
+  box-shadow: 0 0 0 1px var(--forge), 0 0 20px var(--forge-glow);
+}
+.opt-card-name {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 13px;
+  letter-spacing: 0.4px;
+  white-space: nowrap;
+}
+.opt-card.on .opt-card-name {
+  color: var(--forge);
+}
+.opt-card-desc {
+  font-size: 10.5px;
+  line-height: 1.25;
+  color: var(--text-faint);
+}
+.opt-card-cost {
+  margin-top: 3px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-dim);
+}
+.opt-card.on .opt-card-cost {
+  color: var(--forge-2);
+}
+.opt-card:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* switch-row — a clean one-line toggle (label + sub on the left, switch right) */
+.switch-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--line-soft);
+  border-radius: 10px;
+  background: var(--panel-2);
+  cursor: pointer;
+}
+.switch-text {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+.switch-name {
+  font-family: var(--font-ui);
+  font-size: 13.5px;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--text);
+}
+.switch-sub {
+  font-size: 11.5px;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--text-faint);
+}
+/* the pill switch itself */
+.switch {
+  appearance: none;
+  -webkit-appearance: none;
+  flex: none;
+  position: relative;
+  width: 38px;
+  height: 22px;
+  border-radius: 999px;
+  background: var(--line);
+  border: 1px solid var(--line);
+  cursor: pointer;
+  transition: background 0.18s, border-color 0.18s;
+}
+.switch::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--text-dim);
+  transition: transform 0.18s, background 0.18s;
+}
+.switch:checked {
+  background: linear-gradient(90deg, var(--forge-deep), var(--forge));
+  border-color: var(--forge);
+}
+.switch:checked::after {
+  transform: translateX(16px);
+  background: #04121a;
+}
+.switch:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* primary call-to-action — the token-spend button; cyan→magenta, gently breathing */
+.tool-cta {
+  margin-top: 2px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 14px;
+  border: none;
+  border-radius: 12px;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 14px;
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
+  color: #04121a;
+  background: linear-gradient(100deg, var(--forge-2), var(--forge) 45%, var(--steel) 135%);
+  cursor: pointer;
+  box-shadow: 0 0 20px var(--forge-glow);
+  transition: box-shadow 0.2s, filter 0.2s, transform 0.05s;
+  animation: cta-breathe 3.2s ease-in-out infinite;
+}
+.tool-cta:hover:not(:disabled) {
+  filter: brightness(1.08) saturate(1.12);
+  box-shadow: 0 0 34px var(--forge-glow), 0 0 12px var(--steel-glow);
+}
+.tool-cta:active:not(:disabled) {
+  transform: translateY(1px);
+}
+.tool-cta:disabled {
+  background: var(--panel-2);
+  color: var(--text-faint);
+  border: 1px solid var(--line);
+  box-shadow: none;
+  cursor: not-allowed;
+  animation: none;
+}
+.tool-cta-cost {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: 0;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(4, 18, 26, 0.22);
+}
+@keyframes cta-breathe {
+  0%,
+  100% {
+    box-shadow: 0 0 16px var(--forge-glow);
+  }
+  50% {
+    box-shadow: 0 0 30px var(--forge-glow);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .tool-cta {
+    animation: none;
+  }
+}
+
+/* ---- manual edit tools (relocated from the canvas into the Edit tab) ---- */
+.edit-manual {
+  padding: 16px;
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius);
+  background: var(--panel);
+}
+
+/* segmented tool chooser: Paint / Sculpt / Part / Move */
+.tool-seg {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+}
+.tool-seg--sm {
+  grid-template-columns: repeat(3, 1fr);
+  width: 100%;
+}
+.tool-seg-btn {
+  padding: 9px 4px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--panel-2);
+  color: var(--text-dim);
+  font-family: var(--font-ui);
+  font-size: 12.5px;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s, box-shadow 0.15s, background 0.15s;
+}
+.tool-seg-btn:hover:not(:disabled) {
+  color: var(--text);
+  border-color: var(--forge);
+}
+.tool-seg-btn.on {
+  color: var(--forge);
+  border-color: var(--forge);
+  background: radial-gradient(130% 130% at 50% 0, rgba(34, 211, 238, 0.16), transparent 70%),
+    var(--panel-2);
+  box-shadow: 0 0 0 1px var(--forge), 0 0 14px var(--forge-glow);
+}
+
+/* active tool's sub-options (colour / size / preset / gizmo) */
+.sub-opts {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid var(--line-soft);
+  border-radius: 10px;
+  background: var(--panel-2);
+}
+.sub-opt {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  letter-spacing: 0;
+  text-transform: none;
+}
+.sub-opt--grow {
+  flex: 1;
+  min-width: 128px;
+}
+.sub-opt > span {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+.sub-opt input[type='range'] {
+  flex: 1;
+  accent-color: var(--forge);
+}
+.sub-opt input[type='color'] {
+  width: 30px;
+  height: 26px;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--panel);
+  cursor: pointer;
+}
+.sub-opt select {
+  flex: 1;
+  padding: 5px 7px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--panel);
+  color: var(--text);
+  font-family: var(--font-ui);
+  font-size: 12.5px;
+  cursor: pointer;
+}
+.mini-btn {
+  padding: 6px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  color: var(--text-dim);
+  font-family: var(--font-ui);
+  font-size: 12px;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+}
+.mini-btn:hover:not(:disabled) {
+  color: var(--forge);
+  border-color: var(--forge);
+}
+.mini-btn--exit {
+  margin-left: auto;
+}
+
+/* Revert + Save row */
+.edit-actions {
+  display: flex;
+  gap: 8px;
+}
+.edit-actions .ghost-button,
+.edit-actions .tool-cta--sm {
+  flex: 1;
+}
+/* a compact primary button; stands alone (no flex-grow) or in a row */
+.tool-cta--sm {
+  margin-top: 0;
+  padding: 11px;
+  font-size: 12.5px;
+  animation: none;
+}
+
+/* ---- Model tab: upload card + URL row ---- */
+.upload-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  padding: 22px 16px;
+  text-align: center;
+  cursor: pointer;
+  border: 1.5px dashed var(--line);
+  border-radius: 12px;
+  background: radial-gradient(130% 90% at 50% -20%, rgba(34, 211, 238, 0.07), transparent 60%),
+    var(--panel-2);
+  color: var(--text-dim);
+  transition: border-color 0.15s, color 0.15s, background 0.15s;
+}
+.upload-card:hover {
+  border-color: var(--forge);
+  color: var(--text);
+}
+.upload-card svg {
+  color: var(--forge);
+  margin-bottom: 4px;
+}
+.upload-card strong {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 14.5px;
+  color: var(--text);
+}
+.upload-card span {
+  font-size: 12px;
+  color: var(--text-faint);
+}
+
+.pending-save {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--line-soft);
+  border-radius: 10px;
+  background: var(--panel-2);
+}
+
+.url-load {
+  display: flex;
+  gap: 8px;
+}
+.url-load input {
+  flex: 1;
+  min-width: 0;
+  font-family: var(--font-ui);
+  font-size: 13px;
+  color: var(--text);
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 9px 11px;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.url-load input::placeholder {
+  color: var(--text-faint);
+}
+.url-load input:focus {
+  outline: none;
+  border-color: var(--forge);
+  box-shadow: 0 0 0 3px var(--forge-glow);
+}
+.url-load .mini-btn {
+  padding: 9px 14px;
+}
+
+/* a full-width seed pill (e.g. "Try a sample model") */
+.seed--wide {
+  justify-content: center;
+  text-align: center;
+}
+
+/* a shorter reactor for the recolor prompt */
+.reactor-input--sm {
+  min-height: 82px;
+  padding-bottom: 44px;
+}
+
+/* brightness slider row */
+.bright-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 12px;
+  border: 1px solid var(--line-soft);
+  border-radius: 10px;
+  background: var(--panel-2);
+  color: var(--forge);
+}
+.bright-row input[type='range'] {
+  flex: 1;
+  accent-color: var(--forge);
+}
+
+/* 5-up display-mode row (Shaded / Solid / Wire / Parts / Explode) */
+.tool-seg--5 {
+  grid-template-columns: repeat(5, 1fr);
+}
+.tool-seg--5 .tool-seg-btn {
+  padding: 8px 2px;
+  font-size: 12px;
+}
+
+/* Parts section (segmentation chips, moved off the canvas into the Edit tab) */
+.part-block {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 16px;
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius);
+  background: var(--panel);
+}
+.part-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.part-chip {
+  padding: 6px 11px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--panel-2);
+  color: var(--text-dim);
+  font-family: var(--font-ui);
+  font-size: 12.5px;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s, background 0.15s, box-shadow 0.15s;
+}
+.part-chip:hover:not(:disabled) {
+  color: var(--forge);
+  border-color: var(--forge);
+  background: rgba(34, 211, 238, 0.1);
+  box-shadow: 0 0 10px var(--forge-glow);
+}
+.part-chip:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* part-edit header: label + close ✕ */
+.part-edit-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.part-edit-head .tool-label {
+  flex: 1;
+}
+.part-edit-head .point-popup-close {
+  position: static;
+  flex: none;
 }
 
 /* ---- entrance + interaction polish ---- */
@@ -4517,13 +5163,198 @@ button.tag:hover {
    canvas/create-surface · right library.
    ============================================================ */
 
-.forge-rail {
+/* left activity bar (VS Code-style rail): thin icon column on the wall */
+.forge-nav {
+  flex: none;
+  width: 76px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 14px 8px;
+  background: linear-gradient(180deg, var(--panel-2), var(--panel));
+  border-right: 1px solid var(--line);
+  overflow-y: auto;
+}
+
+.forge-nav-item {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 12px 4px;
+  border: 0;
+  border-radius: 12px;
+  background: transparent;
+  color: var(--text-faint);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  transition: color 0.15s ease, background 0.15s ease;
+}
+
+.forge-nav-item svg {
+  width: 24px;
+  height: 24px;
+  display: block;
+}
+
+.forge-nav-item span {
+  line-height: 1;
+}
+
+.forge-nav-item:hover:not(:disabled) {
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.forge-nav-item.active {
+  color: var(--forge);
+  background: rgba(34, 211, 238, 0.1);
+}
+
+/* the active indicator bar riding the left wall */
+.forge-nav-item.active::before {
+  content: '';
+  position: absolute;
+  left: -8px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 3px;
+  height: 28px;
+  border-radius: 0 3px 3px 0;
+  background: var(--forge);
+  box-shadow: 0 0 10px var(--forge-glow);
+}
+
+.forge-nav-item:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+/* the panel that swaps by active tab; sits right beside the rail */
+.forge-panel {
+  width: 384px;
   border-left: none;
   border-right: 1px solid var(--line);
+  transition: width 0.22s ease, padding 0.22s ease, opacity 0.18s ease;
+}
+
+/* collapsed: the panel slides away, leaving just the icon rail */
+.forge-panel--collapsed {
+  width: 0;
+  padding-left: 0;
+  padding-right: 0;
+  border-right-width: 0;
+  opacity: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+/* collapse / expand chevron at the foot of the rail */
+.forge-nav-collapse {
+  margin-top: auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 10px 4px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--text-faint);
+  cursor: pointer;
+  transition: color 0.15s, background 0.15s;
+}
+.forge-nav-collapse:hover {
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.04);
+}
+.forge-nav-collapse svg {
+  transition: transform 0.22s ease;
+}
+/* when collapsed the chevron points the other way (expand) */
+.forge-nav--collapsed .forge-nav-collapse svg {
+  transform: rotate(180deg);
+}
+
+/* one tool's content; display toggled inline (flex/none) by the active tab */
+.tab-pane {
+  flex-direction: column;
+  gap: 18px;
+}
+
+.pane-empty {
+  font-size: 13.5px;
+  line-height: 1.55;
+  color: var(--text-dim);
+  padding: 16px;
+  border: 1px dashed var(--line);
+  border-radius: var(--radius);
+  background: var(--panel);
+}
+
+/* anchor for the absolutely-positioned library re-open handle */
+.app-main.forge {
+  position: relative;
 }
 
 .forge-library {
-  width: 300px;
+  width: 312px;
+  transition: width 0.22s ease, padding 0.22s ease, opacity 0.18s ease;
+}
+
+/* collapsed: the right panel slides away, canvas takes the space */
+.forge-library--collapsed {
+  width: 0;
+  padding-left: 0;
+  padding-right: 0;
+  border-left-width: 0;
+  opacity: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+/* collapse chevron, top-right of the panel */
+.lib-collapse {
+  align-self: flex-end;
+  margin: -4px -4px 2px 0;
+  display: flex;
+  padding: 6px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-faint);
+  cursor: pointer;
+  transition: color 0.15s, background 0.15s;
+}
+.lib-collapse:hover {
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+/* re-open handle: a small tab on the right wall when the panel is hidden */
+.lib-reopen {
+  position: absolute;
+  top: 50%;
+  right: 0;
+  transform: translateY(-50%);
+  z-index: 4;
+  display: flex;
+  align-items: center;
+  padding: 14px 6px;
+  border: 1px solid var(--line);
+  border-right: 0;
+  border-radius: 10px 0 0 10px;
+  background: linear-gradient(180deg, var(--panel-2), var(--panel));
+  color: var(--forge);
+  cursor: pointer;
+  box-shadow: -4px 0 16px rgba(0, 0, 0, 0.35);
+  transition: color 0.15s, background 0.15s;
+}
+.lib-reopen:hover {
+  background: var(--panel-2);
+  box-shadow: -4px 0 20px var(--forge-glow);
 }
 
 /* center create-first / forging state */
@@ -4601,12 +5432,36 @@ button.tag:hover {
     flex-direction: column;
     overflow-y: auto;
   }
-  .forge-rail,
+  .forge-panel,
   .forge-library {
     width: 100%;
     border-right: none;
     border-left: none;
     border-bottom: 1px solid var(--line);
+  }
+  /* the rail lies flat as a top tab-bar */
+  .forge-nav {
+    flex-direction: row;
+    width: 100%;
+    justify-content: center;
+    gap: 4px;
+    border-right: none;
+    border-bottom: 1px solid var(--line);
+    overflow-x: auto;
+  }
+  .forge-nav-item {
+    flex-direction: row;
+    gap: 8px;
+    padding: 10px 14px;
+  }
+  .forge-nav-item.active::before {
+    left: 50%;
+    top: auto;
+    bottom: -8px;
+    transform: translateX(-50%);
+    width: 28px;
+    height: 3px;
+    border-radius: 3px 3px 0 0;
   }
   .app-main.forge .viewer-wrap {
     min-height: 60vh;
@@ -5416,25 +6271,33 @@ button.tag:hover {
 .library-panel .lib-tabs {
   display: flex;
   gap: 4px;
+  padding: 3px;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: 9px;
 }
 
 .lib-tab {
   flex: 1;
-  padding: 7px 0;
-  border: 1px solid var(--line);
-  border-radius: 7px;
-  background: var(--panel-2);
+  padding: 6px 0;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
   color: var(--text-dim);
-  font-family: var(--font-display);
-  font-size: 13px;
+  font-family: var(--font-ui);
+  font-size: 12.5px;
   cursor: pointer;
-  transition: color 0.15s, border-color 0.15s, background 0.15s;
+  transition: color 0.15s, background 0.15s, box-shadow 0.15s;
+}
+
+.lib-tab:hover {
+  color: var(--text);
 }
 
 .lib-tab.active {
   color: var(--forge);
-  border-color: var(--forge);
-  background: rgba(34, 211, 238, 0.08);
+  background: var(--panel);
+  box-shadow: inset 0 0 0 1px rgba(34, 211, 238, 0.4);
 }
 
 .lib-grid {
