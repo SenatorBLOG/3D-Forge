@@ -9,12 +9,15 @@ import { parseRecolor } from '../lib/recolorParse.js'
  * prompt and just reproduces the original texture while still charging credits.
  * The recoloured model is saved as a new version by the parent (onRecolor).
  */
-export default function RecolorPanel({ onRecolor }) {
+export default function RecolorPanel({ onRecolor, scope = null, onShape }) {
   const [prompt, setPrompt] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState(null)
 
   const parsed = parseRecolor(prompt)
+  // one adaptive control: recolor the whole model, OR the selected part / group
+  const scopeName = scope ? (scope.kind === 'group' ? scope.group.name : scope.part.name) : null
+  const scopeLabel = scope ? `${scope.kind === 'group' ? 'Group' : 'Part'}: ${scopeName}` : 'Whole model'
 
   const run = async () => {
     const p = prompt.trim()
@@ -39,8 +42,30 @@ export default function RecolorPanel({ onRecolor }) {
 
   return (
     <section className="panel">
-      <span className="tool-label">Recolor</span>
-      <div className="reactor">
+      <div className="spatial-head">
+        <span className="spatial-flag">🎨 Surface</span>
+        <h2>Recolor</h2>
+      </div>
+      <div className="recolor-scope">
+        <span className="hint">Applying to:</span>
+        <span className={`recolor-scope-chip ${scope ? 'on' : ''}`}>{scopeLabel}</span>
+        {scope && onShape && (
+          <button type="button" className="link-button" onClick={onShape}>
+            ✎ change shape
+          </button>
+        )}
+        {scope && <span className="hint">— click the chip again for the whole model</span>}
+      </div>
+      <p className="spatial-blurb">
+        {scope ? (
+          <>Tint just this {scope.kind} — e.g. “matte black”, “glossy red”. Instant &amp; free, the rest untouched.</>
+        ) : (
+          <>Change colour by prompt — shape stays 1:1, instant &amp; free. Tint the whole model
+          (“matte black”, “glossy red”) or <strong>swap specific colours</strong>: “white to black,
+          blue to red”. Click a part or group to recolor just that.</>
+        )}
+      </p>
+      <div className="input-with-mic">
         <textarea
           className="reactor-input reactor-input--sm"
           value={prompt}
@@ -77,8 +102,8 @@ export default function RecolorPanel({ onRecolor }) {
           ))}
         </div>
       )}
-      <button className="tool-cta" onClick={run} disabled={busy || !prompt.trim()}>
-        {busy ? 'Recoloring…' : !prompt.trim() ? 'Describe a colour to start' : 'Recolor · keep shape'}
+      <button className="submit" onClick={run} disabled={busy || !prompt.trim()}>
+        {busy ? 'Recoloring…' : scope ? `🎨 Recolor ${scopeName}` : '🎨 Recolor (keep shape)'}
       </button>
       {error && <span className="url-error">{error}</span>}
     </section>

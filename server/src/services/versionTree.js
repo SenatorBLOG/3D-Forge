@@ -1,21 +1,50 @@
-import { dbReady } from '../db.js'
-import ModelVersionTree from '../models/ModelVersionTree.js'
-import { load, flush } from './persistence.js'
+import { readFileSync, writeFileSync, renameSync, mkdirSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
+import { dirname } from 'node:path'
 
-// Durable per-model version trees (see the model file). Dual store like the rest
-// of the project: Mongo when connected, an in-memory map (persisted to the dev
-// file) otherwise. A tree is identified by (ownerId, rootModelUrl); we can also
-// look one up by ANY version's modelUrl, so loading a child model still finds
-// the whole strip it belongs to.
+// Durable per-model version trees. A tree is identified by (ownerId,
+// rootModelUrl); we can also look one up by ANY version's modelUrl, so loading a
+// child model still finds the whole strip it belongs to.
+//
+// LOCAL-FIRST (2026-07-25): version trees live in a dedicated on-disk file, NOT
+// Mongo. Reason: with FILES_STORAGE=local the model bytes already live on this
+// machine, and the shared Atlas is over-quota (writes blocked) — routing trees
+// through it made writes fail while reads returned a STALE tree, so deleted
+// versions "came back" after a reload. A plain local file is consistent and
+// survives F5, model switches, and server restarts. (Cross-device sync returns
+// with the Cloudflare-R2 storage move.)
+
+const FILE = fileURLToPath(new URL('../../.devdata/versionTrees.json', import.meta.url))
+const TMP = `${FILE}.tmp`
 
 const key = (ownerId, root) => `${ownerId ?? 'anon'}::${root}`
-
 const mem = new Map() // key -> { ownerId, rootModelUrl, versions, currentVersionId }
-{
-  const saved = load('versionTrees', null)
-  if (saved?.trees) for (const t of saved.trees) mem.set(key(t.ownerId, t.rootModelUrl), t)
+
+// hydrate once at import
+try {
+  const blob = JSON.parse(readFileSync(FILE, 'utf8'))
+  if (Array.isArray(blob?.trees)) {
+    for (const t of blob.trees) mem.set(key(t.ownerId, t.rootModelUrl), t)
+  }
+} catch {
+  /* missing / bad file → start empty */
 }
-const saveMem = () => flush('versionTrees', { trees: [...mem.values()] })
+
+let timer = null
+function persist() {
+  if (timer) clearTimeout(timer)
+  timer = setTimeout(() => {
+    timer = null
+    try {
+      mkdirSync(dirname(FILE), { recursive: true })
+      writeFileSync(TMP, JSON.stringify({ trees: [...mem.values()] }))
+      renameSync(TMP, FILE)
+    } catch (err) {
+      console.warn('versionTree persist failed:', err.message)
+    }
+  }, 200)
+  timer.unref?.()
+}
 
 const shape = (t) =>
   t && {
@@ -33,15 +62,9 @@ const rootOf = (versions) =>
  */
 export async function getTreeByModelUrl(ownerId, modelUrl) {
   if (!modelUrl) return null
-  if (dbReady()) {
-    const doc = await ModelVersionTree.findOne({
-      ownerId: ownerId ?? null,
-      $or: [{ rootModelUrl: modelUrl }, { 'versions.modelUrl': modelUrl }],
-    }).lean()
-    return shape(doc)
-  }
+  const owner = ownerId ?? null
   for (const t of mem.values()) {
-    if (t.ownerId !== (ownerId ?? null)) continue
+    if (t.ownerId !== owner) continue
     if (t.rootModelUrl === modelUrl || (t.versions || []).some((v) => v.modelUrl === modelUrl)) {
       return shape(t)
     }
@@ -52,22 +75,15 @@ export async function getTreeByModelUrl(ownerId, modelUrl) {
 /**
  * Upsert a tree: keyed by (ownerId, rootModelUrl). The client owns the version
  * ids/labels; we just persist the array + which node is current. rootModelUrl is
- * derived from the root node when not passed.
+ * derived from the root node when not passed. Writing REPLACES the stored
+ * versions, so a delete on the client (fewer versions) sticks.
  */
 export async function saveTree(ownerId, { rootModelUrl, versions = [], currentVersionId = null }) {
   const root = rootModelUrl || rootOf(versions)
   if (!root || !versions.length) return null
   const owner = ownerId ?? null
-  if (dbReady()) {
-    const doc = await ModelVersionTree.findOneAndUpdate(
-      { ownerId: owner, rootModelUrl: root },
-      { $set: { versions, currentVersionId } },
-      { new: true, upsert: true },
-    ).lean()
-    return shape(doc)
-  }
   const t = { ownerId: owner, rootModelUrl: root, versions, currentVersionId }
   mem.set(key(owner, root), t)
-  saveMem()
+  persist()
   return shape(t)
 }

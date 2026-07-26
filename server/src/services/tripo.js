@@ -229,6 +229,63 @@ export async function createTripoSegmentByTaskId(originalModelTaskId) {
   return data.task_id
 }
 
+/**
+ * Task 6 — rigging & animation (native chain, same original_model_task_id path).
+ * Verified live 2026-07-21: rig 25 cr, retarget 10 cr/animation, prerigcheck free.
+ * Output GLB has a skeleton (skin + bones) + one animation clip per retarget.
+ */
+
+/** Free check: is this model riggable? Resolves to a task id to poll for
+ * `output.riggable` / `rig_type`. No credit cost, so no daily-limit guard. */
+export async function createTripoPrerigCheckTask(originalModelTaskId) {
+  if (isTripoMock()) return createMockTask('prerigcheck')
+  const data = await tripoFetch('/task', {
+    method: 'POST',
+    body: JSON.stringify({
+      type: 'animate_prerigcheck',
+      original_model_task_id: originalModelTaskId,
+    }),
+  })
+  return data.task_id
+}
+
+/** Put a skeleton on a model (25 credits). Poll → `output.model` = rigged GLB. */
+export async function createTripoRigTask(originalModelTaskId, outFormat = 'glb') {
+  if (isTripoMock()) return createMockTask('rig')
+  enforceDailyLimit()
+  const data = await tripoFetch('/task', {
+    method: 'POST',
+    body: JSON.stringify({
+      type: 'animate_rig',
+      original_model_task_id: originalModelTaskId,
+      out_format: outFormat,
+    }),
+  })
+  return data.task_id
+}
+
+/**
+ * Apply ONE preset animation to a RIGGED model (10 credits). `rigTaskId` is the
+ * task id of a previous animate_rig (retarget chains off the rig, NOT the base
+ * model). `preset` is a string like 'preset:walk'. Poll → `output.model` = a GLB
+ * with the skeleton + that one clip. One clip per call keeps credit accounting
+ * exact (only new clips are ever charged); multiple clips are merged on our side.
+ */
+export async function createTripoAnimateTask(rigTaskId, preset, outFormat = 'glb') {
+  if (isTripoMock()) return createMockTask('retarget')
+  enforceDailyLimit()
+  const data = await tripoFetch('/task', {
+    method: 'POST',
+    body: JSON.stringify({
+      type: 'animate_retarget',
+      original_model_task_id: rigTaskId,
+      animation: preset,
+      out_format: outFormat,
+    }),
+  })
+  return data.task_id
+}
+
 // Tripo → our unified (Meshy-shaped) task object, so the existing polling
 // route and History flow work unchanged regardless of engine.
 const STATUS_MAP = {

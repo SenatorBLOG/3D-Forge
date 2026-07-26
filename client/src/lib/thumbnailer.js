@@ -77,11 +77,11 @@ function renderThumbnail(modelUrl) {
           const size = box.getSize(new THREE.Vector3()).length()
           model.position.sub(center)
           // Tripo exports face the opposite way to Meshy, so with the same camera
-          // their card thumbnail faces the "wrong" way (toward the edge). Mirror
-          // the camera X for Tripo models so every card faces left/toward-centre
-          // like Misha's Meshy cards. (Card render only — the live viewer is
-          // unaffected.)
-          const sx = /tripo/i.test(modelUrl || '') ? -1 : 1
+          // One camera for EVERY model (no per-engine mirror) so all cards + all
+          // version thumbnails face the SAME way — and the SAME way the live viewer
+          // shows the model (viewer camera is at +x too). The old Tripo-only mirror
+          // made Tripo cards show their back → cards faced inconsistent directions.
+          const sx = 1
           camera.position.set(size * 0.6 * sx, size * 0.45, size * 0.85)
           camera.near = size / 100
           camera.far = size * 10
