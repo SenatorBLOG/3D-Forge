@@ -39,25 +39,24 @@ export default function RecolorPanel({ onRecolor }) {
 
   return (
     <section className="panel">
-      <div className="spatial-head">
-        <span className="spatial-flag">🎨 Surface</span>
-        <h2>Recolor</h2>
-      </div>
-      <p className="spatial-blurb">
-        Change colour by prompt — shape stays 1:1, instant &amp; free. Tint the whole model
-        (“matte black”, “glossy red”) or <strong>swap specific colours</strong> and leave the rest:
-        “white to black, blue to red”.
-      </p>
-      <div className="input-with-mic">
+      <span className="tool-label">Recolor</span>
+      <div className="reactor">
         <textarea
-          className="point-prompt"
-          rows={2}
+          className="reactor-input reactor-input--sm"
           value={prompt}
           onChange={(e) => setPrompt(e.target.value)}
           placeholder='e.g. "matte black" or "white to black, blue to red"'
           disabled={busy}
         />
         <MicButton onTranscript={appendSpeech} disabled={busy} />
+      </div>
+      <div className="seed-row">
+        <span className="seed-label">Try</span>
+        {['matte black', 'glossy red', 'white to black, blue to red'].map((p) => (
+          <button key={p} type="button" className="seed" onClick={() => setPrompt(p)} disabled={busy}>
+            {p}
+          </button>
+        ))}
       </div>
       {parsed?.mode === 'single' && (
         <div className="recolor-preview">
@@ -78,8 +77,8 @@ export default function RecolorPanel({ onRecolor }) {
           ))}
         </div>
       )}
-      <button className="submit" onClick={run} disabled={busy || !prompt.trim()}>
-        {busy ? 'Recoloring…' : '🎨 Recolor (keep shape)'}
+      <button className="tool-cta" onClick={run} disabled={busy || !prompt.trim()}>
+        {busy ? 'Recoloring…' : !prompt.trim() ? 'Describe a colour to start' : 'Recolor · keep shape'}
       </button>
       {error && <span className="url-error">{error}</span>}
     </section>

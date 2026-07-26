@@ -31,26 +31,35 @@ export default function PartButtons({ modelUrl, onHoverPart, onPickPart, busy })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [modelUrl])
 
-  if (loading) return <div className="part-buttons part-buttons--loading">Finding parts…</div>
+  if (loading) {
+    return (
+      <div className="part-block">
+        <span className="tool-label">Parts</span>
+        <span className="hint">Finding parts…</span>
+      </div>
+    )
+  }
   if (parts.length < 2) return null // nothing useful to split
 
   return (
-    <div className="part-buttons" onMouseLeave={() => onHoverPart?.(null)}>
-      <span className="part-buttons-label">Parts</span>
-      {parts.map((p) => (
-        <button
-          key={p.id}
-          type="button"
-          className="part-chip"
-          disabled={busy}
-          onMouseEnter={() => onHoverPart?.(p.bbox)}
-          onFocus={() => onHoverPart?.(p.bbox)}
-          onClick={() => onPickPart?.(p)}
-          title={`Regenerate the "${p.name}" part, keep the rest`}
-        >
-          {p.name}
-        </button>
-      ))}
+    <div className="part-block">
+      <span className="tool-label">Parts</span>
+      <div className="part-chips" onMouseLeave={() => onHoverPart?.(null)}>
+        {parts.map((p) => (
+          <button
+            key={p.id}
+            type="button"
+            className="part-chip"
+            disabled={busy}
+            onMouseEnter={() => onHoverPart?.(p.bbox)}
+            onFocus={() => onHoverPart?.(p.bbox)}
+            onClick={() => onPickPart?.(p)}
+            title={`Edit the "${p.name}" part — the rest stays the same`}
+          >
+            {p.name}
+          </button>
+        ))}
+      </div>
     </div>
   )
 }
