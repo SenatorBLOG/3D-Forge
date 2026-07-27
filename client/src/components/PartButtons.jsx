@@ -57,7 +57,7 @@ function allConnected(members, tol) {
   return seen.size === members.length
 }
 
-export default function PartButtons({ modelUrl, onHoverPart, onPickPart, selectedId = null, busy }) {
+export default function PartButtons({ modelUrl, onHoverPart, onPickPart, onParts, selectedId = null, busy }) {
   const [parts, setParts] = useState([])
   const [loading, setLoading] = useState(false)
   const [groups, setGroups] = useState([]) // [{ id, name, partIds:[], names:[], bbox, center }]
@@ -72,6 +72,7 @@ export default function PartButtons({ modelUrl, onHoverPart, onPickPart, selecte
     setGrouping(false)
     setSelected(new Set())
     onHoverPart?.(null)
+    onParts?.([])
     if (!modelUrl) return
     setLoading(true)
     fetch('/api/edit/segment', {
@@ -80,7 +81,12 @@ export default function PartButtons({ modelUrl, onHoverPart, onPickPart, selecte
       body: JSON.stringify({ modelUrl }),
     })
       .then((r) => (r.ok ? r.json() : null))
-      .then((d) => !cancelled && setParts(d?.parts || []))
+      .then((d) => {
+        if (cancelled) return
+        const ps = d?.parts || []
+        setParts(ps)
+        onParts?.(ps) // lift parts so a 3D double-click can resolve mesh → part
+      })
       .catch(() => {})
       .finally(() => !cancelled && setLoading(false))
     return () => {
