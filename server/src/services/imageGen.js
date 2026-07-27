@@ -82,8 +82,15 @@ export async function generateImage(prompt) {
  */
 export async function editImage(imageBytes, mime, instruction) {
   enforceImageDailyLimit()
+  // wrap the user's instruction so the model changes ONLY what's asked and keeps
+  // the rest identical — otherwise it tends to redraw the whole figure, which
+  // makes the 4 reconstructed views drift apart (different shoulders/body/pose).
+  const guarded =
+    `Edit this image: ${instruction}. Change ONLY that. Keep everything else ` +
+    `exactly the same — the same pose, body, shoulders, proportions, colours, ` +
+    `lighting and plain background. Do not redraw or restyle the rest of the figure.`
   return callGemini([
     { inlineData: { mimeType: mime, data: Buffer.from(imageBytes).toString('base64') } },
-    { text: instruction },
+    { text: guarded },
   ])
 }

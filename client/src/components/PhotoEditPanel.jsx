@@ -52,6 +52,22 @@ export default function PhotoEditPanel({ modelUrl, onModelReady3D }) {
   const [mvSel, setMvSel] = useState(null) // selected view index, or null
   const [mvSelPrompt, setMvSelPrompt] = useState('')
   const [mvSelBusy, setMvSelBusy] = useState(false)
+  // centered lightbox: which prepared view is open big (index), or null. Flipping
+  // arrows keeps mvSel in sync so the in-lightbox edit targets the shown view.
+  const [lightIdx, setLightIdx] = useState(null)
+  const openLight = (i) => {
+    setLightIdx(i)
+    setMvSel(i)
+    setMvSelPrompt('')
+  }
+  const moveLight = (d) =>
+    setLightIdx((i) => {
+      if (i == null || !mvViews?.length) return i
+      const n = (i + d + mvViews.length) % mvViews.length
+      setMvSel(n)
+      setMvSelPrompt('')
+      return n
+    })
 
   const currentImage = versions.find((v) => v.id === currentId) || null
 
@@ -70,6 +86,7 @@ export default function PhotoEditPanel({ modelUrl, onModelReady3D }) {
     setMvCount(4)
     setMvSel(null)
     setMvSelPrompt('')
+    setLightIdx(null)
   }, [modelUrl])
 
   // P1c: rebuild the chosen photo into 3D. The result is handed up to the Forge,
@@ -366,11 +383,8 @@ export default function PhotoEditPanel({ modelUrl, onModelReady3D }) {
                       <figure
                         className={`mv-view ${mvSel === i ? 'sel' : ''}`}
                         key={`${i}-${v.id}`}
-                        onClick={() => {
-                          setMvSel(i)
-                          setMvSelPrompt('')
-                        }}
-                        title={`Click to edit only the ${v.label} view`}
+                        onClick={() => openLight(i)}
+                        title={`Click to view large & edit the ${v.label} view`}
                       >
                         <img src={v.url} alt={v.label} />
                         <figcaption>{v.label}</figcaption>
@@ -378,9 +392,9 @@ export default function PhotoEditPanel({ modelUrl, onModelReady3D }) {
                     ))}
                   </div>
                   {mvViews.length > 1 && (
-                    <span className="hint">Click a view to change only that side.</span>
+                    <span className="hint">Click a view to open it large & edit that side.</span>
                   )}
-                  {mvSel != null && mvViews[mvSel] && (
+                  {mvSel != null && lightIdx == null && mvViews[mvSel] && (
                     <div className="mv-view-edit">
                       <textarea
                         className="point-prompt"
@@ -455,6 +469,55 @@ export default function PhotoEditPanel({ modelUrl, onModelReady3D }) {
         </>
       )}
       {error && <span className="url-error">{error}</span>}
+
+      {/* centered photo viewer: flip between the prepared views (arrows), and edit
+          just the shown view — without the thumbnail ballooning over the panel */}
+      {lightIdx != null && mvViews?.[lightIdx] && (
+        <div className="photo-light" onClick={() => setLightIdx(null)}>
+          <div className="photo-light-box" onClick={(e) => e.stopPropagation()}>
+            <div className="photo-light-head">
+              <span>
+                {mvViews[lightIdx].label} · {lightIdx + 1}/{mvViews.length}
+              </span>
+              <button
+                type="button"
+                className="point-popup-close"
+                onClick={() => setLightIdx(null)}
+                aria-label="Close"
+              >
+                ✕
+              </button>
+            </div>
+            <div className="photo-light-main">
+              {mvViews.length > 1 && (
+                <button type="button" className="photo-light-arrow" onClick={() => moveLight(-1)} aria-label="Previous">
+                  ‹
+                </button>
+              )}
+              <img src={mvViews[lightIdx].url} alt={mvViews[lightIdx].label} />
+              {mvViews.length > 1 && (
+                <button type="button" className="photo-light-arrow" onClick={() => moveLight(1)} aria-label="Next">
+                  ›
+                </button>
+              )}
+            </div>
+            <div className="photo-light-edit">
+              <textarea
+                className="point-prompt"
+                rows={2}
+                value={mvSelPrompt}
+                onChange={(e) => setMvSelPrompt(e.target.value)}
+                placeholder={`Change only the ${mvViews[lightIdx].label} — e.g. "add a shield"`}
+                disabled={mvSelBusy}
+              />
+              <button className="submit" onClick={editMvView} disabled={mvSelBusy || !mvSelPrompt.trim()}>
+                {mvSelBusy ? 'Editing…' : `Apply to ${mvViews[lightIdx].label} only`}
+              </button>
+              {mvError && <span className="url-error">{mvError}</span>}
+            </div>
+          </div>
+        </div>
+      )}
     </section>
   )
 }
