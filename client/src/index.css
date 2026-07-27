@@ -3170,30 +3170,20 @@ a.ghost-button {
   z-index: 1;
   width: 100%;
   max-width: 660px;
-  background: linear-gradient(180deg, rgba(34, 211, 238, 0.05), transparent 60%), var(--panel);
-  border: 1px solid transparent;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  background: radial-gradient(130% 90% at 50% -10%, rgba(34, 211, 238, 0.07), transparent 60%), var(--panel);
+  border: 1px solid rgba(34, 211, 238, 0.22);
   border-radius: 16px;
-  padding: 24px 24px 22px;
-  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.5), 0 0 44px rgba(34, 211, 238, 0.07);
+  padding: 22px 24px 20px;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.5), 0 0 40px rgba(34, 211, 238, 0.08);
 }
 
-/* spinning gradient ring around the console (Meshy's border-spin) */
+/* (removed the bright spinning magenta ring — the console now uses the same
+   subtle cyan border/glow as the Forge panels for a single visual language) */
 .gen-console-inner::before {
-  content: '';
-  position: absolute;
-  inset: -1px;
-  z-index: -1;
-  border-radius: 17px;
-  background: conic-gradient(
-    from var(--ring-angle, 0deg),
-    rgba(34, 211, 238, 0.9),
-    rgba(28, 39, 64, 0.35) 25%,
-    rgba(255, 45, 155, 0.42) 45%,
-    rgba(28, 39, 64, 0.35) 65%,
-    rgba(103, 232, 249, 0.7) 85%,
-    rgba(34, 211, 238, 0.9)
-  );
-  animation: ring-spin 9s linear infinite;
+  content: none;
 }
 
 @property --ring-angle {
