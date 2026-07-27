@@ -972,6 +972,7 @@ export default function ForgePage() {
         <div className="edit-manual-host" ref={setManualHost} />
         <PartButtons
           modelUrl={modelUrl}
+          description={baseModelPrompt}
           busy={swapBusy || busy}
           selectedId={selectedId}
           onParts={(parts) => (partsRef.current = parts)}

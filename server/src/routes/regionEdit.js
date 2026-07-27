@@ -1,6 +1,7 @@
 import { Router } from 'express'
 import { segmentModel, segmentTripoByTaskId, hitTestPart, partSwap, extractPart, extractRegion, stitchPart, stitchRegion } from '../services/segment.js'
 import { optionalAuth } from '../middleware/auth.js'
+import { labelParts as aiLabelParts, isClaudeEnabled } from '../services/claude.js'
 import { recordTask, updateTask, listMemory } from '../services/history.js'
 import { dbReady } from '../db.js'
 import GeneratedModel from '../models/GeneratedModel.js'
@@ -81,6 +82,54 @@ router.post('/segment-tripo', async (req, res) => {
     if (err.code === 'NO_KEY') return res.status(400).json({ error: err.message })
     console.error('tripo segment failed:', err)
     res.status(502).json({ error: err.message || 'Tripo segmentation failed' })
+  }
+})
+
+// POST /api/edit/label-parts { modelUrl, description? } — use Claude to give the
+// geometric parts human-readable anatomical/functional names (Head, Left Arm,
+// Wheel…) from each part's normalized position + size. Paid (one text call), so
+// it's a deliberate user action; no key → 400 NO_KEY. → { labels: { [partId]: name } }
+router.post('/label-parts', async (req, res) => {
+  const modelUrl = typeof req.body?.modelUrl === 'string' ? req.body.modelUrl : ''
+  const description = typeof req.body?.description === 'string' ? req.body.description.slice(0, 300) : ''
+  if (!modelUrl) return res.status(400).json({ error: 'modelUrl is required' })
+  if (!isClaudeEnabled()) {
+    return res.status(400).json({ error: 'AI labeling needs ANTHROPIC_API_KEY on the server.', code: 'NO_KEY' })
+  }
+  try {
+    const { parts } = await segmentModel(modelUrl)
+    if (parts.length < 2) return res.json({ labels: {} })
+    // normalize each part's center + size into the model's overall bbox (0..1) so
+    // Claude reasons in object-relative space regardless of the model's scale/units
+    const overall = unionBBox(parts)
+    const span = [0, 1, 2].map((i) => Math.max(1e-6, overall.max[i] - overall.min[i]))
+    const round = (n) => Math.round(n * 100) / 100
+    const payloadParts = parts.map((p) => {
+      const cen = [0, 1, 2].map((i) => (p.bbox.min[i] + p.bbox.max[i]) / 2)
+      return {
+        pos: {
+          x: round((cen[0] - overall.min[0]) / span[0]),
+          y: round((cen[1] - overall.min[1]) / span[1]),
+          z: round((cen[2] - overall.min[2]) / span[2]),
+        },
+        size: {
+          x: round((p.bbox.max[0] - p.bbox.min[0]) / span[0]),
+          y: round((p.bbox.max[1] - p.bbox.min[1]) / span[1]),
+          z: round((p.bbox.max[2] - p.bbox.min[2]) / span[2]),
+        },
+        current: p.name,
+      }
+    })
+    const byIndex = await aiLabelParts({ description, parts: payloadParts })
+    const labels = {}
+    parts.forEach((p, i) => {
+      if (byIndex[i]) labels[p.id] = byIndex[i]
+    })
+    res.json({ labels })
+  } catch (err) {
+    if (err.code === 'NOT_FOUND') return res.status(404).json({ error: err.message })
+    console.error('label-parts failed:', err)
+    res.status(502).json({ error: err.message || 'Failed to label parts' })
   }
 })
 
