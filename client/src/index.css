@@ -3114,7 +3114,7 @@ a.ghost-button {
 .gen-blob-b {
   right: 4%;
   top: -10%;
-  background: radial-gradient(circle, rgba(255, 45, 155, 0.4), transparent 65%);
+  background: radial-gradient(circle, rgba(255, 45, 155, 0.18), transparent 65%);
   animation: blob-drift 24s ease-in-out infinite alternate-reverse;
 }
 
@@ -3147,7 +3147,7 @@ a.ghost-button {
 }
 
 .gen-title-grad {
-  background: linear-gradient(92deg, var(--forge) 10%, var(--steel) 55%, var(--violet) 95%);
+  background: linear-gradient(92deg, var(--forge) 14%, var(--forge-2) 50%, var(--steel) 112%);
   background-size: 200% 100%;
   -webkit-background-clip: text;
   background-clip: text;
@@ -3187,10 +3187,10 @@ a.ghost-button {
   background: conic-gradient(
     from var(--ring-angle, 0deg),
     rgba(34, 211, 238, 0.9),
-    rgba(28, 39, 64, 0.35) 22%,
-    rgba(255, 45, 155, 0.8) 42%,
-    rgba(28, 39, 64, 0.35) 62%,
-    rgba(168, 85, 247, 0.8) 82%,
+    rgba(28, 39, 64, 0.35) 25%,
+    rgba(255, 45, 155, 0.42) 45%,
+    rgba(28, 39, 64, 0.35) 65%,
+    rgba(103, 232, 249, 0.7) 85%,
     rgba(34, 211, 238, 0.9)
   );
   animation: ring-spin 9s linear infinite;
@@ -3241,6 +3241,14 @@ a.ghost-button {
   border-color: var(--forge);
   background: rgba(34, 211, 238, 0.06);
   box-shadow: 0 0 14px var(--forge-glow);
+}
+
+.gen-console-note {
+  display: block;
+  margin-top: 10px;
+  text-align: center;
+  font-size: 12px;
+  color: var(--text-faint);
 }
 
 .gen-console-input {

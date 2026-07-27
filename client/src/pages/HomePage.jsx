@@ -50,8 +50,6 @@ export default function HomePage() {
   const navigate = useNavigate()
   const [mode, setMode] = useState('text') // 'text' | 'image'
   const [prompt, setPrompt] = useState('')
-  const [engine, setEngine] = useState('meshy') // 'meshy' | 'tripo'
-  const [textured, setTextured] = useState(false) // Meshy-only texturing stage
   const [image, setImage] = useState(null) // { id }
   const [preview, setPreview] = useState(null) // object URL
   const [uploading, setUploading] = useState(false)
@@ -122,16 +120,16 @@ export default function HomePage() {
   }
 
   const canGenerate = mode === 'text' ? !!prompt.trim() : !!image
+  // the landing is a launchpad — it hands the idea to the Forge, where the engine
+  // and texturing choices actually live (no duplicated controls here).
   const generate = () => {
-    // texturing is Meshy-only; Tripo returns a finished textured model
-    const extra = `&engine=${engine}${engine === 'meshy' && textured ? '&textured=1' : ''}`
     if (mode === 'text') {
       const p = prompt.trim()
       if (!p) return
-      navigate(`/forge?prompt=${encodeURIComponent(p)}&autostart=1${extra}`)
+      navigate(`/forge?prompt=${encodeURIComponent(p)}&autostart=1`)
     } else {
       if (!image) return
-      navigate(`/forge?mode=image&imageId=${encodeURIComponent(image.id)}&autostart=1${extra}`)
+      navigate(`/forge?mode=image&imageId=${encodeURIComponent(image.id)}&autostart=1`)
     }
   }
 
@@ -220,43 +218,10 @@ export default function HomePage() {
             </>
           )}
 
-          <div className="gen-console-options">
-            <div className="model-select">
-              <span className="model-label">Engine</span>
-              <button
-                type="button"
-                className={`chip ${engine === 'meshy' ? 'chip--on' : ''}`}
-                onClick={() => setEngine('meshy')}
-                title="Meshy — tiered previews, optional texturing stage"
-              >
-                Meshy
-              </button>
-              <button
-                type="button"
-                className={`chip ${engine === 'tripo' ? 'chip--on' : ''}`}
-                onClick={() => setEngine('tripo')}
-                title="Tripo — builds a finished, already-textured model in one step"
-              >
-                Tripo
-              </button>
-            </div>
-            <label className={`toggle ${engine === 'tripo' ? 'toggle--disabled' : ''}`}>
-              <input
-                type="checkbox"
-                checked={engine === 'meshy' && textured}
-                onChange={(e) => setTextured(e.target.checked)}
-                disabled={engine === 'tripo'}
-              />
-              Add textures (color){' '}
-              <span className="hint">
-                {engine === 'tripo' ? '(Tripo textures in one step)' : textured ? '(colored)' : '(off — gray)'}
-              </span>
-            </label>
-          </div>
-
           <button className="submit gen-console-go" onClick={generate} disabled={!canGenerate || uploading}>
-            {uploading ? 'Uploading…' : 'Generate 3D'}
+            {uploading ? 'Uploading…' : 'Forge it →'}
           </button>
+          <span className="gen-console-note">Pick the engine &amp; textures in the Forge.</span>
         </div>
 
       </section>
