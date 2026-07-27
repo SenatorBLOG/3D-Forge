@@ -135,8 +135,10 @@ export default function PhotoEditPanel({ modelUrl, onModelReady3D }) {
         const ed = await fetch(`/api/images/${encodeURIComponent(upData.image.id)}/edit`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          // reference the approved front photo so every view stays the same character
-          body: JSON.stringify({ instruction: lastEdit.instruction, referenceId: currentId }),
+          // NO reference here: each view is already the correct rendered ANGLE of
+          // the 3D model — we only apply the edit. A reference made Gemini redraw
+          // every view to match the front, so all 4 came out identical.
+          body: JSON.stringify({ instruction: lastEdit.instruction }),
         })
         const edData = await readJson(ed)
         prepared.push({ id: edData.image.id, url: edData.image.url, label: v.label })
@@ -187,8 +189,8 @@ export default function PhotoEditPanel({ modelUrl, onModelReady3D }) {
       const ed = await fetch(`/api/images/${encodeURIComponent(mvViews[i].id)}/edit`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        // reference the FRONT view so this side stays the same character as the front
-        body: JSON.stringify({ instruction: instr, referenceId: mvViews[0]?.id }),
+        // no reference — keep THIS view's own angle; only apply the change to it
+        body: JSON.stringify({ instruction: instr }),
       })
       const edData = await readJson(ed)
       setMvViews((prev) =>

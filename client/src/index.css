@@ -6026,8 +6026,8 @@ button.tag:hover {
   backdrop-filter: blur(3px);
 }
 .photo-light-box {
-  width: min(560px, 78vw);
-  max-height: 88vh;
+  width: min(820px, 94vw);
+  max-height: 92vh;
   overflow-y: auto;
   padding: 12px 14px 14px;
   background: rgba(19, 23, 32, 0.98);
@@ -6052,7 +6052,7 @@ button.tag:hover {
 .photo-light-main img {
   flex: 1;
   min-width: 0;
-  max-height: 58vh;
+  max-height: 72vh;
   object-fit: contain;
   border-radius: 10px;
   background: rgba(255, 255, 255, 0.03);
