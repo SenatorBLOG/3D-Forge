@@ -154,16 +154,20 @@ export function getThumbnail(modelUrl) {
 // 4 → [front, left, back, right]. Returns { views: [{ label, dataUrl }] }.
 const VIEW_SIZE = 512
 
+// Clean front + back plus two 3/4 (полубок) side views — the flat ±90° profiles
+// looked alike / unreadable, and the 3/4 angle (like the original capture) reads
+// much better and reconstructs cleaner. All relative to FRONT_AZ (the viewer's
+// front) in renderViews.
 const viewPlan = (count) =>
   count <= 1
     ? [{ label: 'Front', az: 0 }]
     : count === 2
-      ? [{ label: 'Front', az: 0 }, { label: 'Side', az: Math.PI / 2 }]
+      ? [{ label: 'Front', az: 0 }, { label: 'Side', az: Math.PI / 4 }]
       : [
           { label: 'Front', az: 0 },
-          { label: 'Left', az: -Math.PI / 2 },
+          { label: 'Left', az: -Math.PI / 4 },
+          { label: 'Right', az: Math.PI / 4 },
           { label: 'Back', az: Math.PI },
-          { label: 'Right', az: Math.PI / 2 },
         ]
 
 function renderViews(modelUrl, count) {

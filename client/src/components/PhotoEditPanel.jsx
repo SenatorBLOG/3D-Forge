@@ -135,10 +135,13 @@ export default function PhotoEditPanel({ modelUrl, onModelReady3D }) {
         const ed = await fetch(`/api/images/${encodeURIComponent(upData.image.id)}/edit`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          // NO reference here: each view is already the correct rendered ANGLE of
-          // the 3D model — we only apply the edit. A reference made Gemini redraw
-          // every view to match the front, so all 4 came out identical.
-          body: JSON.stringify({ instruction: lastEdit.instruction }),
+          // NO reference image (that made Gemini redraw every view to match the
+          // front → identical). Each view is already the correct rendered ANGLE;
+          // we tell Gemini WHICH side this is so it applies the change sensibly
+          // (e.g. a helmet shows from the back) and keeps the pose from that angle.
+          body: JSON.stringify({
+            instruction: `${lastEdit.instruction}. (This image is the ${v.label} (${v.label === 'Back' ? 'rear' : v.label === 'Front' ? 'front' : 'three-quarter'}) view of the same character — keep this exact camera angle and pose.)`,
+          }),
         })
         const edData = await readJson(ed)
         prepared.push({ id: edData.image.id, url: edData.image.url, label: v.label })
