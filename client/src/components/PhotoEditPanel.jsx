@@ -52,6 +52,22 @@ export default function PhotoEditPanel({ modelUrl, onModelReady3D }) {
   const [mvSel, setMvSel] = useState(null) // selected view index, or null
   const [mvSelPrompt, setMvSelPrompt] = useState('')
   const [mvSelBusy, setMvSelBusy] = useState(false)
+  // centered lightbox: which prepared view is open big (index), or null. Flipping
+  // arrows keeps mvSel in sync so the in-lightbox edit targets the shown view.
+  const [lightIdx, setLightIdx] = useState(null)
+  const openLight = (i) => {
+    setLightIdx(i)
+    setMvSel(i)
+    setMvSelPrompt('')
+  }
+  const moveLight = (d) =>
+    setLightIdx((i) => {
+      if (i == null || !mvViews?.length) return i
+      const n = (i + d + mvViews.length) % mvViews.length
+      setMvSel(n)
+      setMvSelPrompt('')
+      return n
+    })
 
   const currentImage = versions.find((v) => v.id === currentId) || null
 
@@ -70,6 +86,7 @@ export default function PhotoEditPanel({ modelUrl, onModelReady3D }) {
     setMvCount(4)
     setMvSel(null)
     setMvSelPrompt('')
+    setLightIdx(null)
   }, [modelUrl])
 
   // P1c: rebuild the chosen photo into 3D. The result is handed up to the Forge,
@@ -118,7 +135,13 @@ export default function PhotoEditPanel({ modelUrl, onModelReady3D }) {
         const ed = await fetch(`/api/images/${encodeURIComponent(upData.image.id)}/edit`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ instruction: lastEdit.instruction }),
+          // NO reference image (that made Gemini redraw every view to match the
+          // front → identical). Each view is already the correct rendered ANGLE;
+          // we tell Gemini WHICH side this is so it applies the change sensibly
+          // (e.g. a helmet shows from the back) and keeps the pose from that angle.
+          body: JSON.stringify({
+            instruction: `${lastEdit.instruction}. (This image is the ${v.label} (${v.label === 'Back' ? 'rear' : v.label === 'Front' ? 'front' : 'three-quarter'}) view of the same character — keep this exact camera angle and pose.)`,
+          }),
         })
         const edData = await readJson(ed)
         prepared.push({ id: edData.image.id, url: edData.image.url, label: v.label })
@@ -169,6 +192,7 @@ export default function PhotoEditPanel({ modelUrl, onModelReady3D }) {
       const ed = await fetch(`/api/images/${encodeURIComponent(mvViews[i].id)}/edit`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        // no reference — keep THIS view's own angle; only apply the change to it
         body: JSON.stringify({ instruction: instr }),
       })
       const edData = await readJson(ed)
@@ -185,9 +209,8 @@ export default function PhotoEditPanel({ modelUrl, onModelReady3D }) {
 
   const loadVersions = async (id) => {
     const res = await fetch(`/api/images/${encodeURIComponent(id)}/versions`)
-    const data = await res.json()
-    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`)
-    setVersions(data.versions)
+    const data = await readJson(res) // tolerant of an empty body (server reload)
+    setVersions(data.versions || [])
     setCurrentId(id)
   }
 
@@ -206,8 +229,7 @@ export default function PhotoEditPanel({ modelUrl, onModelReady3D }) {
         headers: { 'Content-Type': blob.type || 'image/png' },
         body: blob,
       })
-      const data = await res.json()
-      if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`)
+      const data = await readJson(res) // tolerant of an empty body (server reload)
       setStub(false)
       await loadVersions(data.image.id) // starts a fresh edit family at V1
     } catch (e) {
@@ -231,8 +253,7 @@ export default function PhotoEditPanel({ modelUrl, onModelReady3D }) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ instruction: instr }),
       })
-      const data = await res.json()
-      if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`)
+      const data = await readJson(res) // tolerant of an empty body (server reload)
       setStub(!!data.stub)
       setLastEdit({ sourceId, instruction: instr })
       await loadVersions(data.image.id)
@@ -283,7 +304,7 @@ export default function PhotoEditPanel({ modelUrl, onModelReady3D }) {
                   rows={2}
                   value={instruction}
                   onChange={(e) => setInstruction(e.target.value)}
-                  placeholder={`Change V${currentImage?.version} — e.g. "add horns to the head"`}
+                  placeholder={`Change ${currentImage?.version ? `V${currentImage.version}` : 'the photo'} — e.g. "add horns to the head"`}
                   disabled={editing}
                 />
                 <MicButton onTranscript={appendSpeech} disabled={editing} />
@@ -301,24 +322,6 @@ export default function PhotoEditPanel({ modelUrl, onModelReady3D }) {
                 </button>
               )}
               {editError && <span className="url-error">{editError}</span>}
-
-              <button
-                className="submit gen-go"
-                onClick={rebuild3D}
-                disabled={editing || gen3d.generating}
-                title="Rebuild this photo into a new 3D model (kept as a new version)"
-              >
-                {gen3d.generating ? `Building 3D… ${gen3d.task.progress}%` : `🧊 Rebuild V${currentImage?.version} in 3D`}
-              </button>
-              {gen3d.generating && (
-                <div className="progress" aria-hidden="true">
-                  <div className="progress-fill" style={{ width: `${gen3d.task.progress}%` }} />
-                </div>
-              )}
-              {gen3d.generating && gen3d.task.mock && (
-                <span className="hint">mock mode — set MESHY_API_KEY for a real rebuild</span>
-              )}
-              {gen3d.error && <span className="url-error">{gen3d.error}</span>}
 
               {/* Multi-view: pick view count → render clean views → preview → build */}
               <div className="mv-count" role="radiogroup" aria-label="How many views">
@@ -365,11 +368,8 @@ export default function PhotoEditPanel({ modelUrl, onModelReady3D }) {
                       <figure
                         className={`mv-view ${mvSel === i ? 'sel' : ''}`}
                         key={`${i}-${v.id}`}
-                        onClick={() => {
-                          setMvSel(i)
-                          setMvSelPrompt('')
-                        }}
-                        title={`Click to edit only the ${v.label} view`}
+                        onClick={() => openLight(i)}
+                        title={`Click to view large & edit the ${v.label} view`}
                       >
                         <img src={v.url} alt={v.label} />
                         <figcaption>{v.label}</figcaption>
@@ -377,9 +377,9 @@ export default function PhotoEditPanel({ modelUrl, onModelReady3D }) {
                     ))}
                   </div>
                   {mvViews.length > 1 && (
-                    <span className="hint">Click a view to change only that side.</span>
+                    <span className="hint">Click a view to open it large & edit that side.</span>
                   )}
-                  {mvSel != null && mvViews[mvSel] && (
+                  {mvSel != null && lightIdx == null && mvViews[mvSel] && (
                     <div className="mv-view-edit">
                       <textarea
                         className="point-prompt"
@@ -428,6 +428,18 @@ export default function PhotoEditPanel({ modelUrl, onModelReady3D }) {
                 <span className="hint">mock mode — set TRIPO_API_KEY for a real multi-view rebuild</span>
               )}
               {(mvError || genMV.error) && <span className="url-error">{mvError || genMV.error}</span>}
+
+              {/* quick single-photo Meshy rebuild — disabled for now, shown at the
+                  bottom only once views exist (the Tripo build above is primary) */}
+              {mvViews && (
+                <button
+                  className="ghost-button"
+                  disabled
+                  title="Quick single-photo rebuild (Meshy) is off for now — use Build 3D above."
+                >
+                  🧊 Rebuild {currentImage?.version ? `V${currentImage.version}` : 'photo'} in 3D (soon)
+                </button>
+              )}
             </div>
             <div className="image-lab-versions">
               {versions.map((v) => (
@@ -454,6 +466,55 @@ export default function PhotoEditPanel({ modelUrl, onModelReady3D }) {
         </>
       )}
       {error && <span className="url-error">{error}</span>}
+
+      {/* centered photo viewer: flip between the prepared views (arrows), and edit
+          just the shown view — without the thumbnail ballooning over the panel */}
+      {lightIdx != null && mvViews?.[lightIdx] && (
+        <div className="photo-light" onClick={() => setLightIdx(null)}>
+          <div className="photo-light-box" onClick={(e) => e.stopPropagation()}>
+            <div className="photo-light-head">
+              <span>
+                {mvViews[lightIdx].label} · {lightIdx + 1}/{mvViews.length}
+              </span>
+              <button
+                type="button"
+                className="point-popup-close"
+                onClick={() => setLightIdx(null)}
+                aria-label="Close"
+              >
+                ✕
+              </button>
+            </div>
+            <div className="photo-light-main">
+              {mvViews.length > 1 && (
+                <button type="button" className="photo-light-arrow" onClick={() => moveLight(-1)} aria-label="Previous">
+                  ‹
+                </button>
+              )}
+              <img src={mvViews[lightIdx].url} alt={mvViews[lightIdx].label} />
+              {mvViews.length > 1 && (
+                <button type="button" className="photo-light-arrow" onClick={() => moveLight(1)} aria-label="Next">
+                  ›
+                </button>
+              )}
+            </div>
+            <div className="photo-light-edit">
+              <textarea
+                className="point-prompt"
+                rows={2}
+                value={mvSelPrompt}
+                onChange={(e) => setMvSelPrompt(e.target.value)}
+                placeholder={`Change only the ${mvViews[lightIdx].label} — e.g. "add a shield"`}
+                disabled={mvSelBusy}
+              />
+              <button className="submit" onClick={editMvView} disabled={mvSelBusy || !mvSelPrompt.trim()}>
+                {mvSelBusy ? 'Editing…' : `Apply to ${mvViews[lightIdx].label} only`}
+              </button>
+              {mvError && <span className="url-error">{mvError}</span>}
+            </div>
+          </div>
+        </div>
+      )}
     </section>
   )
 }

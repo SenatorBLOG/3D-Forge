@@ -205,7 +205,21 @@ router.post('/:id/edit', optionalAuth, async (req, res) => {
   try {
     const file = await readImageBytes(source)
     if (!file) return res.status(404).json({ error: 'image file not found' })
-    const result = await editImage(file.bytes, file.mime || 'image/png', instruction)
+    // optional reference image (a chosen front / half-side view of the SAME model)
+    // so Gemini keeps every angle the same character. Best-effort — ignore if the
+    // ref can't be read, so an edit never fails just because of the reference.
+    let reference = null
+    const referenceId = typeof req.body?.referenceId === 'string' ? req.body.referenceId : ''
+    if (referenceId && referenceId !== source.id) {
+      try {
+        const refImg = await getImage(referenceId)
+        const refFile = refImg && (await readImageBytes(refImg))
+        if (refFile) reference = { bytes: refFile.bytes, mime: refFile.mime || 'image/png' }
+      } catch {
+        /* reference unavailable — proceed without it */
+      }
+    }
+    const result = await editImage(file.bytes, file.mime || 'image/png', instruction, reference)
     return await storeResult(res, {
       bytes: result.bytes,
       mime: result.mime,

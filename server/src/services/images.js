@@ -57,8 +57,15 @@ export async function createImage({
 }) {
   const base = { imageId: id, url, source, prompt, mime, ownerId, parentId }
   if (dbReady()) {
-    const doc = await Image.create(base)
-    return publicImage({ ...base, createdAt: doc.createdAt })
+    try {
+      const doc = await Image.create(base)
+      return publicImage({ ...base, createdAt: doc.createdAt })
+    } catch (err) {
+      // Mongo write can fail (e.g. Atlas over-quota → writes blocked). The image
+      // bytes already live on disk, so fall back to the in-memory store instead
+      // of failing the capture/edit ("failed to record the image").
+      console.warn('image: DB write failed, using local store:', err.code || err.message)
+    }
   }
   const rec = { ...base, createdAt: new Date().toISOString() }
   memImages.set(id, rec)
@@ -83,20 +90,34 @@ export async function createImage({
 /** Resolve an imageId to its metadata, or null if unknown. */
 export async function getImage(id) {
   if (dbReady()) {
-    const doc = await Image.findOne({ imageId: id }).lean()
-    return doc ? publicImage(doc) : null
+    try {
+      const doc = await Image.findOne({ imageId: id }).lean()
+      if (doc) return publicImage(doc)
+    } catch {
+      /* fall through to the local store */
+    }
   }
+  // fall back to the in-memory store — covers images saved locally when the DB
+  // write was blocked (Atlas over-quota), so a just-captured image still resolves
   const rec = memImages.get(id)
   return rec ? publicImage(rec) : null
 }
 
 /** Images directly derived from `parentId` (its immediate children). */
 async function getChildren(parentId) {
+  const local = [...memImages.values()].filter((r) => r.parentId === parentId).map(publicImage)
   if (dbReady()) {
-    const docs = await Image.find({ parentId }).lean()
-    return docs.map(publicImage)
+    try {
+      const docs = await Image.find({ parentId }).lean()
+      // merge DB + local (local covers images saved when the DB write was blocked),
+      // de-duped by id, so the version tree is complete either way
+      const seen = new Set(docs.map((d) => d.imageId))
+      return [...docs.map(publicImage), ...local.filter((r) => !seen.has(r.id))]
+    } catch {
+      /* fall through to local */
+    }
   }
-  return [...memImages.values()].filter((r) => r.parentId === parentId).map(publicImage)
+  return local
 }
 
 /**

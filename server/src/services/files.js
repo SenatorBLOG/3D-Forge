@@ -1,6 +1,7 @@
 import mongoose from 'mongoose'
 import { Readable } from 'node:stream'
 import { dbReady } from '../db.js'
+import { r2Enabled, putR2, getR2, readR2 } from './r2.js'
 
 // Cloud file storage (E3): when Mongo/Atlas is connected, image and model
 // bytes live in GridFS — the same database as the rest of our data — so any
@@ -27,6 +28,7 @@ const getBucket = () => {
 export const cloudFilesEnabled = () => {
   const mode = (process.env.FILES_STORAGE || '').toLowerCase()
   if (mode === 'local') return false
+  if (mode === 'r2') return r2Enabled() // Cloudflare R2 (S3), no Mongo needed for files
   return dbReady()
 }
 
@@ -42,6 +44,10 @@ export const isSafeFileName = (name) =>
  */
 export async function saveCloudFile(filename, bytes, mime) {
   if (!isSafeFileName(filename)) throw new Error(`unsafe filename: ${filename}`)
+  if (r2Enabled()) {
+    await putR2(filename, bytes, mime)
+    return `/files/${filename}`
+  }
   await new Promise((resolve, reject) => {
     // the modern driver dropped the top-level contentType option — carry the
     // mime in metadata so downloads can restore the right Content-Type
@@ -59,6 +65,11 @@ const mimeOf = (fileDoc) =>
 /** Read a stored file fully into a Buffer, or null if missing. */
 export async function readCloudFile(filename) {
   if (!isSafeFileName(filename)) return null
+  if (r2Enabled()) {
+    const r = await readR2(filename)
+    if (r) return r
+    if (!dbReady()) return null // R2 miss + no DB → gone; else try GridFS (old file)
+  }
   const found = await getBucket().find({ filename }).limit(1).toArray()
   if (!found.length) return null
   const chunks = []
@@ -75,6 +86,11 @@ export async function readCloudFile(filename) {
 /** Open a download stream for the route layer; null if missing. */
 export async function openCloudFile(filename) {
   if (!isSafeFileName(filename)) return null
+  if (r2Enabled()) {
+    const r = await getR2(filename)
+    if (r) return r
+    if (!dbReady()) return null // R2 miss + no DB → gone; else try GridFS (old file)
+  }
   const found = await getBucket().find({ filename }).limit(1).toArray()
   if (!found.length) return null
   return {

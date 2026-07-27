@@ -80,10 +80,35 @@ export async function generateImage(prompt) {
  * the model receives the current image and changes only what's asked, which is
  * what makes the iterate-on-one-picture loop possible. Returns { bytes, mime }.
  */
-export async function editImage(imageBytes, mime, instruction) {
+export async function editImage(imageBytes, mime, instruction, reference = null) {
   enforceImageDailyLimit()
-  return callGemini([
+  // wrap the user's instruction so the model changes ONLY what's asked and keeps
+  // the rest identical — otherwise it tends to redraw the whole figure, which
+  // makes the 4 reconstructed views drift apart (different shoulders/body/pose).
+  const guarded =
+    `Edit the FIRST image: ${instruction}. Change ONLY that. Keep everything else ` +
+    `exactly the same — the same pose, body, shoulders, proportions, colours, ` +
+    `lighting and plain background. Do not redraw or restyle the rest of the figure.`
+  const parts = [
     { inlineData: { mimeType: mime, data: Buffer.from(imageBytes).toString('base64') } },
-    { text: instruction },
-  ])
+  ]
+  // optional REFERENCE image (e.g. the approved front / a chosen half-side view):
+  // the same character from another angle, so every view stays the same subject.
+  if (reference?.bytes) {
+    parts.push({
+      inlineData: {
+        mimeType: reference.mime || 'image/png',
+        data: Buffer.from(reference.bytes).toString('base64'),
+      },
+    })
+    parts.push({
+      text:
+        `${guarded} The SECOND image is the SAME character from another angle — ` +
+        `keep the subject, its build, armour and colours consistent with it; only ` +
+        `the camera angle differs between the two.`,
+    })
+  } else {
+    parts.push({ text: guarded })
+  }
+  return callGemini(parts)
 }

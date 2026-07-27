@@ -154,16 +154,20 @@ export function getThumbnail(modelUrl) {
 // 4 → [front, left, back, right]. Returns { views: [{ label, dataUrl }] }.
 const VIEW_SIZE = 512
 
+// Clean front + back plus two 3/4 (полубок) side views — the flat ±90° profiles
+// looked alike / unreadable, and the 3/4 angle (like the original capture) reads
+// much better and reconstructs cleaner. All relative to FRONT_AZ (the viewer's
+// front) in renderViews.
 const viewPlan = (count) =>
   count <= 1
     ? [{ label: 'Front', az: 0 }]
     : count === 2
-      ? [{ label: 'Front', az: 0 }, { label: 'Side', az: Math.PI / 2 }]
+      ? [{ label: 'Front', az: 0 }, { label: 'Side', az: Math.PI / 4 }]
       : [
           { label: 'Front', az: 0 },
-          { label: 'Left', az: -Math.PI / 2 },
+          { label: 'Left', az: -Math.PI / 4 },
+          { label: 'Right', az: Math.PI / 4 },
           { label: 'Back', az: Math.PI },
-          { label: 'Right', az: Math.PI / 2 },
         ]
 
 function renderViews(modelUrl, count) {
@@ -217,11 +221,21 @@ function renderViews(modelUrl, count) {
           scene.add(model)
           camera.near = size / 100
           camera.far = size * 10
-          const R = size * 0.72
+          // pull the camera back far enough that the WHOLE model fits the frame
+          // (fit the bounding sphere of radius size/2 to the 45° FOV, + margin) —
+          // the old 0.72·size was too close and cropped the head/top off the views
+          const fov = (45 * Math.PI) / 180
+          const R = (size / 2 / Math.sin(fov / 2)) * 1.15
           const E = size * 0.06 // near-level → clean straight-on profiles
+          // "Front" = the SAME angle the live viewer shows the model from (its
+          // camera sits at x=0.7, z=0.9), so the labelled front matches what the
+          // user sees; the other views are ±90°/180° around that. This aligns
+          // labels to the model's apparent front without hardcoding per-model.
+          const FRONT_AZ = Math.atan2(0.7, 0.9)
           const views = []
           for (const v of viewPlan(count)) {
-            camera.position.set(Math.sin(v.az) * R, E, Math.cos(v.az) * R)
+            const az = v.az + FRONT_AZ
+            camera.position.set(Math.sin(az) * R, E, Math.cos(az) * R)
             camera.lookAt(0, 0, 0)
             camera.updateProjectionMatrix()
             renderer.render(scene, camera)

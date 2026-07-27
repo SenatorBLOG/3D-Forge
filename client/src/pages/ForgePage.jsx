@@ -191,6 +191,15 @@ export default function ForgePage() {
   const selectForEdit = (p) =>
     setSelection(!p ? null : p.isGroup ? { kind: 'group', group: p } : { kind: 'part', part: p })
   const selectedId = selection ? (selection.kind === 'group' ? selection.group.id : selection.part.id) : null
+  // parts of the current model (lifted from PartButtons) so a double-click on the
+  // 3D model can resolve the clicked mesh → part → select + open its edit panel
+  const partsRef = useRef([])
+  const pickPartByName = (name) => {
+    const part = partsRef.current.find((p) => p.name === name)
+    if (!part) return
+    selectForEdit(part)
+    openPartEdit(part)
+  }
 
   // persist the working model + version strip so an F5 doesn't wipe the history:
   // localStorage (instant, this browser) PLUS the server (durable — survives a
@@ -965,12 +974,14 @@ export default function ForgePage() {
           modelUrl={modelUrl}
           busy={swapBusy || busy}
           selectedId={selectedId}
+          onParts={(parts) => (partsRef.current = parts)}
           onHoverPart={setHighlightBox}
           onPickPart={(p) => {
-            // click a part/group chip → select it as the recolor SCOPE and surface
-            // the (adaptive) Recolor tab; re-click clears back to the whole model
+            // click a part/group chip → select it (recolor scope + glow) AND open
+            // its photo/edit panel on the left (Edit tab). Re-click closes it.
             selectForEdit(p)
-            if (p) setActiveTab('recolor')
+            if (p) openPartEdit(p)
+            else setActivePart(null)
           }}
         />
         <PhotoEditPanel
@@ -1007,13 +1018,7 @@ export default function ForgePage() {
 
         <div className="tab-pane" style={{ display: activeTab === 'recolor' ? 'flex' : 'none' }}>
         {modelUrl ? (
-          <RecolorPanel
-            onRecolor={recolorScoped}
-            scope={selection}
-            onShape={
-              selection ? () => openPartEdit(selection.kind === 'group' ? selection.group : selection.part) : null
-            }
-          />
+          <RecolorPanel onRecolor={recolorScoped} scope={selection} />
         ) : (
           <p className="pane-empty">Load or generate a model to recolor it.</p>
         )}
@@ -1079,6 +1084,8 @@ export default function ForgePage() {
                 selection ? (selection.kind === 'group' ? selection.group.names : [selection.part.name]) : null
               }
               manualHost={manualHost}
+              spatialClick={false} // no click-to-prompt popup for now (distracting)
+              onPickPartAt={pickPartByName} // double-click a part → select + open edit
             />
             <ModelVersionStrip
               versions={modelVersions}

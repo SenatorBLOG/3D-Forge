@@ -53,11 +53,15 @@ export default function ModelViewer({
   highlightNames = null,
   showcase = false,
   manualHost = null, // DOM node in the Edit tab where the manual tools render
+  spatialClick = true, // single-click adds a spatial-edit point (+popup); off = no popup
+  onPickPartAt = null, // double-click a part → report its mesh name (part selection)
 }) {
   const containerRef = useRef(null)
   // keep latest callbacks/points without re-creating the whole scene on re-render
   const callbacksRef = useRef({})
-  callbacksRef.current = { onAddPoint, onSelectPoint, onLoaded, onError }
+  callbacksRef.current = { onAddPoint, onSelectPoint, onLoaded, onError, onPickPartAt }
+  const spatialClickRef = useRef(true)
+  spatialClickRef.current = spatialClick
   const pointsRef = useRef(points)
   pointsRef.current = points
   // imperative handles the toolbar + points effect reach into the live scene
@@ -579,6 +583,7 @@ export default function ModelViewer({
       downAt = null
       if (wasDrag || !model) return
       if (toolRef.current) return // an edit tool owns clicks — no point-adding
+      if (!spatialClickRef.current) return // spatial click-to-prompt disabled
 
       const rect = renderer.domElement.getBoundingClientRect()
       pointer.x = ((e.clientX - rect.left) / rect.width) * 2 - 1
@@ -593,8 +598,22 @@ export default function ModelViewer({
       }
     }
 
+    // double-click a part → report its mesh/node name so the parent selects that
+    // part (and opens its edit panel). Single clicks stay free for orbit/drag.
+    const onDoubleClick = (e) => {
+      if (!model || toolRef.current) return
+      const rect = renderer.domElement.getBoundingClientRect()
+      pointer.x = ((e.clientX - rect.left) / rect.width) * 2 - 1
+      pointer.y = -((e.clientY - rect.top) / rect.height) * 2 + 1
+      raycaster.setFromCamera(pointer, camera)
+      const hit = raycaster.intersectObject(model, true)[0]
+      const name = hit?.object?.name || hit?.object?.parent?.name
+      if (name) callbacksRef.current.onPickPartAt?.(name)
+    }
+
     renderer.domElement.addEventListener('pointerdown', onPointerDown)
     renderer.domElement.addEventListener('pointerup', onPointerUp)
+    renderer.domElement.addEventListener('dblclick', onDoubleClick)
     // labels follow the model as the camera moves (orbit/zoom/pan)
     controls.addEventListener('change', updateLabels)
 
@@ -799,6 +818,7 @@ export default function ModelViewer({
       resizeObserver.disconnect()
       renderer.domElement.removeEventListener('pointerdown', onPointerDown)
       renderer.domElement.removeEventListener('pointerup', onPointerUp)
+      renderer.domElement.removeEventListener('dblclick', onDoubleClick)
       renderer.domElement.removeEventListener('pointerdown', onToolDown)
       renderer.domElement.removeEventListener('pointermove', onToolMove)
       window.removeEventListener('pointerup', onToolUp)
