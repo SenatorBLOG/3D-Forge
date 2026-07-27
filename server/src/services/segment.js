@@ -350,8 +350,9 @@ async function storeModelBytes(bytes, prefix = 'edit') {
  * Collect a doc's mesh primitives as world-space triangle soup. When `onlyIndex`
  * is given, only the node at that traversal index (same order segmentModel used)
  * is taken. Normals are copied as-is (generated GLBs are near-identity), indices
- * as-is, and the material reduces to its baseColorFactor — textures are dropped,
- * an accepted tradeoff of the experimental stitch path.
+ * as-is, indices as-is, and the base-colour TEXTURE (+ UVs) is carried through so
+ * a rebuilt/multiview part keeps its texture; untextured parts fall back to the
+ * material's flat baseColorFactor.
  */
 function collectWorldPrimitives(doc, onlyIndex = null, onlyPrim = null) {
   const prims = []
@@ -380,11 +381,23 @@ function collectWorldPrimitives(doc, onlyIndex = null, onlyPrim = null) {
         }
         const nrm = prim.getAttribute('NORMAL')
         const idxAcc = prim.getIndices()
+        const uvAcc = prim.getAttribute('TEXCOORD_0')
+        const mat = prim.getMaterial()
+        // carry the base-colour TEXTURE through the stitch (not just a flat colour)
+        // so a rebuilt/multiview part keeps its texture instead of going plain grey
+        let texture = null
+        const baseTex = mat?.getBaseColorTexture?.()
+        const img = baseTex?.getImage?.()
+        if (img) texture = { bytes: img, mime: baseTex.getMimeType?.() || 'image/png' }
         prims.push({
           positions,
           normals: nrm ? new Float32Array(nrm.getArray()) : null,
           indices: idxAcc ? idxAcc.getArray().slice() : null,
-          color: prim.getMaterial()?.getBaseColorFactor() || [0.62, 0.65, 0.7, 1],
+          uvs: uvAcc ? new Float32Array(uvAcc.getArray()) : null,
+          color: mat?.getBaseColorFactor() || [0.62, 0.65, 0.7, 1],
+          metallic: mat?.getMetallicFactor?.() ?? 0,
+          roughness: mat?.getRoughnessFactor?.() ?? 0.7,
+          texture,
         })
       }
     })
@@ -418,11 +431,23 @@ function addPrimsToMesh(doc, buffer, mesh, prims, mapPoint = null) {
         doc.createAccessor().setType('SCALAR').setArray(new Uint32Array(p.indices)).setBuffer(buffer),
       )
     }
+    // UVs + material: if the source carried a texture, re-create it and keep the
+    // UVs so the stitched region shows its texture; otherwise fall back to the
+    // flat base colour (the old behaviour).
     const mat = doc
       .createMaterial('part-mat')
-      .setBaseColorFactor(p.color)
-      .setMetallicFactor(0)
-      .setRoughnessFactor(0.7)
+      .setMetallicFactor(p.metallic ?? 0)
+      .setRoughnessFactor(p.roughness ?? 0.7)
+    if (p.texture && p.uvs) {
+      prim.setAttribute(
+        'TEXCOORD_0',
+        doc.createAccessor().setType('VEC2').setArray(p.uvs).setBuffer(buffer),
+      )
+      const tex = doc.createTexture('part-tex').setImage(p.texture.bytes).setMimeType(p.texture.mime)
+      mat.setBaseColorTexture(tex).setBaseColorFactor([1, 1, 1, 1])
+    } else {
+      mat.setBaseColorFactor(p.color)
+    }
     prim.setMaterial(mat)
     mesh.addPrimitive(prim)
   }

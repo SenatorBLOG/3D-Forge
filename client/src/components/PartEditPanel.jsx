@@ -21,7 +21,11 @@ export default function PartEditPanel({ modelUrl, part, onClose, onStitched }) {
   // 4.4 — how many views to rebuild the PART from. Clean, axis-aligned views
   // (0/90/180/270) also help the rebuilt part come back in the right orientation,
   // so it stitches straighter. 1 = quick/cheap; 4 = best.
-  const [pvCount, setPvCount] = useState(1)
+  // A GROUP (a whole arm) rebuilds from 4 clean axis-aligned views by default:
+  // multiview returns a TEXTURED mesh (texture:true) and the level 0/90/180/270
+  // shots come back straighter than a single hallucinated front photo. A single
+  // part defaults to the quick 1-view path.
+  const [pvCount, setPvCount] = useState(part.isGroup ? 4 : 1)
 
   // the part identity this panel works on — a swap of the underlying model closes it
   const partIdRef = useRef(part?.id)
