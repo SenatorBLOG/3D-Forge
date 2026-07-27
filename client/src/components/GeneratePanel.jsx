@@ -401,7 +401,7 @@ export default function GeneratePanel({
 
   return (
     <section className="panel" onPaste={mode === 'image' ? onPaste : undefined}>
-      <h2>Generate</h2>
+      <span className="tool-label">Generate</span>
 
       <div className="gen-mode">
         <button

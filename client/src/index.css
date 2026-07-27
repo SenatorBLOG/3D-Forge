@@ -644,6 +644,9 @@ body::before {
   font-size: 18px;
 }
 
+.anim-modal-head .tool-label {
+  flex: 1;
+}
 .anim-modal-head .point-popup-close {
   margin-left: auto;
 }

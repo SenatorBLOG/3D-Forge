@@ -42,10 +42,7 @@ export default function RecolorPanel({ onRecolor, scope = null, onShape }) {
 
   return (
     <section className="panel">
-      <div className="spatial-head">
-        <span className="spatial-flag">🎨 Surface</span>
-        <h2>Recolor</h2>
-      </div>
+      <span className="tool-label">Recolor</span>
       <div className="recolor-scope">
         <span className="hint">Applying to:</span>
         <span className={`recolor-scope-chip ${scope ? 'on' : ''}`}>{scopeLabel}</span>
@@ -56,16 +53,12 @@ export default function RecolorPanel({ onRecolor, scope = null, onShape }) {
         )}
         {scope && <span className="hint">— click the chip again for the whole model</span>}
       </div>
-      <p className="spatial-blurb">
-        {scope ? (
-          <>Tint just this {scope.kind} — e.g. “matte black”, “glossy red”. Instant &amp; free, the rest untouched.</>
-        ) : (
-          <>Change colour by prompt — shape stays 1:1, instant &amp; free. Tint the whole model
-          (“matte black”, “glossy red”) or <strong>swap specific colours</strong>: “white to black,
-          blue to red”. Click a part or group to recolor just that.</>
-        )}
-      </p>
-      <div className="input-with-mic">
+      <span className="hint">
+        {scope
+          ? `Tint just this ${scope.kind} — instant, free, the rest untouched.`
+          : 'Recolor the whole model, or click a part / group to recolor just that.'}
+      </span>
+      <div className="reactor">
         <textarea
           className="reactor-input reactor-input--sm"
           value={prompt}
@@ -102,8 +95,14 @@ export default function RecolorPanel({ onRecolor, scope = null, onShape }) {
           ))}
         </div>
       )}
-      <button className="submit" onClick={run} disabled={busy || !prompt.trim()}>
-        {busy ? 'Recoloring…' : scope ? `🎨 Recolor ${scopeName}` : '🎨 Recolor (keep shape)'}
+      <button className="tool-cta" onClick={run} disabled={busy || !prompt.trim()}>
+        {busy
+          ? 'Recoloring…'
+          : !prompt.trim()
+            ? 'Describe a colour to start'
+            : scope
+              ? `Recolor ${scopeName}`
+              : 'Recolor · keep shape'}
       </button>
       {error && <span className="url-error">{error}</span>}
     </section>
