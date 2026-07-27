@@ -223,9 +223,15 @@ function renderViews(modelUrl, count) {
           const fov = (45 * Math.PI) / 180
           const R = (size / 2 / Math.sin(fov / 2)) * 1.15
           const E = size * 0.06 // near-level → clean straight-on profiles
+          // "Front" = the SAME angle the live viewer shows the model from (its
+          // camera sits at x=0.7, z=0.9), so the labelled front matches what the
+          // user sees; the other views are ±90°/180° around that. This aligns
+          // labels to the model's apparent front without hardcoding per-model.
+          const FRONT_AZ = Math.atan2(0.7, 0.9)
           const views = []
           for (const v of viewPlan(count)) {
-            camera.position.set(Math.sin(v.az) * R, E, Math.cos(v.az) * R)
+            const az = v.az + FRONT_AZ
+            camera.position.set(Math.sin(az) * R, E, Math.cos(az) * R)
             camera.lookAt(0, 0, 0)
             camera.updateProjectionMatrix()
             renderer.render(scene, camera)

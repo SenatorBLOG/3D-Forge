@@ -135,7 +135,8 @@ export default function PhotoEditPanel({ modelUrl, onModelReady3D }) {
         const ed = await fetch(`/api/images/${encodeURIComponent(upData.image.id)}/edit`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ instruction: lastEdit.instruction }),
+          // reference the approved front photo so every view stays the same character
+          body: JSON.stringify({ instruction: lastEdit.instruction, referenceId: currentId }),
         })
         const edData = await readJson(ed)
         prepared.push({ id: edData.image.id, url: edData.image.url, label: v.label })
@@ -186,7 +187,8 @@ export default function PhotoEditPanel({ modelUrl, onModelReady3D }) {
       const ed = await fetch(`/api/images/${encodeURIComponent(mvViews[i].id)}/edit`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ instruction: instr }),
+        // reference the FRONT view so this side stays the same character as the front
+        body: JSON.stringify({ instruction: instr, referenceId: mvViews[0]?.id }),
       })
       const edData = await readJson(ed)
       setMvViews((prev) =>
