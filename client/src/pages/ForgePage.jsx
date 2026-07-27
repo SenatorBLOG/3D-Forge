@@ -166,14 +166,10 @@ export default function ForgePage() {
   const viewerApiRef = useRef({})
   currentVersionIdRef.current = currentVersionId
 
-  // Task 6 — animation session (tied to the current model lineage). rigTaskId is
-  // remembered so the 25-cr rig is paid only once; animEntriesRef holds the
-  // single-clip GLBs we merge into one multi-clip file; appliedClips greys the
-  // cards already baked in. Reset when a different base model is loaded.
+  // Task 6 — animation session. rigTaskId + applied clips persist across F5 and
+  // are stored per-version, so an already-rigged model adds another clip for +10
+  // (no re-rig). Reset when a different BASE model is loaded.
   const [showAnimate, setShowAnimate] = useState(false)
-  // rigTaskId + applied clips persist across F5 (restored from the session) so a
-  // model you already rigged doesn't ask for the 25-cr skeleton again — you can
-  // add another animation for just +10, as long as you stay on that model.
   const [rigTaskId, setRigTaskId] = useState(restored?.rigTaskId || null)
   const [appliedClips, setAppliedClips] = useState(restored?.appliedClips || [])
   const animEntriesRef = useRef(restored?.animEntries || []) // [{ preset, url }] single-clip GLBs
@@ -184,16 +180,14 @@ export default function ForgePage() {
     setShowAnimate(false)
   }
 
-  // Task 8 — the current edit SCOPE for recolor: null = whole model, or a single
-  // part / a group (chosen by clicking its chip). One adaptive Recolor panel
-  // applies to whatever is selected, so there's no separate group panel.
+  // Task 8 — current edit SCOPE for recolor: null = whole model, or a part/group
+  // (chosen by clicking its chip). One adaptive Recolor applies to the selection.
   const [selection, setSelection] = useState(null) // null | {kind:'part',part} | {kind:'group',group}
   const selectionBox = selection
     ? selection.kind === 'group'
       ? selection.group.bbox
       : selection.part.bbox
     : null
-  // toggle scope: null clears back to the whole model (a chip re-click sends null)
   const selectForEdit = (p) =>
     setSelection(!p ? null : p.isGroup ? { kind: 'group', group: p } : { kind: 'part', part: p })
   const selectedId = selection ? (selection.kind === 'group' ? selection.group.id : selection.part.id) : null
@@ -209,8 +203,8 @@ export default function ForgePage() {
         localStorage.removeItem(SESSION_KEY)
         return
       }
-      // a transient non-persistable URL (blob: preview of an upload) must NOT wipe
-      // the saved history — just skip this save and keep the last good session
+      // a transient non-persistable URL (blob: upload preview) must NOT wipe the
+      // saved history — just skip this save and keep the last good session
       if (!persistable(modelUrl)) return
       localStorage.setItem(
         SESSION_KEY,
@@ -289,8 +283,8 @@ export default function ForgePage() {
           label: version.label || 'Edit',
           parentId,
           kind: version.kind,
-          // Task 6 — an animated version carries its rig so re-opening it lets you
-          // add more clips for +10 (no re-rig). Non-anim edits leave these null.
+          // Task 6 — an animated version carries its rig so re-opening it adds
+          // more clips for +10 (no re-rig). Non-anim edits leave these null.
           rigTaskId: version.rigTaskId ?? null,
           clips: version.clips ?? null,
           animEntries: version.animEntries ?? null,
@@ -301,8 +295,8 @@ export default function ForgePage() {
   }
 
   // click a version card → load that model back without disturbing the others.
-  // Restore that version's animation rig (if any) so you can add more clips to an
-  // already-animated version for +10 — instead of it asking for a fresh skeleton.
+  // Restore that version's animation rig (if any) so an already-animated version
+  // can add more clips for +10 instead of asking for a fresh skeleton.
   const loadVersion = (v) => {
     if (v.id === currentVersionIdRef.current) return
     setLastEditPrompt(null)
@@ -389,8 +383,7 @@ export default function ForgePage() {
       label = `${scopeName}: ${parsed.label}`
     }
     const buf = await api.exportModel()
-    // record=0 → store as a version only, NOT in the Library (user sends it there
-    // explicitly via the version card's "to Library" button)
+    // record=0 → version only, not in the Library (user sends it there explicitly)
     const res = await fetch(
       `/api/models/upload?record=0&name=${encodeURIComponent(`recolor-${label}`)}`,
       { method: 'POST', headers: { 'Content-Type': 'application/octet-stream' }, body: buf },
@@ -402,10 +395,9 @@ export default function ForgePage() {
     swapModel(data.url, { version: { as: 'child', label: `Recolor: ${label}` } })
   }
 
-  // Task 6 — rig (once) + apply the selected animations, then merge every clip
-  // into ONE multi-clip GLB saved as a version. `progress` reports stage text to
-  // the modal. Only NEW clips are charged; the 25-cr rig runs only when there's
-  // no rigTaskId yet (tracked locally, no extra API call).
+  // Task 6 — rig (once) + apply the selected animations, merge every clip into one
+  // multi-clip GLB saved as a version. Only NEW clips are charged; the rig runs
+  // only when there's no rigTaskId yet, and is stamped onto the version.
   const runAnimate = async (presets, progress) => {
     let rig = rigTaskId
     if (!rig) {
@@ -437,7 +429,6 @@ export default function ForgePage() {
       if (!data.modelUrl) throw new Error('Animation returned no model (missing TRIPO_API_KEY?)')
       animEntriesRef.current.push({ preset: data.preset || preset, url: data.modelUrl })
     }
-    // combine every single-clip GLB into one multi-clip file (free, client-side)
     const entries = animEntriesRef.current
     let finalUrl = entries[0].url
     if (entries.length > 1) {
@@ -456,8 +447,6 @@ export default function ForgePage() {
     setAppliedClips(names)
     setBaseModelPrompt(`Animated: ${names.join(', ')}`)
     setLastEditPrompt(null)
-    // attach the rig + clips to the new version so re-opening it can add more
-    // animations for +10 (no re-rig), even after navigating away or F5
     swapModel(finalUrl, {
       version: {
         as: 'child',
@@ -852,55 +841,29 @@ export default function ForgePage() {
               {segBusy ? 'Segmenting…' : 'Segment into parts'}
             </button>
             {segMsg && <span className="hint">{segMsg}</span>}
+            <button
+              className="tool-cta tool-cta--sm"
+              onClick={() => setShowAnimate(true)}
+              title="Rig the model and add animations (walk / run / jump…) — Tripo biped models"
+            >
+              🎬 Animate{appliedClips.length ? ` (${appliedClips.length})` : ''}
+            </button>
             <button type="button" className="ghost-button" onClick={clearModel}>
               ✕ Clear canvas
             </button>
-          )}
-          {modelUrl && (
-            <>
-              <button
-                className="submit"
-                onClick={segmentTripo}
-                disabled={segBusy}
-                title="Real semantic segmentation via Tripo (~40 credits) — Tripo-generated models only"
-              >
-                {segBusy ? 'Segmenting…' : '⬗ Segment (Tripo)'}
-              </button>
-              {segMsg && <span className="hint">{segMsg}</span>}
-              <button
-                className="submit"
-                onClick={() => setShowAnimate(true)}
-                title="Rig the model and add animations (walk / run / jump…) — Tripo biped models"
-              >
-                🎬 Animate{appliedClips.length ? ` (${appliedClips.length})` : ''}
-              </button>
-            </>
-          )}
-        </section>
-        {modelUrl && (
-        <section className="panel spatial-panel">
-          <div className="spatial-head">
-            <span className="spatial-flag">✦ Flagship</span>
-            <h2>Spatial edit</h2>
           </div>
-          <p className="spatial-blurb">
-            Click any part of the model and describe a local change — region-grounded edits a
-            plain text prompt can’t target. This is what makes 3D&nbsp;Forge different.
-          </p>
+        )}
+        </div>
+
+        <div className="tab-pane" style={{ display: activeTab === 'edit' ? 'flex' : 'none' }}>
+        {modelUrl ? (
+        <>
+        <section className="panel spatial-panel">
+          <span className="tool-label">Spatial edit</span>
           <div className="field">
             <label>Selected points ({points.length})</label>
             {points.length === 0 ? (
-              <ol className="spatial-steps">
-                <li>
-                  <strong>Click</strong> a spot on the model
-                </li>
-                <li>
-                  <strong>Describe</strong> the change for that point
-                </li>
-                <li>
-                  <strong>Send edit</strong> — or Compare it against a plain prompt
-                </li>
-              </ol>
+              <p className="spatial-tip">👆 Click the model, then describe the change.</p>
             ) : (
               <div className="point-list">
                 {points.map((p, i) => (
@@ -1001,8 +964,14 @@ export default function ForgePage() {
         <PartButtons
           modelUrl={modelUrl}
           busy={swapBusy || busy}
+          selectedId={selectedId}
           onHoverPart={setHighlightBox}
-          onPickPart={openPartEdit}
+          onPickPart={(p) => {
+            // click a part/group chip → select it as the recolor SCOPE and surface
+            // the (adaptive) Recolor tab; re-click clears back to the whole model
+            selectForEdit(p)
+            if (p) setActiveTab('recolor')
+          }}
         />
         <PhotoEditPanel
             modelUrl={modelUrl}
@@ -1028,7 +997,16 @@ export default function ForgePage() {
             }}
           />
         )}
-        {modelUrl && (
+        </>
+        ) : (
+          <p className="pane-empty">
+            Generate or load a model first — then click any part of it to reshape, photo-edit, or swap that region.
+          </p>
+        )}
+        </div>
+
+        <div className="tab-pane" style={{ display: activeTab === 'recolor' ? 'flex' : 'none' }}>
+        {modelUrl ? (
           <RecolorPanel
             onRecolor={recolorScoped}
             scope={selection}
@@ -1036,7 +1014,10 @@ export default function ForgePage() {
               selection ? () => openPartEdit(selection.kind === 'group' ? selection.group : selection.part) : null
             }
           />
+        ) : (
+          <p className="pane-empty">Load or generate a model to recolor it.</p>
         )}
+        </div>
       </aside>
 
       {showAnimate && modelUrl && (
@@ -1097,6 +1078,7 @@ export default function ForgePage() {
               highlightNames={
                 selection ? (selection.kind === 'group' ? selection.group.names : [selection.part.name]) : null
               }
+              manualHost={manualHost}
             />
             <ModelVersionStrip
               versions={modelVersions}
@@ -1106,15 +1088,6 @@ export default function ForgePage() {
               onDownload={downloadVersion}
               onToLibrary={versionToLibrary}
             />
-            {modelStatus === 'ready' && (
-              <PartButtons
-                modelUrl={modelUrl}
-                busy={swapBusy || busy}
-                selectedId={selectedId}
-                onHoverPart={setHighlightBox}
-                onPickPart={selectForEdit}
-              />
-            )}
           </>
         ) : busy ? (
           <div className="forge-empty">
