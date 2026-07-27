@@ -2118,7 +2118,7 @@ body::before {
   position: relative;
   display: grid;
   place-items: center;
-  min-height: 130px;
+  min-height: 200px;
   border: 1.5px dashed var(--line);
   border-radius: var(--radius);
   background: var(--panel-2);
@@ -2153,7 +2153,7 @@ body::before {
 
 .image-drop-preview {
   width: 100%;
-  max-height: 220px;
+  max-height: 320px;
   object-fit: contain;
   display: block;
 }
@@ -5997,7 +5997,7 @@ button.tag:hover {
 .mv-view img {
   width: 100%;
   aspect-ratio: 1 / 1;
-  object-fit: cover;
+  object-fit: contain; /* show the WHOLE rendered view, never crop the model */
   border-radius: 8px;
   border: 1px solid var(--line);
   background: rgba(255, 255, 255, 0.03);

@@ -217,7 +217,11 @@ function renderViews(modelUrl, count) {
           scene.add(model)
           camera.near = size / 100
           camera.far = size * 10
-          const R = size * 0.72
+          // pull the camera back far enough that the WHOLE model fits the frame
+          // (fit the bounding sphere of radius size/2 to the 45° FOV, + margin) —
+          // the old 0.72·size was too close and cropped the head/top off the views
+          const fov = (45 * Math.PI) / 180
+          const R = (size / 2 / Math.sin(fov / 2)) * 1.15
           const E = size * 0.06 // near-level → clean straight-on profiles
           const views = []
           for (const v of viewPlan(count)) {
