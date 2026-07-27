@@ -202,9 +202,8 @@ export default function PhotoEditPanel({ modelUrl, onModelReady3D }) {
 
   const loadVersions = async (id) => {
     const res = await fetch(`/api/images/${encodeURIComponent(id)}/versions`)
-    const data = await res.json()
-    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`)
-    setVersions(data.versions)
+    const data = await readJson(res) // tolerant of an empty body (server reload)
+    setVersions(data.versions || [])
     setCurrentId(id)
   }
 
@@ -223,8 +222,7 @@ export default function PhotoEditPanel({ modelUrl, onModelReady3D }) {
         headers: { 'Content-Type': blob.type || 'image/png' },
         body: blob,
       })
-      const data = await res.json()
-      if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`)
+      const data = await readJson(res) // tolerant of an empty body (server reload)
       setStub(false)
       await loadVersions(data.image.id) // starts a fresh edit family at V1
     } catch (e) {
@@ -248,8 +246,7 @@ export default function PhotoEditPanel({ modelUrl, onModelReady3D }) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ instruction: instr }),
       })
-      const data = await res.json()
-      if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`)
+      const data = await readJson(res) // tolerant of an empty body (server reload)
       setStub(!!data.stub)
       setLastEdit({ sourceId, instruction: instr })
       await loadVersions(data.image.id)
@@ -318,25 +315,6 @@ export default function PhotoEditPanel({ modelUrl, onModelReady3D }) {
                 </button>
               )}
               {editError && <span className="url-error">{editError}</span>}
-
-              {/* quick single-photo → 3D (Meshy path) — disabled for now; the
-                  primary build is the multi-view flow below (Prepare views → Build) */}
-              <button
-                className="ghost-button"
-                disabled
-                title="For now, build via Prepare views → Build (below). Quick single-photo rebuild is off."
-              >
-                🧊 Rebuild {currentImage?.version ? `V${currentImage.version}` : 'photo'} in 3D (soon)
-              </button>
-              {gen3d.generating && (
-                <div className="progress" aria-hidden="true">
-                  <div className="progress-fill" style={{ width: `${gen3d.task.progress}%` }} />
-                </div>
-              )}
-              {gen3d.generating && gen3d.task.mock && (
-                <span className="hint">mock mode — set MESHY_API_KEY for a real rebuild</span>
-              )}
-              {gen3d.error && <span className="url-error">{gen3d.error}</span>}
 
               {/* Multi-view: pick view count → render clean views → preview → build */}
               <div className="mv-count" role="radiogroup" aria-label="How many views">
@@ -443,6 +421,18 @@ export default function PhotoEditPanel({ modelUrl, onModelReady3D }) {
                 <span className="hint">mock mode — set TRIPO_API_KEY for a real multi-view rebuild</span>
               )}
               {(mvError || genMV.error) && <span className="url-error">{mvError || genMV.error}</span>}
+
+              {/* quick single-photo Meshy rebuild — disabled for now, shown at the
+                  bottom only once views exist (the Tripo build above is primary) */}
+              {mvViews && (
+                <button
+                  className="ghost-button"
+                  disabled
+                  title="Quick single-photo rebuild (Meshy) is off for now — use Build 3D above."
+                >
+                  🧊 Rebuild {currentImage?.version ? `V${currentImage.version}` : 'photo'} in 3D (soon)
+                </button>
+              )}
             </div>
             <div className="image-lab-versions">
               {versions.map((v) => (
