@@ -105,11 +105,19 @@ export async function getImage(id) {
 
 /** Images directly derived from `parentId` (its immediate children). */
 async function getChildren(parentId) {
+  const local = [...memImages.values()].filter((r) => r.parentId === parentId).map(publicImage)
   if (dbReady()) {
-    const docs = await Image.find({ parentId }).lean()
-    return docs.map(publicImage)
+    try {
+      const docs = await Image.find({ parentId }).lean()
+      // merge DB + local (local covers images saved when the DB write was blocked),
+      // de-duped by id, so the version tree is complete either way
+      const seen = new Set(docs.map((d) => d.imageId))
+      return [...docs.map(publicImage), ...local.filter((r) => !seen.has(r.id))]
+    } catch {
+      /* fall through to local */
+    }
   }
-  return [...memImages.values()].filter((r) => r.parentId === parentId).map(publicImage)
+  return local
 }
 
 /**

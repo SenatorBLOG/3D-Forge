@@ -283,7 +283,7 @@ export default function PhotoEditPanel({ modelUrl, onModelReady3D }) {
                   rows={2}
                   value={instruction}
                   onChange={(e) => setInstruction(e.target.value)}
-                  placeholder={`Change V${currentImage?.version} — e.g. "add horns to the head"`}
+                  placeholder={`Change ${currentImage?.version ? `V${currentImage.version}` : 'the photo'} — e.g. "add horns to the head"`}
                   disabled={editing}
                 />
                 <MicButton onTranscript={appendSpeech} disabled={editing} />
@@ -302,13 +302,14 @@ export default function PhotoEditPanel({ modelUrl, onModelReady3D }) {
               )}
               {editError && <span className="url-error">{editError}</span>}
 
+              {/* quick single-photo → 3D (Meshy path) — disabled for now; the
+                  primary build is the multi-view flow below (Prepare views → Build) */}
               <button
-                className="submit gen-go"
-                onClick={rebuild3D}
-                disabled={editing || gen3d.generating}
-                title="Rebuild this photo into a new 3D model (kept as a new version)"
+                className="ghost-button"
+                disabled
+                title="For now, build via Prepare views → Build (below). Quick single-photo rebuild is off."
               >
-                {gen3d.generating ? `Building 3D… ${gen3d.task.progress}%` : `🧊 Rebuild V${currentImage?.version} in 3D`}
+                🧊 Rebuild {currentImage?.version ? `V${currentImage.version}` : 'photo'} in 3D (soon)
               </button>
               {gen3d.generating && (
                 <div className="progress" aria-hidden="true">
