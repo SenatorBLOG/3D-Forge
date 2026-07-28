@@ -1134,7 +1134,8 @@ body::before {
 
 .part-group-toggle,
 .part-group-make,
-.part-group-cancel {
+.part-group-cancel,
+.part-label-ai {
   padding: 4px 10px;
   border: 1px solid var(--line);
   border-radius: 13px;
@@ -1147,13 +1148,15 @@ body::before {
 }
 
 .part-group-toggle:hover:not(:disabled),
-.part-group-make:hover:not(:disabled) {
+.part-group-make:hover:not(:disabled),
+.part-label-ai:hover:not(:disabled) {
   color: var(--forge);
   border-color: var(--forge);
 }
 
 .part-group-toggle:disabled,
-.part-group-make:disabled {
+.part-group-make:disabled,
+.part-label-ai:disabled {
   color: var(--text-faint);
   cursor: not-allowed;
 }
