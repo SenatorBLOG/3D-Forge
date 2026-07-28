@@ -345,17 +345,36 @@ export async function segmentByMarks(modelUrl, seeds) {
       dropped.push(seedPts[li].label)
       continue
     }
+    // MERGE every source-prim bucket of this seed into ONE primitive per node —
+    // so extractParts sees a single-primitive node and names the part from the
+    // NODE (the user's label), not the material. A single-bucket seed keeps its
+    // texture; a seed spanning several source materials falls back to a flat
+    // colour (its dominant material) — textures across materials can't share one
+    // UV set. Naming + clean split is the point here.
+    const single = bks.length === 1 ? bks[0] : null
+    const positions = new Float32Array(bks.reduce((n, b) => n + b.pos.length, 0))
+    const hasNrm = bks.every((b) => b.nrm)
+    const normals = hasNrm ? new Float32Array(positions.length) : null
+    let off = 0
+    for (const b of bks) {
+      positions.set(b.pos, off)
+      if (normals) normals.set(b.nrm, off)
+      off += b.pos.length
+    }
+    const keepTex = single && single.uv && single.srcPrim.texture
+    const soup = [
+      {
+        positions,
+        normals,
+        indices: null, // de-indexed
+        uvs: keepTex ? new Float32Array(single.uv) : null,
+        color: bks[0].srcPrim.color,
+        metallic: bks[0].srcPrim.metallic,
+        roughness: bks[0].srcPrim.roughness,
+        texture: keepTex ? single.srcPrim.texture : null,
+      },
+    ]
     const mesh = doc.createMesh(seedPts[li].label)
-    const soup = bks.map((bk) => ({
-      positions: new Float32Array(bk.pos),
-      normals: bk.nrm ? new Float32Array(bk.nrm) : null,
-      indices: null, // de-indexed
-      uvs: bk.uv ? new Float32Array(bk.uv) : null,
-      color: bk.srcPrim.color,
-      metallic: bk.srcPrim.metallic,
-      roughness: bk.srcPrim.roughness,
-      texture: bk.srcPrim.texture,
-    }))
     addPrimsToMesh(doc, buffer, mesh, soup)
     scene.addChild(doc.createNode(seedPts[li].label).setMesh(mesh))
   }
