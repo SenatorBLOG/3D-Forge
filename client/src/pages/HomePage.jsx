@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import PostCard from '../components/PostCard.jsx'
 import CardSkeleton from '../components/CardSkeleton.jsx'
+import MicButton from '../components/MicButton.jsx'
 import { getThumbnail } from '../lib/thumbnailer.js'
 
 const QUICK = ['a neon samurai helmet', 'a small dragon', 'a hover bike', 'a rune-etched axe']
@@ -50,8 +51,6 @@ export default function HomePage() {
   const navigate = useNavigate()
   const [mode, setMode] = useState('text') // 'text' | 'image'
   const [prompt, setPrompt] = useState('')
-  const [engine, setEngine] = useState('meshy') // 'meshy' | 'tripo'
-  const [textured, setTextured] = useState(false) // Meshy-only texturing stage
   const [image, setImage] = useState(null) // { id }
   const [preview, setPreview] = useState(null) // object URL
   const [uploading, setUploading] = useState(false)
@@ -121,18 +120,22 @@ export default function HomePage() {
     if (item) uploadImage(item.getAsFile())
   }
 
-  const canGenerate = mode === 'text' ? !!prompt.trim() : !!image
+  const canGenerate = mode === 'image' ? !!image : !!prompt.trim()
+  const appendSpeech = (t) => setPrompt((p) => (p.trim() ? `${p.trim()} ${t}` : t))
+  // the landing is a launchpad — it hands the idea to the Forge, where the engine
+  // and texturing choices actually live (no duplicated controls here).
   const generate = () => {
-    // texturing is Meshy-only; Tripo returns a finished textured model
-    const extra = `&engine=${engine}${engine === 'meshy' && textured ? '&textured=1' : ''}`
-    if (mode === 'text') {
-      const p = prompt.trim()
-      if (!p) return
-      navigate(`/forge?prompt=${encodeURIComponent(p)}&autostart=1${extra}`)
-    } else {
+    if (mode === 'image') {
       if (!image) return
-      navigate(`/forge?mode=image&imageId=${encodeURIComponent(image.id)}&autostart=1${extra}`)
+      navigate(`/forge?mode=image&imageId=${encodeURIComponent(image.id)}&autostart=1`)
+      return
     }
+    const p = prompt.trim()
+    if (!p) return
+    // imagine → open the Forge's Imagine tab with the prompt (two-step: image → 3D);
+    // describe → auto-start the 3D generation straight away
+    if (mode === 'imagine') navigate(`/forge?mode=imagine&prompt=${encodeURIComponent(p)}`)
+    else navigate(`/forge?prompt=${encodeURIComponent(p)}&autostart=1`)
   }
 
   // honest, derived community stats (no fabricated logos/testimonials)
@@ -147,49 +150,52 @@ export default function HomePage() {
   return (
     <div className="home">
       <section className="gen-console">
-        {/* aurora glow blobs drifting behind the console */}
-        <div className="gen-aurora" aria-hidden="true">
-          <span className="gen-blob gen-blob-a" />
-          <span className="gen-blob gen-blob-b" />
-          <span className="gen-blob gen-blob-c" />
-        </div>
         <h1 className="gen-title">
           Forge <span className="gen-title-grad">anything</span> in 3D
         </h1>
         <div className="gen-console-inner" onPaste={mode === 'image' ? onPaste : undefined}>
-          <span className="gen-console-kicker">TEXT · IMAGE → 3D</span>
+          <span className="tool-label">Create</span>
 
-          <div className="gen-console-tabs">
-            <button
-              className={`gen-console-tab ${mode === 'text' ? 'active' : ''}`}
-              onClick={() => setMode('text')}
-            >
-              Describe
-            </button>
-            <button
-              className={`gen-console-tab ${mode === 'image' ? 'active' : ''}`}
-              onClick={() => setMode('image')}
-            >
-              From image
-            </button>
+          <div className="gen-mode">
+            {[
+              ['text', 'Describe'],
+              ['image', 'From image'],
+              ['imagine', 'Imagine'],
+            ].map(([m, label]) => (
+              <button
+                key={m}
+                type="button"
+                className={`gen-mode-tab ${mode === m ? 'active' : ''}`}
+                onClick={() => setMode(m)}
+              >
+                {label}
+              </button>
+            ))}
           </div>
 
-          {mode === 'text' ? (
+          {mode !== 'image' ? (
             <>
-              <textarea
-                className="gen-console-input"
-                rows={3}
-                value={prompt}
-                onChange={(e) => setPrompt(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) generate()
-                }}
-                placeholder={`Describe anything to forge in 3D — e.g. “${PLACEHOLDERS[phIdx]}”`}
-                autoFocus
-              />
-              <div className="gen-console-quick">
+              <div className="reactor">
+                <textarea
+                  className="reactor-input"
+                  value={prompt}
+                  onChange={(e) => setPrompt(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) generate()
+                  }}
+                  placeholder={
+                    mode === 'imagine'
+                      ? `Describe an image to imagine — e.g. “${PLACEHOLDERS[phIdx]}”`
+                      : `Describe anything to forge in 3D — e.g. “${PLACEHOLDERS[phIdx]}”`
+                  }
+                  autoFocus
+                />
+                <MicButton onTranscript={appendSpeech} />
+              </div>
+              <div className="seed-row">
+                <span className="seed-label">Try</span>
                 {QUICK.map((q) => (
-                  <button key={q} className="chip" onClick={() => setPrompt(q)}>
+                  <button key={q} type="button" className="seed" onClick={() => setPrompt(q)}>
                     {q}
                   </button>
                 ))}
@@ -220,43 +226,14 @@ export default function HomePage() {
             </>
           )}
 
-          <div className="gen-console-options">
-            <div className="model-select">
-              <span className="model-label">Engine</span>
-              <button
-                type="button"
-                className={`chip ${engine === 'meshy' ? 'chip--on' : ''}`}
-                onClick={() => setEngine('meshy')}
-                title="Meshy — tiered previews, optional texturing stage"
-              >
-                Meshy
-              </button>
-              <button
-                type="button"
-                className={`chip ${engine === 'tripo' ? 'chip--on' : ''}`}
-                onClick={() => setEngine('tripo')}
-                title="Tripo — builds a finished, already-textured model in one step"
-              >
-                Tripo
-              </button>
-            </div>
-            <label className={`toggle ${engine === 'tripo' ? 'toggle--disabled' : ''}`}>
-              <input
-                type="checkbox"
-                checked={engine === 'meshy' && textured}
-                onChange={(e) => setTextured(e.target.checked)}
-                disabled={engine === 'tripo'}
-              />
-              Add textures (color){' '}
-              <span className="hint">
-                {engine === 'tripo' ? '(Tripo textures in one step)' : textured ? '(colored)' : '(off — gray)'}
-              </span>
-            </label>
-          </div>
-
-          <button className="submit gen-console-go" onClick={generate} disabled={!canGenerate || uploading}>
-            {uploading ? 'Uploading…' : 'Generate 3D'}
+          <button className="tool-cta gen-console-go" onClick={generate} disabled={!canGenerate || uploading}>
+            {uploading ? 'Uploading…' : mode === 'imagine' ? 'Imagine it →' : 'Forge it →'}
           </button>
+          <span className="gen-console-note">
+            {mode === 'imagine'
+              ? 'Make a reference image, then turn it into 3D — in the Forge.'
+              : 'Pick the engine & textures in the Forge.'}
+          </span>
         </div>
 
       </section>
@@ -285,7 +262,7 @@ export default function HomePage() {
 
         {posts && posts.length > 0 ? (
           <div className="explore-grid">
-            {posts.slice(0, HOME_LIMIT).map((p) => (
+            {posts.map((p) => (
               <PostCard key={p.id} post={p} />
             ))}
           </div>

@@ -84,8 +84,7 @@ export default function AnimatePanel({ modelUrl, rigTaskId, appliedClips = [], o
     <div className="anim-modal-backdrop" onClick={busy ? undefined : onClose}>
       <div className="anim-modal" onClick={(e) => e.stopPropagation()}>
         <div className="anim-modal-head">
-          <span className="spatial-flag">🎬 Animate</span>
-          <h2>Add animations</h2>
+          <span className="tool-label">Animate</span>
           <button type="button" className="point-popup-close" onClick={onClose} aria-label="Close">
             ✕
           </button>
@@ -98,10 +97,10 @@ export default function AnimatePanel({ modelUrl, rigTaskId, appliedClips = [], o
           </p>
         ) : (
           <>
-            <p className="anim-modal-blurb">
-              Pick one or more. A skeleton is added automatically the first time.
+            <span className="hint">
+              Pick one or more — a skeleton is added automatically the first time.
               {appliedClips.length > 0 && ' Greyed clips are already on this model.'}
-            </p>
+            </span>
             <div className="anim-grid">
               {PRESETS.map(([name, icon]) => {
                 const isApplied = applied.has(name)
@@ -124,7 +123,7 @@ export default function AnimatePanel({ modelUrl, rigTaskId, appliedClips = [], o
               })}
             </div>
             {error && <span className="url-error">{error}</span>}
-            <button className="submit gen-go" onClick={run} disabled={!newCount || busy}>
+            <button className="tool-cta" onClick={run} disabled={!newCount || busy}>
               {busy
                 ? stage || 'Working…'
                 : newCount

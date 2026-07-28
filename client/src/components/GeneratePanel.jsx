@@ -46,7 +46,7 @@ export default function GeneratePanel({
   initialTextured = false,
   autostart = false,
 }) {
-  const [mode, setMode] = useState(initialMode === 'image' ? 'image' : 'text')
+  const [mode, setMode] = useState(['image', 'imagine'].includes(initialMode) ? initialMode : 'text')
   const [prompt, setPrompt] = useState(initialPrompt)
   // 3D engine: 'meshy' (tiered previews + optional texturing) | 'tripo' (builds
   // a finished, already-textured model in one step — so no separate refine)
@@ -401,7 +401,7 @@ export default function GeneratePanel({
 
   return (
     <section className="panel" onPaste={mode === 'image' ? onPaste : undefined}>
-      <h2>Generate</h2>
+      <span className="tool-label">Generate</span>
 
       <div className="gen-mode">
         <button

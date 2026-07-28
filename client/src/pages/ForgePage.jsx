@@ -802,7 +802,7 @@ export default function ForgePage() {
         <div className="tab-pane" style={{ display: activeTab === 'generate' ? 'flex' : 'none' }}>
         <GeneratePanel
           disabled={editTask.generating}
-          initialMode={searchParams.get('mode') === 'image' ? 'image' : 'text'}
+          initialMode={['image', 'imagine'].includes(searchParams.get('mode')) ? searchParams.get('mode') : 'text'}
           initialPrompt={searchParams.get('prompt') || ''}
           initialImageId={searchParams.get('imageId') || null}
           initialEngine={searchParams.get('engine') === 'tripo' ? 'tripo' : 'meshy'}
