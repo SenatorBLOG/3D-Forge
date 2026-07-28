@@ -3857,16 +3857,18 @@ a.ghost-button {
   }
 }
 
+/* masonry wall — cards flow into columns at varied heights (set per-card) */
 .explore-grid {
   margin-top: 24px;
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(232px, 1fr));
-  gap: 14px;
+  column-width: 256px;
+  column-gap: 14px;
 }
 
 .post-card {
   position: relative;
   display: block;
+  break-inside: avoid;
+  margin-bottom: 14px;
   background: var(--panel);
   border: 1px solid var(--line-soft);
   border-radius: 12px;
@@ -3881,17 +3883,17 @@ a.ghost-button {
   box-shadow: 0 14px 32px rgba(0, 0, 0, 0.45), 0 0 20px var(--forge-glow);
 }
 
-/* the model IS the card — a big preview that fills it (Meshy-style) */
+/* the model IS the card — a big preview that fills it (Meshy-style). Height/aspect
+   is set per-card inline (masonry). Dark, near-monotone backdrop so the model
+   contrasts instead of fighting a bright cyan glow. */
 .post-thumb {
   position: relative;
-  aspect-ratio: 1 / 1;
+  aspect-ratio: 4 / 5; /* fallback; the card overrides this inline */
   display: flex;
   align-items: center;
   justify-content: center;
   overflow: hidden;
-  background:
-    radial-gradient(circle at 50% 42%, rgba(34, 211, 238, 0.12), transparent 70%),
-    var(--panel-2);
+  background: radial-gradient(circle at 50% 42%, #05060a 22%, #0e1119 100%);
 }
 
 /* light meta overlay at the foot: author + stats on a dark scrim */
@@ -3905,10 +3907,12 @@ a.ghost-button {
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  padding: 24px 11px 10px;
-  background: linear-gradient(0deg, rgba(6, 7, 13, 0.92), rgba(6, 7, 13, 0.55) 55%, transparent);
+  padding: 26px 11px 11px;
+  background: linear-gradient(0deg, rgba(4, 5, 10, 0.95), rgba(4, 5, 10, 0.62) 55%, transparent);
   font-family: var(--font-ui);
-  font-size: 12px;
+  font-size: 13px;
+  font-weight: 600;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.85);
   pointer-events: none;
 }
 .post-overlay .post-author {
@@ -3916,7 +3920,7 @@ a.ghost-button {
   align-items: center;
   gap: 6px;
   min-width: 0;
-  color: var(--text);
+  color: #fff;
 }
 .post-overlay .post-author-name {
   overflow: hidden;

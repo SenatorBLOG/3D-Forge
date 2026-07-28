@@ -38,9 +38,17 @@ export default function PostCard({ post }) {
   const kindLabel =
     post.kind === 'image' ? 'Image → 3D' : post.kind === 'text' ? 'Text → 3D' : null
 
+  // varied card heights (masonry, Meshy-style): a deterministic pseudo-random
+  // aspect per post so the wall doesn't line up in a rigid grid
+  const RATIOS = ['1 / 1', '5 / 6', '4 / 5', '3 / 4', '5 / 7', '1 / 1.15']
+  const seed = String(post.id ?? post.modelUrl ?? '')
+  let h = 0
+  for (let i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) | 0
+  const ratio = RATIOS[Math.abs(h) % RATIOS.length]
+
   return (
     <Link className="post-card" to={`/post/${post.id}`} title={post.title}>
-      <div className="post-thumb">
+      <div className="post-thumb" style={{ aspectRatio: ratio }}>
         {kindLabel && <span className={`kind-pill kind-${post.kind}`}>{kindLabel}</span>}
         {thumb ? (
           <>
