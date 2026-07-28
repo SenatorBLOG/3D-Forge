@@ -3860,37 +3860,83 @@ a.ghost-button {
 .explore-grid {
   margin-top: 24px;
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-  gap: 16px;
+  grid-template-columns: repeat(auto-fill, minmax(232px, 1fr));
+  gap: 14px;
 }
 
 .post-card {
-  display: flex;
-  flex-direction: column;
+  position: relative;
+  display: block;
   background: var(--panel);
   border: 1px solid var(--line-soft);
-  border-radius: var(--radius);
+  border-radius: 12px;
   overflow: hidden;
   text-decoration: none;
-  transition: border-color 0.15s, transform 0.15s;
+  transition: border-color 0.15s, transform 0.15s, box-shadow 0.15s;
 }
 
 .post-card:hover {
-  border-color: var(--line);
-  transform: translateY(-2px);
+  border-color: var(--forge);
+  transform: translateY(-3px);
+  box-shadow: 0 14px 32px rgba(0, 0, 0, 0.45), 0 0 20px var(--forge-glow);
 }
 
+/* the model IS the card — a big preview that fills it (Meshy-style) */
 .post-thumb {
   position: relative;
+  aspect-ratio: 1 / 1;
   display: flex;
   align-items: center;
   justify-content: center;
-  height: 150px;
   overflow: hidden;
   background:
-    radial-gradient(circle at 50% 40%, rgba(34, 211, 238, 0.12), transparent 70%),
+    radial-gradient(circle at 50% 42%, rgba(34, 211, 238, 0.12), transparent 70%),
     var(--panel-2);
-  border-bottom: 1px solid var(--line-soft);
+}
+
+/* light meta overlay at the foot: author + stats on a dark scrim */
+.post-overlay {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 24px 11px 10px;
+  background: linear-gradient(0deg, rgba(6, 7, 13, 0.92), rgba(6, 7, 13, 0.55) 55%, transparent);
+  font-family: var(--font-ui);
+  font-size: 12px;
+  pointer-events: none;
+}
+.post-overlay .post-author {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  color: var(--text);
+}
+.post-overlay .post-author-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.post-overlay .post-stats {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  flex: none;
+  color: var(--text-dim);
+}
+.post-overlay .stat {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+.post-overlay .stat-like {
+  color: var(--steel);
 }
 
 .post-thumb .brand-mark {
@@ -3900,7 +3946,7 @@ a.ghost-button {
 .post-thumb-img {
   width: 100%;
   height: 100%;
-  object-fit: contain;
+  object-fit: cover;
   display: block;
   transition: opacity 0.3s ease, transform 0.35s cubic-bezier(0.4, 0, 0.2, 1);
 }

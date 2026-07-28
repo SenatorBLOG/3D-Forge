@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import Logo from './Logo.jsx'
 import Avatar from './Avatar.jsx'
-import TagList from './TagList.jsx'
 import { getThumbnail } from '../lib/thumbnailer.js'
 
 const HeartIcon = () => (
@@ -40,14 +39,13 @@ export default function PostCard({ post }) {
     post.kind === 'image' ? 'Image → 3D' : post.kind === 'text' ? 'Text → 3D' : null
 
   return (
-    <Link className="post-card" to={`/post/${post.id}`}>
+    <Link className="post-card" to={`/post/${post.id}`} title={post.title}>
       <div className="post-thumb">
         {kindLabel && <span className={`kind-pill kind-${post.kind}`}>{kindLabel}</span>}
         {thumb ? (
           <>
             <img className="post-thumb-img shaded" src={thumb.shaded} alt={post.title} loading="lazy" />
             <img className="post-thumb-img wire" src={thumb.wire} alt="" aria-hidden="true" loading="lazy" />
-            <span className="post-thumb-hint">wireframe</span>
             {thumb.views?.length > 0 && (
               <span className="post-thumb-views" aria-hidden="true">
                 {thumb.views.map((v, i) => (
@@ -59,16 +57,11 @@ export default function PostCard({ post }) {
         ) : (
           <Logo size={56} />
         )}
-      </div>
-      <div className="post-card-body">
-        <h3 className="post-card-title" title={post.title}>
-          {post.title}
-        </h3>
-        <TagList tags={post.tags} linkify={false} />
-        <div className="post-card-meta">
+        {/* Meshy-style: the model fills the card, only a light meta overlay at the foot */}
+        <div className="post-overlay">
           <span className="post-author">
-            <Avatar username={post.authorUsername} size={18} />
-            @{post.authorUsername}
+            <Avatar username={post.authorUsername} size={16} />
+            <span className="post-author-name">{post.authorUsername}</span>
           </span>
           <span className="post-stats">
             <span className="stat stat-like">
