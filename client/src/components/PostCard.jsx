@@ -35,9 +35,6 @@ export default function PostCard({ post }) {
     }
   }, [post.modelUrl])
 
-  const kindLabel =
-    post.kind === 'image' ? 'Image → 3D' : post.kind === 'text' ? 'Text → 3D' : null
-
   // varied card heights (masonry, Meshy-style): a deterministic pseudo-random
   // aspect per post so the wall doesn't line up in a rigid grid
   const RATIOS = ['1 / 1', '5 / 6', '4 / 5', '3 / 4', '5 / 7', '1 / 1.15']
@@ -49,7 +46,11 @@ export default function PostCard({ post }) {
   return (
     <Link className="post-card" to={`/post/${post.id}`} title={post.title}>
       <div className="post-thumb" style={{ aspectRatio: ratio }}>
-        {kindLabel && <span className={`kind-pill kind-${post.kind}`}>{kindLabel}</span>}
+        {/* author chip in the top corner (Meshy-style, replaces the kind badge) */}
+        <span className="post-author-top">
+          <Avatar username={post.authorUsername} size={16} />
+          <span className="post-author-name">{post.authorUsername}</span>
+        </span>
         {thumb ? (
           <>
             <img className="post-thumb-img shaded" src={thumb.shaded} alt={post.title} loading="lazy" />
@@ -65,21 +66,14 @@ export default function PostCard({ post }) {
         ) : (
           <Logo size={56} />
         )}
-        {/* Meshy-style: the model fills the card, only a light meta overlay at the foot */}
-        <div className="post-overlay">
-          <span className="post-author">
-            <Avatar username={post.authorUsername} size={16} />
-            <span className="post-author-name">{post.authorUsername}</span>
+        <span className="post-stats-bot">
+          <span className="stat stat-like">
+            <HeartIcon /> {post.likes ?? 0}
           </span>
-          <span className="post-stats">
-            <span className="stat stat-like">
-              <HeartIcon /> {post.likes ?? 0}
-            </span>
-            <span className="stat stat-comment">
-              <CommentIcon /> {post.comments ?? 0}
-            </span>
+          <span className="stat stat-comment">
+            <CommentIcon /> {post.comments ?? 0}
           </span>
-        </div>
+        </span>
       </div>
     </Link>
   )

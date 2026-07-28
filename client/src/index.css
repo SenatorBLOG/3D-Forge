@@ -116,6 +116,7 @@ body::before {
   display: flex;
   flex-direction: column;
   overflow-y: auto;
+  overflow-x: clip; /* let full-bleed sections span the viewport without h-scroll */
 }
 
 /* animated screen transition: each route's root fades in on navigation */
@@ -3857,10 +3858,15 @@ a.ghost-button {
   }
 }
 
-/* masonry wall — cards flow into columns at varied heights (set per-card) */
+/* masonry wall — full-bleed (edge to edge), cards flow into columns at varied
+   heights (set per-card). Breaks out of the page's centered 1200px container. */
 .explore-grid {
   margin-top: 24px;
-  column-width: 256px;
+  width: 100vw;
+  margin-left: calc(50% - 50vw);
+  margin-right: calc(50% - 50vw);
+  padding: 0 16px;
+  column-width: 320px;
   column-gap: 14px;
 }
 
@@ -3897,49 +3903,55 @@ a.ghost-button {
 }
 
 /* light meta overlay at the foot: author + stats on a dark scrim */
-.post-overlay {
+/* author chip, top-left corner (replaces the kind badge) */
+.post-author-top {
   position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 0;
+  top: 9px;
+  left: 9px;
   z-index: 3;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  padding: 26px 11px 11px;
-  background: linear-gradient(0deg, rgba(4, 5, 10, 0.95), rgba(4, 5, 10, 0.62) 55%, transparent);
-  font-family: var(--font-ui);
-  font-size: 13px;
-  font-weight: 600;
-  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.85);
-  pointer-events: none;
-}
-.post-overlay .post-author {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  min-width: 0;
+  max-width: calc(100% - 18px);
+  padding: 4px 10px 4px 4px;
+  border-radius: 999px;
+  background: rgba(4, 5, 10, 0.55);
+  backdrop-filter: blur(5px);
   color: #fff;
+  font-family: var(--font-ui);
+  font-size: 12.5px;
+  font-weight: 600;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
+  pointer-events: none;
 }
-.post-overlay .post-author-name {
+.post-author-top .post-author-name {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.post-overlay .post-stats {
+
+/* likes / comments, bottom-right, on a soft shadow */
+.post-stats-bot {
+  position: absolute;
+  right: 11px;
+  bottom: 10px;
+  z-index: 3;
   display: inline-flex;
   align-items: center;
-  gap: 10px;
-  flex: none;
-  color: var(--text-dim);
+  gap: 11px;
+  color: #fff;
+  font-family: var(--font-ui);
+  font-size: 12.5px;
+  font-weight: 600;
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.9), 0 0 2px rgba(0, 0, 0, 0.9);
+  pointer-events: none;
 }
-.post-overlay .stat {
+.post-stats-bot .stat {
   display: inline-flex;
   align-items: center;
   gap: 3px;
 }
-.post-overlay .stat-like {
+.post-stats-bot .stat-like {
   color: var(--steel);
 }
 
