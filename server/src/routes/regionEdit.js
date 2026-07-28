@@ -1,6 +1,7 @@
 import { Router } from 'express'
 import { segmentModel, segmentTripoByTaskId, segmentByMarks, hitTestPart, partSwap, extractPart, extractRegion, stitchPart, stitchRegion } from '../services/segment.js'
 import { optionalAuth } from '../middleware/auth.js'
+import { labelParts as aiLabelParts, isClaudeEnabled } from '../services/claude.js'
 import { recordTask, updateTask, listMemory } from '../services/history.js'
 import { dbReady } from '../db.js'
 import GeneratedModel from '../models/GeneratedModel.js'

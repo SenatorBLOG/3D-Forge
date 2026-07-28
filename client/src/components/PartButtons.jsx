@@ -57,13 +57,15 @@ function allConnected(members, tol) {
   return seen.size === members.length
 }
 
-export default function PartButtons({ modelUrl, onHoverPart, onPickPart, onParts, selectedId = null, busy }) {
+export default function PartButtons({ modelUrl, description = '', onHoverPart, onPickPart, onParts, selectedId = null, busy }) {
   const [parts, setParts] = useState([])
   const [loading, setLoading] = useState(false)
   const [groups, setGroups] = useState([]) // [{ id, name, partIds:[], names:[], bbox, center }]
   const [grouping, setGrouping] = useState(false)
   const [selected, setSelected] = useState(() => new Set())
   const [nameDraft, setNameDraft] = useState('')
+  const [labeling, setLabeling] = useState(false) // AI auto-label in flight
+  const [labelErr, setLabelErr] = useState(null)
 
   useEffect(() => {
     let cancelled = false
@@ -71,6 +73,7 @@ export default function PartButtons({ modelUrl, onHoverPart, onPickPart, onParts
     setGroups([])
     setGrouping(false)
     setSelected(new Set())
+    setLabelErr(null)
     onHoverPart?.(null)
     onParts?.([])
     if (!modelUrl) return
@@ -138,6 +141,38 @@ export default function PartButtons({ modelUrl, onHoverPart, onPickPart, onParts
   }
 
   const ungroup = (id) => setGroups((prev) => prev.filter((g) => g.id !== id))
+
+  // AI auto-label: ask the server (Claude) to rename the geometric parts by their
+  // spatial layout ("part 1" → "Head", "Left Arm"…). One paid text call, fired
+  // only by this click. Renames the loose part chips; groups keep their own names.
+  const autoLabel = async () => {
+    if (labeling || busy || !modelUrl) return
+    setLabelErr(null)
+    setLabeling(true)
+    try {
+      const r = await fetch('/api/edit/label-parts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ modelUrl, description }),
+      })
+      const d = await r.json().catch(() => ({}))
+      if (!r.ok) throw new Error(d.error || `HTTP ${r.status}`)
+      const labels = d.labels || {}
+      if (!Object.keys(labels).length) {
+        setLabelErr('No labels came back — try again.')
+        return
+      }
+      setParts((prev) => {
+        const next = prev.map((p) => (labels[p.id] ? { ...p, name: labels[p.id] } : p))
+        onParts?.(next)
+        return next
+      })
+    } catch (e) {
+      setLabelErr(e.message || 'Auto-label failed')
+    } finally {
+      setLabeling(false)
+    }
+  }
 
   if (loading) return <div className="part-buttons part-buttons--loading">Finding parts…</div>
   if (parts.length < 2) return null // nothing useful to split
@@ -207,15 +242,27 @@ export default function PartButtons({ modelUrl, onHoverPart, onPickPart, onParts
 
       {/* group toolbar */}
       {!grouping ? (
-        <button
-          type="button"
-          className="part-group-toggle"
-          disabled={busy || looseParts.length < 2}
-          onClick={() => setGrouping(true)}
-          title="Merge several touching parts into one region (e.g. a whole arm)"
-        >
-          ⧉ Group
-        </button>
+        <>
+          <button
+            type="button"
+            className="part-group-toggle"
+            disabled={busy || looseParts.length < 2}
+            onClick={() => setGrouping(true)}
+            title="Merge several touching parts into one region (e.g. a whole arm)"
+          >
+            ⧉ Group
+          </button>
+          <button
+            type="button"
+            className="part-label-ai"
+            disabled={busy || labeling}
+            onClick={autoLabel}
+            title="Let AI rename the parts by where they sit (Head, Left Arm, Wheel…)"
+          >
+            {labeling ? 'Labeling…' : '🏷 Auto-label (AI)'}
+          </button>
+          {labelErr && <span className="part-group-warn">⚠ {labelErr}</span>}
+        </>
       ) : (
         <span className="part-group-bar">
           <input
