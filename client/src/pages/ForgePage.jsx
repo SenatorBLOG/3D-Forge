@@ -9,6 +9,7 @@ import ModelVersionStrip from '../components/ModelVersionStrip.jsx'
 import PhotoEditPanel from '../components/PhotoEditPanel.jsx'
 import RecolorPanel from '../components/RecolorPanel.jsx'
 import PartButtons from '../components/PartButtons.jsx'
+import MarkPartsPanel from '../components/MarkPartsPanel.jsx'
 import PartEditPanel from '../components/PartEditPanel.jsx'
 import AnimatePanel from '../components/AnimatePanel.jsx'
 import MicButton from '../components/MicButton.jsx'
@@ -199,6 +200,31 @@ export default function ForgePage() {
     if (!part) return
     selectForEdit(part)
     openPartEdit(part)
+  }
+
+  // manual (seed-based) segmentation: the user drops named marks on the model,
+  // then "Segment by marks" splits it so parts come out exactly as marked
+  const [markMode, setMarkMode] = useState(false)
+  const [marks, setMarks] = useState([]) // [{ label, point:{x,y,z} }]
+  const addMark = (point) =>
+    setMarks((prev) => [...prev, { label: `part ${prev.length + 1}`, point }])
+  const renameMark = (i, label) => setMarks((prev) => prev.map((m, k) => (k === i ? { ...m, label } : m)))
+  const removeMark = (i) => setMarks((prev) => prev.filter((_, k) => k !== i))
+  const clearMarks = () => setMarks([])
+  const runMarkSegment = async () => {
+    const res = await fetch('/api/edit/segment-marks', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ modelUrl, seeds: marks }),
+    })
+    const data = await res.json().catch(() => ({}))
+    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`)
+    setMarkMode(false)
+    setMarks([])
+    setBaseModelPrompt('Segmented (marks)')
+    setLastEditPrompt(null)
+    swapModel(data.url, { version: { as: 'child', label: 'Segmented (marks)' } })
+    return data
   }
 
   // persist the working model + version strip so an F5 doesn't wipe the history:
@@ -972,7 +998,7 @@ export default function ForgePage() {
         <div className="edit-manual-host" ref={setManualHost} />
         <PartButtons
           modelUrl={modelUrl}
-          busy={swapBusy || busy}
+          busy={swapBusy || busy || markMode}
           selectedId={selectedId}
           onParts={(parts) => (partsRef.current = parts)}
           onHoverPart={setHighlightBox}
@@ -984,6 +1010,26 @@ export default function ForgePage() {
             else setActivePart(null)
           }}
         />
+        {modelUrl && (
+          <MarkPartsPanel
+            active={markMode}
+            marks={marks}
+            busy={swapBusy || busy}
+            onToggle={(on) => {
+              setMarkMode(on)
+              if (on) {
+                selectForEdit(null) // marking owns clicks — drop any part selection
+                setActivePart(null)
+              } else {
+                clearMarks()
+              }
+            }}
+            onRename={renameMark}
+            onRemove={removeMark}
+            onClear={clearMarks}
+            onSegment={runMarkSegment}
+          />
+        )}
         <PhotoEditPanel
             modelUrl={modelUrl}
             onModelReady3D={(url, label) => {
@@ -1085,7 +1131,10 @@ export default function ForgePage() {
               }
               manualHost={manualHost}
               spatialClick={false} // no click-to-prompt popup for now (distracting)
-              onPickPartAt={pickPartByName} // double-click a part → select + open edit
+              onPickPartAt={markMode ? null : pickPartByName} // double-click a part → select + open edit
+              markMode={markMode}
+              marks={marks}
+              onAddMark={addMark}
             />
             <ModelVersionStrip
               versions={modelVersions}

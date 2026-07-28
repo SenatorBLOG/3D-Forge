@@ -1,5 +1,5 @@
 import { Router } from 'express'
-import { segmentModel, segmentTripoByTaskId, hitTestPart, partSwap, extractPart, extractRegion, stitchPart, stitchRegion } from '../services/segment.js'
+import { segmentModel, segmentTripoByTaskId, segmentByMarks, hitTestPart, partSwap, extractPart, extractRegion, stitchPart, stitchRegion } from '../services/segment.js'
 import { optionalAuth } from '../middleware/auth.js'
 import { recordTask, updateTask, listMemory } from '../services/history.js'
 import { dbReady } from '../db.js'
@@ -81,6 +81,50 @@ router.post('/segment-tripo', async (req, res) => {
     if (err.code === 'NO_KEY') return res.status(400).json({ error: err.message })
     console.error('tripo segment failed:', err)
     res.status(502).json({ error: err.message || 'Tripo segmentation failed' })
+  }
+})
+
+// POST /api/edit/segment-marks { modelUrl, seeds:[{ label, point:{x,y,z} }] } —
+// USER-GUIDED segmentation: the user drops named seed points on the surface and
+// every triangle goes to its nearest seed, so the parts come out exactly as
+// marked (a sword, a shield, a helmet the auto-splitter would shatter). Free,
+// geometric. Returns a NEW segmented model URL + parts (same shape as /segment).
+router.post('/segment-marks', optionalAuth, async (req, res) => {
+  const modelUrl = typeof req.body?.modelUrl === 'string' ? req.body.modelUrl : ''
+  const seeds = Array.isArray(req.body?.seeds) ? req.body.seeds : null
+  const clean =
+    seeds
+      ?.filter((s) => s?.point && ['x', 'y', 'z'].every((k) => Number.isFinite(Number(s.point[k]))))
+      .map((s) => ({ label: String(s.label ?? '').slice(0, 40), point: s.point })) || []
+  if (!modelUrl || clean.length < 2) {
+    return res.status(400).json({ error: 'modelUrl and at least 2 seed marks are required' })
+  }
+  try {
+    const result = await segmentByMarks(modelUrl, clean)
+    // mirror to History + Library so the marked model persists as a card
+    const segTaskId = `marks-seg-${Date.now()}`
+    recordTask({ kind: 'generate', taskId: segTaskId, prompt: 'Segmented (marks)', mock: true, ownerId: req.user?.id ?? null })
+    updateTask(segTaskId, 'SUCCEEDED', result.modelUrl)
+    if (dbReady()) {
+      try {
+        await GeneratedModel.create({
+          prompt: 'Segmented (marks)',
+          meshyTaskId: segTaskId,
+          status: 'SUCCEEDED',
+          modelUrl: result.modelUrl,
+          mock: true,
+          ownerId: req.user?.id ?? null,
+        })
+      } catch (err) {
+        console.error('marks-seg library record failed:', err)
+      }
+    }
+    res.json(result)
+  } catch (err) {
+    if (err.code === 'NOT_FOUND') return res.status(404).json({ error: err.message })
+    if (err.code === 'NO_GEOMETRY') return res.status(400).json({ error: err.message })
+    console.error('segment-marks failed:', err)
+    res.status(500).json({ error: 'Failed to segment by marks' })
   }
 })
 

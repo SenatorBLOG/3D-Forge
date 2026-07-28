@@ -258,6 +258,119 @@ export async function segmentTripoByTaskId(tripoTaskId, originalModelUrl = null)
   return { modelUrl: storedUrl, parts, cached: false, engine: 'tripo', taskId }
 }
 
+// --- marker/seed segmentation (manual, geometric, free) --------------------
+
+/**
+ * User-guided segmentation: instead of the auto splitter deciding where to cut,
+ * the user drops named seed points on the surface (Head, Sword, Arm-L…). Every
+ * triangle is assigned to its NEAREST seed, and each seed becomes its own named
+ * mesh node — so a sword sticking out of a hand, or a helmet the auto-splitter
+ * would shatter, come out as exactly the parts the user marked. Free, no AI.
+ *
+ * Seeds arrive in the client's CENTERED space (the viewer recenters the model on
+ * its bbox centre before the raycast); we shift them by the same centre so they
+ * line up with the world-space geometry. Returns a NEW segmented model URL (one
+ * node per marked part) + parts derived by the same extractParts we use
+ * everywhere — so select / recolor / extract / group / animate all just work.
+ */
+export async function segmentByMarks(modelUrl, seeds) {
+  const bytes = await readModelBytes(modelUrl)
+  if (!bytes) throw Object.assign(new Error('model not found'), { code: 'NOT_FOUND' })
+  const srcDoc = await new NodeIO().readBinary(new Uint8Array(bytes))
+  const prims = collectWorldPrimitives(srcDoc) // world-space triangle soup, all prims
+  if (!prims.length) throw Object.assign(new Error('model has no geometry'), { code: 'NOT_FOUND' })
+
+  // seeds → world space: add the overall bbox centre the viewer subtracted
+  const overall = primsBBox(prims)
+  const C = [0, 1, 2].map((a) => (overall.min[a] + overall.max[a]) / 2)
+  const seedPts = seeds.map((s, i) => ({
+    label: (typeof s.label === 'string' && s.label.trim()) || `part ${i + 1}`,
+    p: [Number(s.point.x) + C[0], Number(s.point.y) + C[1], Number(s.point.z) + C[2]],
+  }))
+  const nearest = (c) => {
+    let best = 0
+    let bd = Infinity
+    for (let i = 0; i < seedPts.length; i++) {
+      const d = dist2(seedPts[i].p, c)
+      if (d < bd) {
+        bd = d
+        best = i
+      }
+    }
+    return best
+  }
+
+  // bucket triangles by (seedIndex, sourcePrim) so each part keeps the right
+  // material/texture/UVs; triangles are de-indexed (3 explicit verts each)
+  const buckets = new Map() // `${li}:${pi}` -> { li, srcPrim, pos:[], nrm:[]|null, uv:[]|null }
+  prims.forEach((prim, pi) => {
+    const pos = prim.positions
+    const idx = prim.indices
+    const triCount = idx ? idx.length / 3 : pos.length / 9
+    for (let t = 0; t < triCount; t++) {
+      const a = idx ? idx[t * 3] : t * 3
+      const b = idx ? idx[t * 3 + 1] : t * 3 + 1
+      const c = idx ? idx[t * 3 + 2] : t * 3 + 2
+      const cx = (pos[a * 3] + pos[b * 3] + pos[c * 3]) / 3
+      const cy = (pos[a * 3 + 1] + pos[b * 3 + 1] + pos[c * 3 + 1]) / 3
+      const cz = (pos[a * 3 + 2] + pos[b * 3 + 2] + pos[c * 3 + 2]) / 3
+      const li = nearest([cx, cy, cz])
+      const key = `${li}:${pi}`
+      let bk = buckets.get(key)
+      if (!bk) {
+        bk = { li, srcPrim: prim, pos: [], nrm: prim.normals ? [] : null, uv: prim.uvs ? [] : null }
+        buckets.set(key, bk)
+      }
+      for (const vi of [a, b, c]) {
+        bk.pos.push(pos[vi * 3], pos[vi * 3 + 1], pos[vi * 3 + 2])
+        if (bk.nrm) bk.nrm.push(prim.normals[vi * 3], prim.normals[vi * 3 + 1], prim.normals[vi * 3 + 2])
+        if (bk.uv) bk.uv.push(prim.uvs[vi * 2], prim.uvs[vi * 2 + 1])
+      }
+    }
+  })
+
+  // one node per seed that actually captured geometry, in seed order
+  const byLabel = new Map()
+  for (const bk of buckets.values()) {
+    if (!byLabel.has(bk.li)) byLabel.set(bk.li, [])
+    byLabel.get(bk.li).push(bk)
+  }
+  const doc = new Document()
+  const buffer = doc.createBuffer()
+  const scene = doc.createScene()
+  const dropped = []
+  for (let li = 0; li < seedPts.length; li++) {
+    const bks = byLabel.get(li)
+    if (!bks?.length) {
+      dropped.push(seedPts[li].label)
+      continue
+    }
+    const mesh = doc.createMesh(seedPts[li].label)
+    const soup = bks.map((bk) => ({
+      positions: new Float32Array(bk.pos),
+      normals: bk.nrm ? new Float32Array(bk.nrm) : null,
+      indices: null, // de-indexed
+      uvs: bk.uv ? new Float32Array(bk.uv) : null,
+      color: bk.srcPrim.color,
+      metallic: bk.srcPrim.metallic,
+      roughness: bk.srcPrim.roughness,
+      texture: bk.srcPrim.texture,
+    }))
+    addPrimsToMesh(doc, buffer, mesh, soup)
+    scene.addChild(doc.createNode(seedPts[li].label).setMesh(mesh))
+  }
+  if (!scene.listChildren().length) {
+    throw Object.assign(new Error('no marks captured any geometry — place seeds on the model'), { code: 'NO_GEOMETRY' })
+  }
+
+  const out = await new NodeIO().writeBinary(doc)
+  const url = await storeModelBytes(out, 'model-marks-seg')
+  const parts = extractParts(doc)
+  memCache.set(url, parts)
+  saveCache()
+  return { modelUrl: url, parts, cached: false, engine: 'marks', dropped }
+}
+
 // --- B-H2: hit-test a spatial point to a part ------------------------------
 
 const inside = (box, p) =>
