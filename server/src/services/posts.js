@@ -91,7 +91,7 @@ export async function listPosts({
   tag,
   anyTags, // match posts carrying ANY of these tags (theme filtering, B9)
   q,
-  limit = 50,
+  limit = 200,
 } = {}) {
   const query = typeof q === 'string' ? q.trim().toLowerCase() : ''
   const wantTag = tag ? normalizeTags(tag)[0] : undefined

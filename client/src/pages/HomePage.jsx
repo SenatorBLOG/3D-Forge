@@ -262,7 +262,7 @@ export default function HomePage() {
 
         {posts && posts.length > 0 ? (
           <div className="explore-grid">
-            {posts.slice(0, HOME_LIMIT).map((p) => (
+            {posts.map((p) => (
               <PostCard key={p.id} post={p} />
             ))}
           </div>
