@@ -55,15 +55,22 @@ export default function ModelViewer({
   manualHost = null, // DOM node in the Edit tab where the manual tools render
   spatialClick = true, // single-click adds a spatial-edit point (+popup); off = no popup
   onPickPartAt = null, // double-click a part → report its mesh name (part selection)
+  markMode = false, // seed-marking: single-click drops a segmentation seed (no popup)
+  marks = [], // [{ label, point:{x,y,z} }] seed markers to render
+  onAddMark = null, // called with { x, y, z } when the user clicks in mark mode
 }) {
   const containerRef = useRef(null)
   // keep latest callbacks/points without re-creating the whole scene on re-render
   const callbacksRef = useRef({})
-  callbacksRef.current = { onAddPoint, onSelectPoint, onLoaded, onError, onPickPartAt }
+  callbacksRef.current = { onAddPoint, onSelectPoint, onLoaded, onError, onPickPartAt, onAddMark }
   const spatialClickRef = useRef(true)
   spatialClickRef.current = spatialClick
+  const markModeRef = useRef(false)
+  markModeRef.current = markMode
   const pointsRef = useRef(points)
   pointsRef.current = points
+  const marksRef = useRef(marks)
+  marksRef.current = marks
   // imperative handles the toolbar + points effect reach into the live scene
   const apiRef = useRef({})
   const [autoRotate, setAutoRotate] = useState(showcase)
@@ -193,6 +200,21 @@ export default function ModelViewer({
     const markerMat = new THREE.MeshBasicMaterial({ color: MARKER_COLOR })
     let markerGeom = new THREE.SphereGeometry(0.01, 16, 16)
 
+    // seed marks (manual segmentation) — a separate, brighter set so they read
+    // distinctly from spatial-edit points; each is coloured by its part palette
+    const marksGroup = new THREE.Group()
+    scene.add(marksGroup)
+    let markSeedGeom = new THREE.SphereGeometry(0.018, 16, 16)
+    const syncMarks = (list) => {
+      marksGroup.clear()
+      ;(list || []).forEach((mk, i) => {
+        const mat = new THREE.MeshBasicMaterial({ color: PART_PALETTE[i % PART_PALETTE.length] })
+        const dot = new THREE.Mesh(markSeedGeom, mat)
+        dot.position.set(mk.point.x, mk.point.y, mk.point.z)
+        marksGroup.add(dot)
+      })
+    }
+
     // display-mode override materials (Meshy-style solid / wireframe views).
     // Each mesh keeps its original material in userData.origMat for "shaded".
     const solidMat = new THREE.MeshStandardMaterial({ color: 0x9aa3b2, metalness: 0.1, roughness: 0.78 })
@@ -311,6 +333,7 @@ export default function ModelViewer({
     apiRef.current = {
       controls,
       syncMarkers,
+      syncMarks,
       updateLabels,
       playClip,
       getClips: () => Object.keys(clipActions),
@@ -516,6 +539,9 @@ export default function ModelViewer({
         // marker radius scaled to the model — small, not a giant blob
         markerGeom.dispose()
         markerGeom = new THREE.SphereGeometry(size * 0.006, 16, 16)
+        // seed marks a touch larger so they stand out as deliberate labels
+        markSeedGeom.dispose()
+        markSeedGeom = new THREE.SphereGeometry(size * 0.012, 16, 16)
 
         const grid = new THREE.GridHelper(size * 1.6, 22, 0x22d3ee, 0x1c2740)
         grid.position.y = box.min.y - center.y
@@ -554,6 +580,7 @@ export default function ModelViewer({
           setActiveClip(null)
         }
         syncMarkers(pointsRef.current)
+        syncMarks(marksRef.current)
         updateLabels()
         callbacksRef.current.onLoaded?.()
       },
@@ -583,6 +610,18 @@ export default function ModelViewer({
       downAt = null
       if (wasDrag || !model) return
       if (toolRef.current) return // an edit tool owns clicks — no point-adding
+
+      // seed-mark mode: a click drops a segmentation seed at the hit point and
+      // takes precedence over the spatial-edit point (no popup)
+      if (markModeRef.current) {
+        const rect = renderer.domElement.getBoundingClientRect()
+        pointer.x = ((e.clientX - rect.left) / rect.width) * 2 - 1
+        pointer.y = -((e.clientY - rect.top) / rect.height) * 2 + 1
+        raycaster.setFromCamera(pointer, camera)
+        const hit = raycaster.intersectObject(model, true)[0]
+        if (hit) callbacksRef.current.onAddMark?.({ x: hit.point.x, y: hit.point.y, z: hit.point.z })
+        return
+      }
       if (!spatialClickRef.current) return // spatial click-to-prompt disabled
 
       const rect = renderer.domElement.getBoundingClientRect()
@@ -835,6 +874,8 @@ export default function ModelViewer({
       markersGroup.clear()
       markerGeom.dispose()
       markerMat.dispose()
+      marksGroup.clear() // per-mark materials disposed via disposeObject(scene)
+      markSeedGeom.dispose()
       solidMat.dispose()
       wireMat.dispose()
       disposeObject(scene)
@@ -850,6 +891,11 @@ export default function ModelViewer({
     apiRef.current.syncMarkers?.(points)
     apiRef.current.updateLabels?.()
   }, [points])
+
+  // redraw seed marks whenever they change
+  useEffect(() => {
+    apiRef.current.syncMarks?.(marks)
+  }, [marks])
 
   // reflect auto-rotate into the live controls
   useEffect(() => {

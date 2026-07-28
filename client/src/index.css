@@ -1138,7 +1138,8 @@ body::before {
 
 .part-group-toggle,
 .part-group-make,
-.part-group-cancel {
+.part-group-cancel,
+.part-label-ai {
   padding: 4px 10px;
   border: 1px solid var(--line);
   border-radius: 13px;
@@ -1151,13 +1152,15 @@ body::before {
 }
 
 .part-group-toggle:hover:not(:disabled),
-.part-group-make:hover:not(:disabled) {
+.part-group-make:hover:not(:disabled),
+.part-label-ai:hover:not(:disabled) {
   color: var(--forge);
   border-color: var(--forge);
 }
 
 .part-group-toggle:disabled,
-.part-group-make:disabled {
+.part-group-make:disabled,
+.part-label-ai:disabled {
   color: var(--text-faint);
   cursor: not-allowed;
 }
@@ -1166,6 +1169,72 @@ body::before {
   display: inline-flex;
   align-items: center;
   gap: 5px;
+}
+
+/* manual seed-based segmentation */
+.mark-parts {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+}
+.mark-parts-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.spatial-blurb--sm {
+  font-size: 12px;
+  margin: 8px 0;
+}
+.mark-list {
+  list-style: none;
+  margin: 8px 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.mark-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.mark-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  flex: 0 0 auto;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.2);
+}
+.mark-name {
+  flex: 1;
+  padding: 4px 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel-2);
+  color: var(--text);
+  font-size: 12px;
+}
+.mark-name:focus {
+  border-color: var(--forge);
+  outline: none;
+}
+.mark-x {
+  border: none;
+  background: none;
+  color: var(--text-faint);
+  cursor: pointer;
+  font-size: 13px;
+  padding: 2px 4px;
+}
+.mark-x:hover {
+  color: var(--danger, #fb7185);
+}
+.mark-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .part-group-name {
