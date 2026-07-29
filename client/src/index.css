@@ -1287,6 +1287,18 @@ body::before {
 .cs-size input {
   flex: 1;
 }
+.cs-selected {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.cs-selected-dot {
+  width: 16px;
+  height: 16px;
+  border-radius: 4px;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.25);
+}
 .cs-swatch {
   width: 24px;
   height: 24px;
@@ -6604,22 +6616,19 @@ button.tag:hover {
 }
 .pic-del {
   position: absolute;
-  top: 4px;
-  right: 4px;
-  width: 22px;
-  height: 22px;
+  top: 5px;
+  right: 5px;
+  width: 24px;
+  height: 24px;
   border: none;
   border-radius: 50%;
-  background: rgba(10, 14, 22, 0.72);
+  background: rgba(10, 14, 22, 0.82);
   color: #fff;
-  font-size: 12px;
+  font-size: 13px;
   line-height: 1;
   cursor: pointer;
-  opacity: 0;
-  transition: opacity 0.12s, background 0.12s;
-}
-.pic-card-wrap:hover .pic-del {
-  opacity: 1;
+  opacity: 1; /* always visible (like the model cards' ✕) */
+  transition: background 0.12s;
 }
 .pic-del:hover {
   background: #fb7185;

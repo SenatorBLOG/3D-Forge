@@ -1,10 +1,13 @@
 import { useState } from 'react'
 
-// same palette the viewer seeds parts with, so the swatches match the model
-const PALETTE = [
-  '#ff4d4d', '#4dff4d', '#4d7fff', '#ffd24d', '#b84dff', '#22d3ee',
-  '#ff8a4d', '#ff4dd2', '#9dff4d', '#4dffa0', '#ff6b6b', '#6b8cff',
+// paint palette + readable names for the "Selected:" hint
+const NAMED = [
+  ['#ff4d4d', 'red'], ['#4dff4d', 'green'], ['#4d7fff', 'blue'], ['#ffd24d', 'yellow'],
+  ['#b84dff', 'purple'], ['#22d3ee', 'cyan'], ['#ff8a4d', 'orange'], ['#ff4dd2', 'pink'],
+  ['#9dff4d', 'lime'], ['#4dffa0', 'mint'], ['#ff6b6b', 'coral'], ['#6b8cff', 'periwinkle'],
 ]
+const PALETTE = NAMED.map(([c]) => c)
+const nameOf = (hex) => NAMED.find(([c]) => c.toLowerCase() === (hex || '').toLowerCase())?.[1] || (hex || '')
 
 /**
  * #3 — segment by PAINT. Turn on paint mode: every existing segment gets a
@@ -81,6 +84,12 @@ export default function ColorSegPanel({ active, tool, hex, size, onToggle, onSet
                 aria-label={`colour ${c}`}
               />
             ))}
+          </div>
+          <div className="cs-selected">
+            <span className="cs-selected-dot" style={{ background: hex }} />
+            <span className="hint">
+              selected — <strong>{nameOf(hex)}</strong>
+            </span>
           </div>
 
           {tool === 'brush' && (

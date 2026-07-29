@@ -547,15 +547,33 @@ export default function ModelViewer({
         model.position.sub(center)
         modelCenter.copy(center)
         modelSize = size
-        // record each mesh's outward direction (from center) for the explode toggle
+        // explode moves each PART (top-level node under the model) as a UNIT, not
+        // each primitive-mesh — so a merged/painted part stays whole instead of
+        // tearing along its old material seams (all its prims share one direction)
         model.updateWorldMatrix(true, true)
+        const topNodeOf = (o) => {
+          let n = o
+          while (n.parent && n.parent !== model) n = n.parent
+          return n
+        }
+        const nodeGroups = new Map() // top node -> { meshes:[{mesh,origPos}], box }
         model.traverse((o) => {
           if (!o.isMesh) return
-          const c = new THREE.Box3().setFromObject(o).getCenter(new THREE.Vector3())
+          const top = topNodeOf(o)
+          let g = nodeGroups.get(top)
+          if (!g) {
+            g = { meshes: [], box: new THREE.Box3() }
+            nodeGroups.set(top, g)
+          }
+          g.meshes.push({ mesh: o, origPos: o.position.clone() })
+          g.box.expandByObject(o)
+        })
+        for (const g of nodeGroups.values()) {
+          const c = g.box.getCenter(new THREE.Vector3())
           const dir =
             c.lengthSq() > 1e-6 ? c.clone().normalize().multiplyScalar(size * 0.5) : new THREE.Vector3()
-          explodeParts.push({ mesh: o, origPos: o.position.clone(), dir })
-        })
+          for (const m of g.meshes) explodeParts.push({ mesh: m.mesh, origPos: m.origPos, dir })
+        }
         // Default view: a 3/4 FRONT shot so the model faces the camera (slightly
         // turned to the viewer's right), for Meshy and Tripo alike. Earlier we
         // flipped the camera behind Tripo models on the theory they export
@@ -856,7 +874,9 @@ export default function ModelViewer({
         // capture the TRUE original material (texture), not whatever display mode
         // is active — otherwise the export baked the flat Parts colours as texture
         if (!o.userData.csOrigMat) o.userData.csOrigMat = o.userData.origMat || o.material
-        o.material = new THREE.MeshStandardMaterial({ vertexColors: true, metalness: 0.05, roughness: 0.85 })
+        // unlit vertex-colour material → vivid flat labels (a lit material made the
+        // paint colours look dull vs the bright Parts view)
+        o.material = new THREE.MeshBasicMaterial({ vertexColors: true })
       })
       colorSegRef.current.active = true
     }
@@ -957,10 +977,16 @@ export default function ModelViewer({
     const onToolDown = (e) => {
       // paint-by-colour owns clicks while active (independent of the tool tray)
       if (colorSegRef.current.active && model && e.button === 0) {
-        const brush = colorSegRef.current.tool === 'brush'
-        controls.enabled = !brush // only the brush stroke owns the drag; fill/pick keep orbit
+        const cs = colorSegRef.current
+        const hit = pick(e)
+        if (!hit?.object?.isMesh) {
+          controls.enabled = true // clicked empty space → orbit the model, even with Brush
+          return
+        }
+        const brush = cs.tool === 'brush'
+        controls.enabled = !brush // only a brush stroke ON the mesh owns the drag
         stroking = brush
-        if (colorSegRef.current.tool !== 'eyedropper') csSnapshot() // one undo step per action
+        if (cs.tool !== 'eyedropper') csSnapshot() // one undo step per action
         colorSegPaint(e)
         return
       }
