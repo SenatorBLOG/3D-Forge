@@ -162,10 +162,12 @@ export default function ForgePage() {
   const [currentVersionId, setCurrentVersionId] = useState(restored?.currentVersionId || null)
   const versionSeq = useRef(restored?.versionSeq || 0)
   const currentVersionIdRef = useRef(null)
+  const modelUrlRef = useRef(null) // latest working model (guards async hydrate)
   // imperative handle into the live viewer (recolor/exportModel), populated by
   // ModelViewer via its apiOut prop; used by the local (free) recolor flow
   const viewerApiRef = useRef({})
   currentVersionIdRef.current = currentVersionId
+  modelUrlRef.current = modelUrl
 
   // Task 6 — animation session. rigTaskId + applied clips persist across F5 and
   // are stored per-version, so an already-rigged model adds another clip for +10
@@ -271,10 +273,60 @@ export default function ForgePage() {
     }
   }, [modelUrl, modelVersions, currentVersionId, baseModelPrompt, modelKind, rigTaskId, appliedClips])
 
+  // first load (a shared ?model= link, or a session restored with only a root):
+  // pull the server-side version tree so the strip isn't a lone card
+  useEffect(() => {
+    if (modelUrl && modelVersions.length < 2) hydrateVersionsFromServer(modelUrl, currentVersionId)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   // model-dependent tools fall back to Generate when the canvas is cleared
   useEffect(() => {
     if (!modelUrl && (activeTab === 'edit' || activeTab === 'recolor')) setActiveTab('generate')
   }, [modelUrl, activeTab])
+
+  // Restore a base model's durable version history from the server. The client
+  // saves the strip on every change (PUT /api/versions) but only ever restored it
+  // from THIS browser's localStorage — so returning to a model from the Library,
+  // or opening it on another browser/machine, showed a lone root even though its
+  // versions live in Mongo. This pulls that tree. Guarded: only applies while the
+  // model is still loaded AND the strip is still just the root we set, so it can
+  // never clobber an edit the user made while the fetch was in flight.
+  const hydrateVersionsFromServer = async (url, rootId) => {
+    try {
+      const res = await fetch(`/api/versions?modelUrl=${encodeURIComponent(url)}`)
+      if (!res.ok) return
+      const { tree } = await res.json()
+      const versions = (tree?.versions || []).filter((v) => persistable(v.modelUrl))
+      if (versions.length < 2) return // nothing richer than the lone root
+      if (modelUrlRef.current !== url) return // user moved on
+      let applied = false
+      setModelVersions((prev) => {
+        if (prev.length > 1) return prev // an edit landed meanwhile — don't clobber
+        applied = true
+        return versions
+      })
+      if (!applied) return
+      // point "current" at the node we actually loaded (or the tree's saved current)
+      const cur = versions.find((v) => v.modelUrl === url)?.id || tree.currentVersionId || rootId
+      setCurrentVersionId(cur)
+      // never reuse an id: bump the counter past every restored one
+      const maxN = versions.reduce(
+        (m, v) => Math.max(m, parseInt(String(v.id).replace(/^v/, ''), 10) || 0),
+        versionSeq.current,
+      )
+      versionSeq.current = maxN
+      // restore the animation session of the current node (rig → +10 clips, no re-rig)
+      const node = versions.find((v) => v.id === cur)
+      if (node?.rigTaskId) {
+        setRigTaskId(node.rigTaskId)
+        setAppliedClips(node.clips || [])
+        animEntriesRef.current = node.animEntries || []
+      }
+    } catch {
+      /* offline / no tree — keep the lone root */
+    }
+  }
 
   // switch the on-screen model, and optionally record it as a version:
   //   version:{ as:'root' }  — start a fresh chain (a loaded/generated base)
@@ -307,6 +359,9 @@ export default function ForgePage() {
       const id = `v${++versionSeq.current}`
       setModelVersions([{ id, modelUrl: url, label: version.label || 'Model', parentId: null, kind: version.kind }])
       setCurrentVersionId(id)
+      // this base may already have an edit history on the server (a past session,
+      // another browser, a teammate) — pull it so the strip isn't a lone root
+      hydrateVersionsFromServer(url, id)
     } else if (version?.as === 'child') {
       const id = `v${++versionSeq.current}`
       const parentId = currentVersionIdRef.current
