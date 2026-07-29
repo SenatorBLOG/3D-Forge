@@ -83,57 +83,93 @@ export async function createPost(user, { title, modelUrl, description, tags, kin
   return publicPost(p)
 }
 
-export async function listPosts({
-  authorId,
-  authorIds,
-  authorUsername,
-  ids, // restrict to these post ids (profile Favorites: the posts a user liked)
-  tag,
-  anyTags, // match posts carrying ANY of these tags (theme filtering, B9)
-  q,
-  limit = 200,
-} = {}) {
-  const query = typeof q === 'string' ? q.trim().toLowerCase() : ''
-  const wantTag = tag ? normalizeTags(tag)[0] : undefined
-  const wantAny = Array.isArray(anyTags) && anyTags.length ? normalizeTags(anyTags) : undefined
+// Turn caller options into the concrete match criteria both stores share.
+function resolveCriteria({ tag, anyTags, q }) {
+  return {
+    query: typeof q === 'string' ? q.trim().toLowerCase() : '',
+    wantTag: tag ? normalizeTags(tag)[0] : undefined,
+    wantAny: Array.isArray(anyTags) && anyTags.length ? normalizeTags(anyTags) : undefined,
+  }
+}
+
+// Mongo query object — used by both find (list) and countDocuments (total).
+function mongoFilter({ authorId, authorIds, ids, authorUsername, wantTag, wantAny, query }) {
+  const filter = {}
+  if (authorId) filter.authorId = authorId
+  if (authorIds) filter.authorId = { $in: authorIds }
+  // drop anything that can't be a Mongo id so a mem-mode id never throws a CastError
+  if (ids) filter._id = { $in: ids.filter((i) => /^[0-9a-f]{24}$/i.test(i)) }
+  if (authorUsername) filter.authorUsername = authorUsername
+  if (wantTag) filter.tags = wantTag
+  if (wantAny) filter.tags = { ...(wantTag ? { $eq: wantTag } : {}), $in: wantAny }
+  if (query) {
+    const rx = new RegExp(escapeRegex(query), 'i')
+    filter.$or = [{ title: rx }, { tags: rx }]
+  }
+  return filter
+}
+
+// in-memory predicate mirroring the Mongo filter (keyless/mock dev)
+function memMatches(p, { authorId, idSet, postIdSet, authorUsername, wantTag, wantAny, query }) {
+  if (authorId && p.authorId !== authorId) return false
+  if (idSet && !idSet.has(p.authorId)) return false
+  if (postIdSet && !postIdSet.has(p.id)) return false
+  if (authorUsername && p.authorUsername !== authorUsername) return false
+  if (wantTag && !(p.tags || []).includes(wantTag)) return false
+  if (wantAny && !(p.tags || []).some((t) => wantAny.includes(t))) return false
+  if (query) {
+    // mirror the Mongo $or: match within the title OR within a single tag,
+    // never across the title/tag seam
+    const inTitle = p.title.toLowerCase().includes(query)
+    const inTag = (p.tags || []).some((t) => t.toLowerCase().includes(query))
+    if (!inTitle && !inTag) return false
+  }
+  return true
+}
+
+const emptyMatch = ({ authorIds, ids }) =>
   // an empty authorIds/ids list means "matches nothing", not "all posts"
-  if (authorIds && authorIds.length === 0) return []
-  if (ids && ids.length === 0) return []
+  (authorIds && authorIds.length === 0) || (ids && ids.length === 0)
+
+export async function listPosts(opts = {}) {
+  const { authorIds, ids, limit = 200, offset = 0 } = opts
+  if (emptyMatch(opts)) return []
+  const crit = resolveCriteria(opts)
   if (dbReady()) {
-    const filter = {}
-    if (authorId) filter.authorId = authorId
-    if (authorIds) filter.authorId = { $in: authorIds }
-    // drop anything that can't be a Mongo id so a mem-mode id never throws a CastError
-    if (ids) filter._id = { $in: ids.filter((i) => /^[0-9a-f]{24}$/i.test(i)) }
-    if (authorUsername) filter.authorUsername = authorUsername
-    if (wantTag) filter.tags = wantTag
-    if (wantAny) filter.tags = { ...(wantTag ? { $eq: wantTag } : {}), $in: wantAny }
-    if (query) {
-      const rx = new RegExp(escapeRegex(query), 'i')
-      filter.$or = [{ title: rx }, { tags: rx }]
-    }
-    const docs = await Post.find(filter).sort({ createdAt: -1 }).limit(limit).lean()
+    const filter = mongoFilter({ ...opts, ...crit })
+    const docs = await Post.find(filter).sort({ createdAt: -1 }).skip(offset).limit(limit).lean()
     return docs.map((d) => publicPost({ ...d, id: String(d._id) }))
   }
-  const idSet = authorIds ? new Set(authorIds) : null
-  const postIdSet = ids ? new Set(ids) : null
-  const list = memPosts.filter((p) => {
-    if (authorId && p.authorId !== authorId) return false
-    if (idSet && !idSet.has(p.authorId)) return false
-    if (postIdSet && !postIdSet.has(p.id)) return false
-    if (authorUsername && p.authorUsername !== authorUsername) return false
-    if (wantTag && !(p.tags || []).includes(wantTag)) return false
-    if (wantAny && !(p.tags || []).some((t) => wantAny.includes(t))) return false
-    if (query) {
-      // mirror the Mongo $or: match within the title OR within a single tag,
-      // never across the title/tag seam
-      const inTitle = p.title.toLowerCase().includes(query)
-      const inTag = (p.tags || []).some((t) => t.toLowerCase().includes(query))
-      if (!inTitle && !inTag) return false
-    }
-    return true
-  })
-  return list.slice(0, limit).map(publicPost)
+  const memCrit = {
+    authorId: opts.authorId,
+    authorUsername: opts.authorUsername,
+    idSet: authorIds ? new Set(authorIds) : null,
+    postIdSet: ids ? new Set(ids) : null,
+    ...crit,
+  }
+  return memPosts
+    .filter((p) => memMatches(p, memCrit))
+    .slice(offset, offset + limit)
+    .map(publicPost)
+}
+
+// Total posts matching the same filters (ignores limit/offset) — lets the client
+// paginate/infinite-scroll knowing when it has reached the end.
+export async function countPosts(opts = {}) {
+  const { authorIds, ids } = opts
+  if (emptyMatch(opts)) return 0
+  const crit = resolveCriteria(opts)
+  if (dbReady()) {
+    return Post.countDocuments(mongoFilter({ ...opts, ...crit }))
+  }
+  const memCrit = {
+    authorId: opts.authorId,
+    authorUsername: opts.authorUsername,
+    idSet: authorIds ? new Set(authorIds) : null,
+    postIdSet: ids ? new Set(ids) : null,
+    ...crit,
+  }
+  return memPosts.filter((p) => memMatches(p, memCrit)).length
 }
 
 // Most-used tags across the gallery, for Explore's filter chips.

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext.jsx'
 import { getThumbnail } from '../lib/thumbnailer.js'
 import { downloadModel } from '../lib/download.js'
@@ -105,8 +106,15 @@ export default function LibraryPanel({ refreshKey = 0, busy = false, onLoad }) {
     return data // { models, total }
   }
 
-  // reload on filter change / refresh signal (a finished generation or upload)
+  // reload on filter change / refresh signal (a finished generation or upload).
+  // The library is a signed-in space — skip the fetch entirely when logged out.
   useEffect(() => {
+    if (!user) {
+      setModels(null)
+      setTotal(0)
+      setError(null)
+      return undefined
+    }
     let cancelled = false
     setError(null)
     setModels(null)
@@ -121,7 +129,7 @@ export default function LibraryPanel({ refreshKey = 0, busy = false, onLoad }) {
       cancelled = true
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filter, refreshKey, token])
+  }, [user, filter, refreshKey, token])
 
   const loadMore = async () => {
     if (loadingMore || !models) return
@@ -179,6 +187,15 @@ export default function LibraryPanel({ refreshKey = 0, busy = false, onLoad }) {
     <section className="panel library-panel">
       <span className="tool-label">Library</span>
 
+      {!user && (
+        <div className="lib-signin">
+          <p className="hint">Sign in to keep a library of your generations — save, star, and reload them anytime.</p>
+          <Link className="tool-cta tool-cta--sm" to="/login">
+            Sign in →
+          </Link>
+        </div>
+      )}
+
       {user && (
         <div className="lib-tabs">
           {[
@@ -200,7 +217,7 @@ export default function LibraryPanel({ refreshKey = 0, busy = false, onLoad }) {
 
       {error && <span className="url-error">{error}</span>}
 
-      {!models && !error && <p className="hint">Loading…</p>}
+      {user && !models && !error && <p className="hint">Loading…</p>}
 
       {models && models.length === 0 && (
         <p className="hint">

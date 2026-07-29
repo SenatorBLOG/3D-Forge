@@ -6626,6 +6626,31 @@ button.tag:hover {
   width: 100%;
 }
 
+/* Library is a signed-in space — logged-out prompt */
+.lib-signin {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 6px 0 2px;
+}
+.lib-signin .tool-cta {
+  align-self: flex-start;
+}
+
+/* Infinite-scroll sentinel + tail states (Home + Explore community walls) */
+.feed-sentinel {
+  width: 100%;
+  height: 1px;
+}
+.feed-more-hint,
+.feed-end-hint {
+  text-align: center;
+  padding: 18px 0 6px;
+}
+.feed-end-hint {
+  opacity: 0.6;
+}
+
 /* A11 — profile badges */
 .badge-stats {
   display: inline-flex;

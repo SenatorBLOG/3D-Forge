@@ -10,8 +10,11 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
 // cap concurrent contexts). Renders are serialized through a queue, so at most
 // one transient context exists at a time and it's disposed right after capture.
 
-const WIDTH = 440
-const HEIGHT = 300
+// Portrait frame (4:5) — the community cards are tall/masonry, so a portrait
+// render fills them cleanly; a landscape render got heavily side-cropped by the
+// cards' object-fit: cover and made models look zoomed-in and clipped.
+const WIDTH = 420
+const HEIGHT = 520
 const WIRE_COLOR = 0x22d3ee // electric cyan — matches the brand action accent
 
 const cache = new Map() // modelUrl -> Promise<{ shaded, wire }>
@@ -81,11 +84,21 @@ function renderThumbnail(modelUrl) {
           // version thumbnails face the SAME way — and the SAME way the live viewer
           // shows the model (viewer camera is at +x too). The old Tripo-only mirror
           // made Tripo cards show their back → cards faced inconsistent directions.
-          const sx = 1
-          camera.position.set(size * 0.6 * sx, size * 0.45, size * 0.85)
+          // 3/4 front, orbiting at a fixed radius + elevation. The radius is pulled
+          // back (1.4× the model's bounding diagonal) so the WHOLE model fits the
+          // narrower portrait frame with margin — cover-cropping into any card ratio
+          // then trims background, never the model. baseAz keeps the same apparent
+          // front the live viewer shows (camera at +x), so cards face consistently.
+          const radius = size * 1.4
+          const elev = size * 0.42
+          const baseAz = Math.atan2(0.6, 0.85)
+          const aim = (az) => {
+            camera.position.set(Math.sin(az) * radius, elev, Math.cos(az) * radius)
+            camera.lookAt(0, 0, 0)
+          }
           camera.near = size / 100
           camera.far = size * 10
-          camera.lookAt(0, 0, 0)
+          aim(baseAz)
           camera.updateProjectionMatrix()
           scene.add(model)
 
@@ -95,19 +108,14 @@ function renderThumbnail(modelUrl) {
 
           // pass 2 — three more shaded angles, orbiting at the same radius and
           // elevation (feeds the hover-reveal multi-angle strip on cards)
-          const radius = Math.hypot(0.6, 0.85) * size
-          const baseAz = Math.atan2(0.6 * sx, 0.85)
           const views = []
           for (const quarter of [1, 2, 3]) {
-            const az = baseAz + (quarter * Math.PI) / 2
-            camera.position.set(Math.sin(az) * radius, size * 0.45, Math.cos(az) * radius)
-            camera.lookAt(0, 0, 0)
+            aim(baseAz + (quarter * Math.PI) / 2)
             renderer.render(scene, camera)
             views.push(canvas.toDataURL('image/png'))
           }
           // back to the front angle for the wireframe pass
-          camera.position.set(size * 0.6 * sx, size * 0.45, size * 0.85)
-          camera.lookAt(0, 0, 0)
+          aim(baseAz)
 
           // pass 3 — cyan wireframe (stash originals so we can dispose them)
           wireMat = new THREE.MeshBasicMaterial({ color: WIRE_COLOR, wireframe: true })

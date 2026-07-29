@@ -4,6 +4,7 @@ import PostCard from '../components/PostCard.jsx'
 import CardSkeleton from '../components/CardSkeleton.jsx'
 import MicButton from '../components/MicButton.jsx'
 import { getThumbnail } from '../lib/thumbnailer.js'
+import { usePaginatedPosts } from '../lib/usePaginatedPosts.js'
 
 const QUICK = ['a neon samurai helmet', 'a small dragon', 'a hover bike', 'a rune-etched axe']
 const HOME_LIMIT = 12
@@ -55,25 +56,16 @@ export default function HomePage() {
   const [preview, setPreview] = useState(null) // object URL
   const [uploading, setUploading] = useState(false)
   const [imgError, setImgError] = useState(null)
-  const [posts, setPosts] = useState(null)
   const [phIdx, setPhIdx] = useState(0)
   const fileRef = useRef(null)
+
+  // community wall — paginated + infinite-scrolling (grows past the first page)
+  const { posts, total, loadingMore, hasMore, sentinelRef } = usePaginatedPosts('')
 
   // rotate the prompt suggestion every few seconds
   useEffect(() => {
     const t = setInterval(() => setPhIdx((i) => (i + 1) % PLACEHOLDERS.length), 3500)
     return () => clearInterval(t)
-  }, [])
-
-  useEffect(() => {
-    let cancelled = false
-    fetch('/api/posts')
-      .then((r) => (r.ok ? r.json() : { posts: [] }))
-      .then((d) => !cancelled && setPosts(d.posts || []))
-      .catch(() => !cancelled && setPosts([]))
-    return () => {
-      cancelled = true
-    }
   }, [])
 
   useEffect(() => () => preview && URL.revokeObjectURL(preview), [preview])
@@ -141,7 +133,7 @@ export default function HomePage() {
   // honest, derived community stats (no fabricated logos/testimonials)
   const stats = posts
     ? {
-        models: posts.length,
+        models: total, // whole gallery, not just the loaded page
         creators: new Set(posts.map((p) => p.authorUsername)).size,
         themes: new Set(posts.flatMap((p) => p.tags || [])).size,
       }
@@ -261,11 +253,17 @@ export default function HomePage() {
         </div>
 
         {posts && posts.length > 0 ? (
-          <div className="explore-grid">
-            {posts.map((p) => (
-              <PostCard key={p.id} post={p} />
-            ))}
-          </div>
+          <>
+            <div className="explore-grid">
+              {posts.map((p) => (
+                <PostCard key={p.id} post={p} />
+              ))}
+            </div>
+            {/* infinite-scroll sentinel + tail state */}
+            <div ref={sentinelRef} className="feed-sentinel" aria-hidden="true" />
+            {loadingMore && <p className="hint feed-more-hint">Loading more…</p>}
+            {!hasMore && total > 24 && <p className="hint feed-end-hint">You’ve reached the end.</p>}
+          </>
         ) : posts && posts.length === 0 ? (
           <div className="home-community-empty">
             <p>No models published yet — be the first.</p>

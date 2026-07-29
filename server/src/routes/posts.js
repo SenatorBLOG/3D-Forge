@@ -3,6 +3,7 @@ import { requireAuth, optionalAuth } from '../middleware/auth.js'
 import {
   createPost,
   listPosts,
+  countPosts,
   getPost,
   listTags,
   updatePost,
@@ -64,7 +65,12 @@ router.get('/', optionalAuth, async (req, res) => {
       }
       anyTags = theme.tags
     }
-    const posts = await listPosts({
+    // pagination for the community wall / infinite scroll. Default stays generous
+    // (200) so unpaginated callers (profiles, stats) keep getting the full set;
+    // Explore/Home pass an explicit ?limit=&offset=.
+    const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 200, 1), 200)
+    const offset = Math.max(parseInt(req.query.offset, 10) || 0, 0)
+    const filters = {
       authorId: str(req.query.author),
       authorIds,
       ids,
@@ -72,8 +78,17 @@ router.get('/', optionalAuth, async (req, res) => {
       tag: str(req.query.tag),
       anyTags,
       q: str(req.query.q),
+    }
+    const [posts, total] = await Promise.all([
+      listPosts({ ...filters, limit, offset }),
+      countPosts(filters),
+    ])
+    res.json({
+      posts: await Promise.all(posts.map((p) => withSocial(p, req.user?.id))),
+      total,
+      offset,
+      limit,
     })
-    res.json({ posts: await Promise.all(posts.map((p) => withSocial(p, req.user?.id))) })
   } catch (err) {
     console.error('list posts failed:', err)
     res.status(500).json({ error: 'Failed to list posts' })

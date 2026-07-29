@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { Link } from 'react-router-dom'
 import PostCard from '../components/PostCard.jsx'
@@ -6,6 +6,7 @@ import Avatar from '../components/Avatar.jsx'
 import EmptyState from '../components/EmptyState.jsx'
 import CardSkeleton from '../components/CardSkeleton.jsx'
 import { useAuth } from '../auth/AuthContext.jsx'
+import { usePaginatedPosts } from '../lib/usePaginatedPosts.js'
 
 /** The community gallery: models published by everyone, with free-text search,
  *  tag filters, and an "All / Following" feed switch. Active tag/query/feed live
@@ -18,11 +19,19 @@ export default function ExplorePage() {
   // Following feed only applies when signed in
   const feed = user && params.get('feed') === 'following' ? 'following' : 'all'
 
-  const [posts, setPosts] = useState(null)
   const [tags, setTags] = useState([])
   const [creators, setCreators] = useState([]) // B10: creators matching q
-  const [error, setError] = useState(null)
   const [draft, setDraft] = useState(q) // controlled search box
+
+  // one filter query string drives the paginated, infinite-scrolling feed
+  const query = useMemo(() => {
+    const p = new URLSearchParams()
+    if (tag) p.set('tag', tag)
+    if (q) p.set('q', q)
+    if (feed === 'following') p.set('following', '1')
+    return p.toString()
+  }, [tag, q, feed])
+  const { posts, total, error, loadingMore, hasMore, sentinelRef } = usePaginatedPosts(query, token)
 
   // merge changes into the URL; empty values drop the param
   const update = (next) => {
@@ -37,31 +46,6 @@ export default function ExplorePage() {
   useEffect(() => {
     setDraft(q)
   }, [q])
-
-  // reload the feed whenever the tag / query / feed changes
-  useEffect(() => {
-    let cancelled = false
-    const qs = new URLSearchParams()
-    if (tag) qs.set('tag', tag)
-    if (q) qs.set('q', q)
-    if (feed === 'following') qs.set('following', '1')
-    const headers = feed === 'following' && token ? { Authorization: `Bearer ${token}` } : {}
-    setPosts(null)
-    fetch(`/api/posts?${qs}`, { headers })
-      .then(async (r) => {
-        const d = await r.json()
-        if (cancelled) return
-        if (!r.ok) throw new Error(d.error || `HTTP ${r.status}`)
-        setPosts(d.posts)
-        setError(null)
-      })
-      .catch((e) => {
-        if (!cancelled) setError(e.message)
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [tag, q, feed, token])
 
   // B10 unified search: when a text query is active, also surface matching creators
   useEffect(() => {
@@ -172,7 +156,7 @@ export default function ExplorePage() {
                 search <strong>“{q}”</strong>
               </>
             )}
-            {posts && ` · ${posts.length} result${posts.length === 1 ? '' : 's'}`}
+            {posts && ` · ${total} result${total === 1 ? '' : 's'}`}
           </span>
           <button className="link-button" onClick={() => update({ tag: '', q: '' })}>
             Clear
@@ -201,11 +185,17 @@ export default function ExplorePage() {
         />
       )}
       {posts && posts.length > 0 && (
-        <div className="explore-grid">
-          {posts.map((p) => (
-            <PostCard key={p.id} post={p} />
-          ))}
-        </div>
+        <>
+          <div className="explore-grid">
+            {posts.map((p) => (
+              <PostCard key={p.id} post={p} />
+            ))}
+          </div>
+          {/* infinite-scroll sentinel + tail state */}
+          <div ref={sentinelRef} className="feed-sentinel" aria-hidden="true" />
+          {loadingMore && <p className="hint feed-more-hint">Loading more…</p>}
+          {!hasMore && total > 24 && <p className="hint feed-end-hint">You’ve reached the end.</p>}
+        </>
       )}
     </div>
   )
