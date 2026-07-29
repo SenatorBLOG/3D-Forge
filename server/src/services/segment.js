@@ -102,6 +102,16 @@ export async function readModelBytes(modelUrl) {
  * merged mesh into vertical bands so there's always something to click.
  */
 function extractParts(doc) {
+  // Count mesh-bearing nodes first. A MULTI-node model (our segmented outputs:
+  // tripo-seg / marks-seg / baked-seg — one node per part) gets one part per
+  // NODE and never splits a node's primitives — splitting would shatter a
+  // multi-material part (e.g. a merged leg) across its materials and, worse,
+  // name the pieces after the material. A SINGLE-node model (sample GLBs = one
+  // mesh with a primitive per logical part) still splits by primitive.
+  let meshNodes = 0
+  for (const scene of doc.getRoot().listScenes()) scene.traverse((n) => n.getMesh() && meshNodes++)
+  const nodeLevel = meshNodes > 1
+
   const parts = []
   let nodeIndex = 0
   for (const scene of doc.getRoot().listScenes()) {
@@ -113,10 +123,9 @@ function extractParts(doc) {
       const prims = mesh.listPrimitives().filter((p) => p.getAttribute('POSITION'))
       if (!prims.length) return
       const name = node.getName() || mesh.getName() || `part ${idx + 1}`
-      if (prims.length > 1) {
-        // generated GLBs are often ONE mesh with a primitive per logical part
-        // (our sample models are) — segment at primitive level so a swap
-        // touches just that piece
+      if (!nodeLevel && prims.length > 1) {
+        // single-mesh sample GLB — segment at primitive level so a swap touches
+        // just that piece
         prims.forEach((prim, k) => {
           const pos = prim.getAttribute('POSITION')
           const box = worldBox(world, pos.getMin([]), pos.getMax([]))
@@ -132,8 +141,13 @@ function extractParts(doc) {
         })
         return
       }
-      const pos = prims[0].getAttribute('POSITION')
-      const box = worldBox(world, pos.getMin([]), pos.getMax([]))
+      // node-level: union bbox over every primitive → one part named by the node
+      let box = null
+      for (const prim of prims) {
+        const pos = prim.getAttribute('POSITION')
+        const b = worldBox(world, pos.getMin([]), pos.getMax([]))
+        box = box ? unionBox([box, b]) : b
+      }
       parts.push({ id: `${slug(name) || 'part'}-${idx}`, name, index: idx, bbox: box, center: center(box) })
     })
   }
@@ -345,35 +359,21 @@ export async function segmentByMarks(modelUrl, seeds) {
       dropped.push(seedPts[li].label)
       continue
     }
-    // MERGE every source-prim bucket of this seed into ONE primitive per node —
-    // so extractParts sees a single-primitive node and names the part from the
-    // NODE (the user's label), not the material. A single-bucket seed keeps its
-    // texture; a seed spanning several source materials falls back to a flat
-    // colour (its dominant material) — textures across materials can't share one
-    // UV set. Naming + clean split is the point here.
-    const single = bks.length === 1 ? bks[0] : null
-    const positions = new Float32Array(bks.reduce((n, b) => n + b.pos.length, 0))
-    const hasNrm = bks.every((b) => b.nrm)
-    const normals = hasNrm ? new Float32Array(positions.length) : null
-    let off = 0
-    for (const b of bks) {
-      positions.set(b.pos, off)
-      if (normals) normals.set(b.nrm, off)
-      off += b.pos.length
-    }
-    const keepTex = single && single.uv && single.srcPrim.texture
-    const soup = [
-      {
-        positions,
-        normals,
-        indices: null, // de-indexed
-        uvs: keepTex ? new Float32Array(single.uv) : null,
-        color: bks[0].srcPrim.color,
-        metallic: bks[0].srcPrim.metallic,
-        roughness: bks[0].srcPrim.roughness,
-        texture: keepTex ? single.srcPrim.texture : null,
-      },
-    ]
+    // one primitive PER source-material bucket (de-indexed), each keeping its own
+    // full material + UVs — so a seed spanning several materials keeps every
+    // texture. extractParts is node-level for this multi-node output, so the
+    // seed's node stays ONE part named by the user's label.
+    const soup = bks.map((b) => ({
+      positions: new Float32Array(b.pos),
+      normals: b.nrm ? new Float32Array(b.nrm) : null,
+      indices: null, // de-indexed
+      uvs: b.uv ? new Float32Array(b.uv) : null,
+      material: b.srcPrim.material,
+      color: b.srcPrim.color,
+      metallic: b.srcPrim.metallic,
+      roughness: b.srcPrim.roughness,
+      texture: b.srcPrim.texture,
+    }))
     const mesh = doc.createMesh(seedPts[li].label)
     addPrimsToMesh(doc, buffer, mesh, soup)
     scene.addChild(doc.createNode(seedPts[li].label).setMesh(mesh))
@@ -388,36 +388,6 @@ export async function segmentByMarks(modelUrl, seeds) {
   memCache.set(url, parts)
   saveCache()
   return { modelUrl: url, parts, cached: false, engine: 'marks', dropped }
-}
-
-// Collapse several triangle-soup primitives into ONE (de-indexed) so a node ends
-// up single-primitive — extractParts then names the part from the NODE. A lone
-// prim is returned untouched (keeps its indices/UVs/texture); a merge across
-// materials drops texture (can't share one UV set) and falls back to flat colour.
-function mergeToOnePrim(prims) {
-  if (prims.length === 1) return prims[0]
-  const pos = []
-  const nrm = []
-  const keepNrm = prims.every((p) => p.normals)
-  for (const p of prims) {
-    const idx = p.indices
-    const count = idx ? idx.length : p.positions.length / 3
-    for (let t = 0; t < count; t++) {
-      const vi = idx ? idx[t] : t
-      pos.push(p.positions[vi * 3], p.positions[vi * 3 + 1], p.positions[vi * 3 + 2])
-      if (keepNrm) nrm.push(p.normals[vi * 3], p.normals[vi * 3 + 1], p.normals[vi * 3 + 2])
-    }
-  }
-  return {
-    positions: new Float32Array(pos),
-    normals: keepNrm ? new Float32Array(nrm) : null,
-    indices: null,
-    uvs: null,
-    color: prims[0].color,
-    metallic: prims[0].metallic,
-    roughness: prims[0].roughness,
-    texture: null,
-  }
 }
 
 // --- Task 7/#1: bake grouped segments into real merged parts ----------------
@@ -455,8 +425,11 @@ export async function bakeGroups(modelUrl, groups) {
   const addNode = (name, partList) => {
     const prims = partList.flatMap(soupOf)
     if (!prims.length) return
+    // keep each source primitive (its own material/texture) — extractParts is
+    // node-level for this multi-node output, so the node stays ONE part while
+    // every piece keeps its texture (no white/flat merged part)
     const mesh = doc.createMesh(name)
-    addPrimsToMesh(doc, buffer, mesh, [mergeToOnePrim(prims)])
+    addPrimsToMesh(doc, buffer, mesh, prims)
     scene.addChild(doc.createNode(name).setMesh(mesh))
   }
 
@@ -596,21 +569,41 @@ function collectWorldPrimitives(doc, onlyIndex = null, onlyPrim = null) {
         const idxAcc = prim.getIndices()
         const uvAcc = prim.getAttribute('TEXCOORD_0')
         const mat = prim.getMaterial()
-        // carry the base-colour TEXTURE through the stitch (not just a flat colour)
-        // so a rebuilt/multiview part keeps its texture instead of going plain grey
-        let texture = null
-        const baseTex = mat?.getBaseColorTexture?.()
-        const img = baseTex?.getImage?.()
-        if (img) texture = { bytes: img, mime: baseTex.getMimeType?.() || 'image/png' }
+        // Carry the FULL PBR material through a rebuild — not just base colour.
+        // Dropping emissive/normal/metallic-roughness/occlusion is exactly why a
+        // rebuilt part came out dark & flat (no glow on emissive cracks, no shine,
+        // no surface detail). Every map is re-captured with its bytes so the part
+        // renders the same as the original.
+        const grabTex = (t) => {
+          const img = t?.getImage?.()
+          return img ? { bytes: img, mime: t.getMimeType?.() || 'image/png' } : null
+        }
+        const material = mat && {
+          baseColorFactor: mat.getBaseColorFactor?.() || [1, 1, 1, 1],
+          metallic: mat.getMetallicFactor?.() ?? 0,
+          roughness: mat.getRoughnessFactor?.() ?? 1,
+          emissiveFactor: mat.getEmissiveFactor?.() || [0, 0, 0],
+          alphaMode: mat.getAlphaMode?.() || 'OPAQUE',
+          doubleSided: mat.getDoubleSided?.() ?? false,
+          base: grabTex(mat.getBaseColorTexture?.()),
+          metallicRoughness: grabTex(mat.getMetallicRoughnessTexture?.()),
+          normal: grabTex(mat.getNormalTexture?.()),
+          normalScale: mat.getNormalScale?.() ?? 1,
+          emissive: grabTex(mat.getEmissiveTexture?.()),
+          occlusion: grabTex(mat.getOcclusionTexture?.()),
+          occlusionStrength: mat.getOcclusionStrength?.() ?? 1,
+        }
         prims.push({
           positions,
           normals: nrm ? new Float32Array(nrm.getArray()) : null,
           indices: idxAcc ? idxAcc.getArray().slice() : null,
           uvs: uvAcc ? new Float32Array(uvAcc.getArray()) : null,
+          material,
+          // legacy flat fields kept for callers/paths that don't read `material`
           color: mat?.getBaseColorFactor() || [0.62, 0.65, 0.7, 1],
           metallic: mat?.getMetallicFactor?.() ?? 0,
           roughness: mat?.getRoughnessFactor?.() ?? 0.7,
-          texture,
+          texture: material?.base || null,
         })
       }
     })
@@ -644,22 +637,46 @@ function addPrimsToMesh(doc, buffer, mesh, prims, mapPoint = null) {
         doc.createAccessor().setType('SCALAR').setArray(new Uint32Array(p.indices)).setBuffer(buffer),
       )
     }
-    // UVs + material: if the source carried a texture, re-create it and keep the
-    // UVs so the stitched region shows its texture; otherwise fall back to the
-    // flat base colour (the old behaviour).
-    const mat = doc
-      .createMaterial('part-mat')
-      .setMetallicFactor(p.metallic ?? 0)
-      .setRoughnessFactor(p.roughness ?? 0.7)
-    if (p.texture && p.uvs) {
-      prim.setAttribute(
-        'TEXCOORD_0',
-        doc.createAccessor().setType('VEC2').setArray(p.uvs).setBuffer(buffer),
-      )
-      const tex = doc.createTexture('part-tex').setImage(p.texture.bytes).setMimeType(p.texture.mime)
-      mat.setBaseColorTexture(tex).setBaseColorFactor([1, 1, 1, 1])
+    const mat = doc.createMaterial('part-mat')
+    const M = p.material
+    if (M) {
+      // full PBR re-apply — every map (base/metallic-rough/normal/emissive/AO)
+      // + factors, so the part looks identical to the source (glow, shine, detail)
+      mat
+        .setMetallicFactor(M.metallic)
+        .setRoughnessFactor(M.roughness)
+        .setEmissiveFactor(M.emissiveFactor)
+        .setAlphaMode(M.alphaMode)
+        .setDoubleSided(M.doubleSided)
+      const anyTex = M.base || M.metallicRoughness || M.normal || M.emissive || M.occlusion
+      if (anyTex && p.uvs) {
+        prim.setAttribute(
+          'TEXCOORD_0',
+          doc.createAccessor().setType('VEC2').setArray(p.uvs).setBuffer(buffer),
+        )
+        const mk = (t, name) => doc.createTexture(name).setImage(t.bytes).setMimeType(t.mime)
+        if (M.base) mat.setBaseColorTexture(mk(M.base, 'base')).setBaseColorFactor([1, 1, 1, 1])
+        else mat.setBaseColorFactor(M.baseColorFactor)
+        if (M.metallicRoughness) mat.setMetallicRoughnessTexture(mk(M.metallicRoughness, 'mr'))
+        if (M.normal) mat.setNormalTexture(mk(M.normal, 'nrm')).setNormalScale(M.normalScale)
+        if (M.emissive) mat.setEmissiveTexture(mk(M.emissive, 'em'))
+        if (M.occlusion) mat.setOcclusionTexture(mk(M.occlusion, 'ao')).setOcclusionStrength(M.occlusionStrength)
+      } else {
+        mat.setBaseColorFactor(M.baseColorFactor)
+      }
     } else {
-      mat.setBaseColorFactor(p.color)
+      // legacy fallback: base texture or flat colour only
+      mat.setMetallicFactor(p.metallic ?? 0).setRoughnessFactor(p.roughness ?? 0.7)
+      if (p.texture && p.uvs) {
+        prim.setAttribute(
+          'TEXCOORD_0',
+          doc.createAccessor().setType('VEC2').setArray(p.uvs).setBuffer(buffer),
+        )
+        const tex = doc.createTexture('part-tex').setImage(p.texture.bytes).setMimeType(p.texture.mime)
+        mat.setBaseColorTexture(tex).setBaseColorFactor([1, 1, 1, 1])
+      } else {
+        mat.setBaseColorFactor(p.color)
+      }
     }
     prim.setMaterial(mat)
     mesh.addPrimitive(prim)
