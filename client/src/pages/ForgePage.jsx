@@ -228,6 +228,7 @@ export default function ForgePage() {
   const [colorSegMode, setColorSegMode] = useState(false)
   const [colorSegTool, setColorSegTool] = useState('fill')
   const [colorSegHex, setColorSegHex] = useState('#ff4d4d')
+  const [colorSegSize, setColorSegSize] = useState(0.4)
   const toggleColorSeg = (on) => {
     const api = viewerApiRef.current
     if (on) {
@@ -1174,10 +1175,13 @@ export default function ForgePage() {
             active={colorSegMode}
             tool={colorSegTool}
             hex={colorSegHex}
+            size={colorSegSize}
             busy={swapBusy || busy}
             onToggle={toggleColorSeg}
             onSetTool={setColorSegToolAnd}
             onPickColor={pickColorSegColor}
+            onSize={setColorSegSize}
+            onUndo={() => viewerApiRef.current?.colorSegUndo?.()}
             onSegment={runColorSegment}
           />
         )}
@@ -1289,6 +1293,10 @@ export default function ForgePage() {
               partClickMode={groupMode}
               onPartClick={(name) => setPartClickSignal({ name, ts: Date.now() })}
               onEyedrop={pickColorSegColor}
+              colorSegMode={colorSegMode}
+              colorSegTool={colorSegTool}
+              colorSegColor={colorSegHex}
+              colorSegSize={colorSegSize}
             />
             <ModelVersionStrip
               versions={modelVersions}

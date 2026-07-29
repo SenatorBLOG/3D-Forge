@@ -61,13 +61,21 @@ export default function ModelViewer({
   partClickMode = false, // single-click a part reports it (group-select by clicking the model)
   onPartClick = null, // called with the clicked part's mesh/node name
   onEyedrop = null, // #3 paint: eyedropper picked a colour (hex) under the cursor
+  colorSegMode = false, // #3 paint active (drives the brush ring / cursor)
+  colorSegTool = 'fill', // 'fill' | 'brush' | 'eyedropper'
+  colorSegColor = '#ff4d4d', // active paint colour (ring tint)
+  colorSegSize = 0.4, // brush radius 0..1
 }) {
   const containerRef = useRef(null)
   // keep latest callbacks/points without re-creating the whole scene on re-render
   const callbacksRef = useRef({})
   callbacksRef.current = { onAddPoint, onSelectPoint, onLoaded, onError, onPickPartAt, onAddMark, onPartClick, onEyedrop }
-  // #3 paint-by-colour segmentation state (imperative — driven by ColorSegPanel)
-  const colorSegRef = useRef({ active: false, tool: 'brush', hex: '#ff4d4d' })
+  // #3 paint-by-colour segmentation. `active` is set imperatively by begin/end
+  // (they add COLOR_0 + swap materials); tool/hex/size mirror the props each render
+  const colorSegRef = useRef({ active: false, tool: 'fill', hex: '#ff4d4d', size: 0.4 })
+  colorSegRef.current.tool = colorSegTool
+  colorSegRef.current.hex = colorSegColor
+  colorSegRef.current.size = colorSegSize
   const spatialClickRef = useRef(true)
   spatialClickRef.current = spatialClick
   const markModeRef = useRef(false)
@@ -854,13 +862,36 @@ export default function ModelViewer({
     }
     const colorSegEnd = () => {
       colorSegRef.current.active = false
+      csUndoStack.length = 0
       if (!model) return
       model.traverse((o) => {
         if (o.isMesh && o.userData.csOrigMat) {
           o.material?.dispose?.()
-          o.material = o.userData.csOrigMat
+          o.material = o.userData.origMat || o.userData.csOrigMat
         }
       })
+    }
+    // undo: snapshot every mesh's colour attribute before an action; undo restores
+    const csUndoStack = []
+    const csSnapshot = () => {
+      const snap = new Map()
+      model.traverse((o) => {
+        const ca = o.isMesh && o.geometry?.getAttribute('color')
+        if (ca) snap.set(o.uuid, { mesh: o, arr: ca.array.slice() })
+      })
+      csUndoStack.push(snap)
+      if (csUndoStack.length > 12) csUndoStack.shift()
+    }
+    const colorSegUndo = () => {
+      const snap = csUndoStack.pop()
+      if (!snap) return
+      for (const { mesh, arr } of snap.values()) {
+        const ca = mesh.geometry.getAttribute('color')
+        if (ca) {
+          ca.array.set(arr)
+          ca.needsUpdate = true
+        }
+      }
     }
     // paint the picked triangle's neighbourhood (brush), the whole mesh (fill),
     // or read the colour under the cursor (eyedropper)
@@ -888,7 +919,7 @@ export default function ModelViewer({
         return
       }
       // brush: paint vertices within a world-space radius of the hit point
-      const r = modelSize * 0.06 * (0.4 + sizeRef.current)
+      const r = modelSize * (0.02 + cs.size * 0.14)
       const r2 = r * r
       for (let i = 0; i < posAttr.count; i++) {
         csTmp.fromBufferAttribute(posAttr, i)
@@ -920,6 +951,7 @@ export default function ModelViewer({
     apiRef.current.colorSegBegin = colorSegBegin
     apiRef.current.colorSegEnd = colorSegEnd
     apiRef.current.colorSegExport = colorSegExport
+    apiRef.current.colorSegUndo = colorSegUndo
 
     let stroking = false
     const onToolDown = (e) => {
@@ -928,6 +960,7 @@ export default function ModelViewer({
         const brush = colorSegRef.current.tool === 'brush'
         controls.enabled = !brush // only the brush stroke owns the drag; fill/pick keep orbit
         stroking = brush
+        if (colorSegRef.current.tool !== 'eyedropper') csSnapshot() // one undo step per action
         colorSegPaint(e)
         return
       }
@@ -1302,14 +1335,17 @@ export default function ModelViewer({
     </div>
   )
 
-  return (
+    return (
     <div
-      className={`viewer${tool && tool !== 'move' ? ' tool-active' : ''}${tool === 'move' ? ' tool-move' : ''}`}
+      className={`viewer${tool && tool !== 'move' ? ' tool-active' : ''}${tool === 'move' ? ' tool-move' : ''}${
+        colorSegMode ? ` cs-${colorSegTool}` : ''
+      }`}
       ref={containerRef}
       style={viewerBg ? { background: viewerBg } : undefined}
       onPointerMove={(e) => {
-        if (!tool || tool === 'move') return // move uses the gizmo, no brush ring
-        // over a control panel → normal cursor, no brush ring (so you can click)
+        // brush ring follows the pointer for edit tools AND the #3 paint brush
+        const showRing = (tool && tool !== 'move') || (colorSegMode && colorSegTool === 'brush')
+        if (!showRing) return
         if (e.target.closest?.(UI_SELECTOR)) {
           if (brushCursor) setBrushCursor(null)
           return
@@ -1319,15 +1355,15 @@ export default function ModelViewer({
       }}
       onPointerLeave={() => brushCursor && setBrushCursor(null)}
     >
-      {tool && tool !== 'move' && brushCursor && (
+      {((tool && tool !== 'move') || (colorSegMode && colorSegTool === 'brush')) && brushCursor && (
         <div
           className="brush-cursor"
           style={{
             left: brushCursor.x,
             top: brushCursor.y,
-            width: (10 + brushSize * 44) * 2,
-            height: (10 + brushSize * 44) * 2,
-            borderColor: tool === 'sculpt' ? '#22d3ee' : paintColor,
+            width: (10 + (colorSegMode ? colorSegSize : brushSize) * 44) * 2,
+            height: (10 + (colorSegMode ? colorSegSize : brushSize) * 44) * 2,
+            borderColor: colorSegMode ? colorSegColor : tool === 'sculpt' ? '#22d3ee' : paintColor,
           }}
         />
       )}

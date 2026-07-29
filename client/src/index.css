@@ -1237,7 +1237,18 @@ body::before {
   gap: 8px;
 }
 
-/* #3 paint segmentation */
+/* #3 paint segmentation — cursors per tool */
+.viewer.cs-brush {
+  cursor: none; /* the brush ring stands in for the cursor */
+}
+.viewer.cs-eyedropper,
+.viewer.cs-eyedropper canvas {
+  cursor: crosshair;
+}
+.viewer.cs-fill,
+.viewer.cs-fill canvas {
+  cursor: cell;
+}
 .cs-tools {
   display: flex;
   gap: 6px;
@@ -1266,6 +1277,15 @@ body::before {
   flex-wrap: wrap;
   gap: 6px;
   margin-bottom: 10px;
+}
+.cs-size {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.cs-size input {
+  flex: 1;
 }
 .cs-swatch {
   width: 24px;

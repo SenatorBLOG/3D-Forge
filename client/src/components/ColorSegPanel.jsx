@@ -13,7 +13,7 @@ const PALETTE = [
  * existing colour. "Segment by colour" bakes the painted labels into real parts.
  * Exit (✕) leaves the model untouched.
  */
-export default function ColorSegPanel({ active, tool, hex, onToggle, onSetTool, onPickColor, onSegment, busy }) {
+export default function ColorSegPanel({ active, tool, hex, size, onToggle, onSetTool, onPickColor, onSize, onUndo, onSegment, busy }) {
   const [running, setRunning] = useState(false)
   const [error, setError] = useState(null)
 
@@ -83,9 +83,28 @@ export default function ColorSegPanel({ active, tool, hex, onToggle, onSetTool, 
             ))}
           </div>
 
-          <button className="submit" onClick={run} disabled={running || busy}>
-            {running ? 'Segmenting…' : '✂ Segment by colour'}
-          </button>
+          {tool === 'brush' && (
+            <label className="cs-size">
+              <span className="hint">Brush size</span>
+              <input
+                type="range"
+                min="0.05"
+                max="1"
+                step="0.05"
+                value={size}
+                onChange={(e) => onSize(Number(e.target.value))}
+              />
+            </label>
+          )}
+
+          <div className="mark-actions">
+            <button className="submit" onClick={run} disabled={running || busy}>
+              {running ? 'Segmenting…' : '✂ Segment by colour'}
+            </button>
+            <button type="button" className="part-group-cancel" onClick={onUndo} title="Undo the last paint action">
+              ↶ Undo
+            </button>
+          </div>
           {error && <span className="url-error">{error}</span>}
         </>
       )}
