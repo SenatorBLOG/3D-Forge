@@ -13,6 +13,17 @@ const nodeSchema = new mongoose.Schema(
     modelUrl: { type: String, required: true },
     label: { type: String, default: 'Version' },
     kind: { type: String, default: null }, // 'text' | 'image' | null
+    // Task 6 — animation. A rigged/animated version carries its Tripo rig id, the
+    // applied clip names, and the single-clip GLBs, so re-opening it can add more
+    // clips for +10 (no re-rig) and the strip shows it as animated. These MUST be
+    // on the schema — Mongoose silently drops fields it doesn't know, which is why
+    // an animated version used to come back "un-animated" after a reload.
+    rigTaskId: { type: String, default: null },
+    clips: { type: [String], default: undefined },
+    animEntries: {
+      type: [new mongoose.Schema({ preset: String, url: String }, { _id: false })],
+      default: undefined,
+    },
   },
   { _id: false },
 )
