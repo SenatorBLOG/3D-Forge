@@ -2,8 +2,9 @@ import * as THREE from 'three'
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
 
 // Renders a GLB to PNG data URLs once and caches them by model URL:
-//   { shaded } — the lit model (front),
-//   { wire }   — a cyan wireframe ("reveal the geometry" on card hover), and
+//   { shaded } — the lit, textured model (front),
+//   { clay }   — the same model in neutral gray clay ("reveal the form" on card
+//                hover — shows the sculpt without colour/texture), and
 //   { views }  — three more shaded angles (90°/180°/270° orbit) for the
 //                hover-reveal multi-angle strip on cards.
 // Cards show a real preview without each mounting a live WebGL viewer (browsers
@@ -15,7 +16,7 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
 // cards' object-fit: cover and made models look zoomed-in and clipped.
 const WIDTH = 420
 const HEIGHT = 520
-const WIRE_COLOR = 0x22d3ee // electric cyan — matches the brand action accent
+const CLAY_COLOR = 0x9aa3b2 // neutral gray — matches the viewer's "Solid" mode
 
 const cache = new Map() // modelUrl -> Promise<{ shaded, wire }>
 let queue = Promise.resolve() // one render at a time
@@ -55,7 +56,7 @@ function renderThumbnail(modelUrl) {
     rim.position.set(-3, 2, -4)
     scene.add(rim)
 
-    let wireMat
+    let clayMat
     const teardown = (model) => {
       if (model) {
         const origMats = []
@@ -65,7 +66,7 @@ function renderThumbnail(modelUrl) {
         })
         origMats.forEach(disposeMaterial)
       }
-      wireMat?.dispose()
+      clayMat?.dispose()
       renderer.dispose()
       renderer.forceContextLoss() // release the context immediately
     }
@@ -117,19 +118,24 @@ function renderThumbnail(modelUrl) {
           // back to the front angle for the wireframe pass
           aim(baseAz)
 
-          // pass 3 — cyan wireframe (stash originals so we can dispose them)
-          wireMat = new THREE.MeshBasicMaterial({ color: WIRE_COLOR, wireframe: true })
+          // pass 3 — neutral gray clay: same lit shading, colour/texture stripped,
+          // so hover reveals the raw sculpted form (stash originals to dispose them)
+          clayMat = new THREE.MeshStandardMaterial({
+            color: CLAY_COLOR,
+            metalness: 0.1,
+            roughness: 0.78,
+          })
           model.traverse((o) => {
             if (o.isMesh) {
               o.userData.origMat = o.material
-              o.material = wireMat
+              o.material = clayMat
             }
           })
           renderer.render(scene, camera)
-          const wire = canvas.toDataURL('image/png')
+          const clay = canvas.toDataURL('image/png')
 
           teardown(model)
-          resolve({ shaded, wire, views })
+          resolve({ shaded, clay, views })
         } catch (err) {
           teardown()
           reject(err)

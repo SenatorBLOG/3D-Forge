@@ -17,11 +17,11 @@ const CommentIcon = () => (
 )
 
 /** A community feed card. Shows a real model preview rendered once per model URL
- *  (shared cache — no live WebGL viewer per card). On hover the shaded preview
- *  cross-fades to a steel wireframe, revealing the geometry. Falls back to the
- *  logo while rendering / on error. */
+ *  (shared cache — no live WebGL viewer per card). On hover the textured preview
+ *  cross-fades to a neutral gray clay render, revealing the sculpted form. Falls
+ *  back to the logo while rendering / on error. */
 export default function PostCard({ post }) {
-  const [thumb, setThumb] = useState(null) // { shaded, wire }
+  const [thumb, setThumb] = useState(null) // { shaded, clay, views }
 
   useEffect(() => {
     let cancelled = false
@@ -54,7 +54,7 @@ export default function PostCard({ post }) {
         {thumb ? (
           <>
             <img className="post-thumb-img shaded" src={thumb.shaded} alt={post.title} loading="lazy" />
-            <img className="post-thumb-img wire" src={thumb.wire} alt="" aria-hidden="true" loading="lazy" />
+            <img className="post-thumb-img clay" src={thumb.clay} alt="" aria-hidden="true" loading="lazy" />
             {thumb.views?.length > 0 && (
               <span className="post-thumb-views" aria-hidden="true">
                 {thumb.views.map((v, i) => (

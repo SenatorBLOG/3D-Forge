@@ -4036,7 +4036,7 @@ a.ghost-button {
   transition: opacity 0.3s ease, transform 0.35s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-/* zoom the artwork slightly while the wireframe reveal plays */
+/* zoom the artwork slightly while the clay reveal plays */
 .post-card:hover .post-thumb-img {
   transform: scale(1.06);
 }
@@ -4049,8 +4049,8 @@ a.ghost-button {
   color: var(--forge);
 }
 
-/* shaded preview by default; on hover it fades out and the wireframe fades in */
-.post-thumb-img.wire {
+/* textured preview by default; on hover it fades out and the gray clay fades in */
+.post-thumb-img.clay {
   position: absolute;
   inset: 0;
   opacity: 0;
@@ -4060,7 +4060,7 @@ a.ghost-button {
   opacity: 0;
 }
 
-.post-card:hover .post-thumb-img.wire {
+.post-card:hover .post-thumb-img.clay {
   opacity: 1;
 }
 
