@@ -220,7 +220,7 @@ export default function PartEditPanel({ modelUrl, part, onClose, onStitched }) {
             </button>
           )}
           <div className="mv-count" role="radiogroup" aria-label="Views to rebuild the part from">
-            <span className="hint">Views:</span>
+            <span className="hint">Rebuild from:</span>
             {[
               [1, '1 · quick'],
               [2, '2 · front+side'],

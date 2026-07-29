@@ -208,8 +208,22 @@ export default function ForgePage() {
   // parts of the current model (lifted from PartButtons) so a double-click on the
   // 3D model can resolve the clicked mesh → part → select + open its edit panel
   const partsRef = useRef([])
-  const pickPartByName = (name) => {
-    const part = partsRef.current.find((p) => p.name === name)
+  const pickPartByName = (name, point) => {
+    const parts = partsRef.current
+    // 1) exact name match (works for clean single-mesh parts)
+    let part = parts.find((p) => p.name === name)
+    // 2) fallback by the clicked POINT — merged/painted parts render as several
+    // child meshes whose names don't match the part, so name lookup misses them.
+    // Pick the part whose box contains the point, else the nearest centre.
+    if (!part && point && parts.length) {
+      const inside = (b, q) =>
+        b && q[0] >= b.min[0] && q[0] <= b.max[0] && q[1] >= b.min[1] && q[1] <= b.max[1] && q[2] >= b.min[2] && q[2] <= b.max[2]
+      const q = [point.x, point.y, point.z]
+      const d2 = (c) => (c[0] - q[0]) ** 2 + (c[1] - q[1]) ** 2 + (c[2] - q[2]) ** 2
+      part =
+        parts.find((p) => inside(p.hitBox || p.bbox, q)) ||
+        parts.reduce((best, p) => (best && d2(best.center) <= d2(p.center) ? best : p), null)
+    }
     if (!part) return
     selectForEdit(part)
     openPartEdit(part)

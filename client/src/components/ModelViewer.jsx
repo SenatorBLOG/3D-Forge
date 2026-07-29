@@ -709,8 +709,11 @@ export default function ModelViewer({
       pointer.y = -((e.clientY - rect.top) / rect.height) * 2 + 1
       raycaster.setFromCamera(pointer, camera)
       const hit = raycaster.intersectObject(model, true)[0]
-      const name = hit?.object?.name || hit?.object?.parent?.name
-      if (name) callbacksRef.current.onPickPartAt?.(name)
+      if (!hit) return
+      const name = hit.object?.name || hit.object?.parent?.name
+      // pass the hit POINT too — merged/painted parts have several child meshes
+      // whose names don't match the part, so the parent resolves them by point
+      callbacksRef.current.onPickPartAt?.(name, { x: hit.point.x, y: hit.point.y, z: hit.point.z })
     }
 
     renderer.domElement.addEventListener('pointerdown', onPointerDown)
