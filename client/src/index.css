@@ -6536,6 +6536,31 @@ button.tag:hover {
   grid-template-columns: 1fr 1fr;
   gap: 10px;
 }
+.pic-card-wrap {
+  position: relative;
+}
+.pic-del {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 22px;
+  height: 22px;
+  border: none;
+  border-radius: 50%;
+  background: rgba(10, 14, 22, 0.72);
+  color: #fff;
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.12s, background 0.12s;
+}
+.pic-card-wrap:hover .pic-del {
+  opacity: 1;
+}
+.pic-del:hover {
+  background: #fb7185;
+}
 .pic-card {
   display: flex;
   flex-direction: column;

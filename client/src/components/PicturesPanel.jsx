@@ -24,6 +24,15 @@ export default function PicturesPanel({ refreshKey = 0, busy = false, onPick }) 
     }
   }, [refreshKey])
 
+  const remove = async (id) => {
+    setImages((prev) => (prev || []).filter((im) => im.id !== id)) // optimistic
+    try {
+      await fetch(`/api/images/${encodeURIComponent(id)}`, { method: 'DELETE' })
+    } catch {
+      /* best-effort; the card is already gone from view */
+    }
+  }
+
   if (error) return <div className="lib-empty">Couldn’t load pictures — {error}</div>
   if (!images) return <div className="lib-empty">Loading pictures…</div>
   if (!images.length) {
@@ -38,20 +47,30 @@ export default function PicturesPanel({ refreshKey = 0, busy = false, onPick }) 
   return (
     <div className="pics-grid">
       {images.map((img) => (
-        <button
-          key={img.id}
-          type="button"
-          className="pic-card"
-          disabled={busy}
-          onClick={() => onPick?.(img)}
-          title={img.prompt || img.source}
-        >
-          <img className="pic-thumb" src={img.url} alt={img.prompt || 'picture'} loading="lazy" />
-          <span className="pic-meta">
-            <span className="pic-source">{img.source === 'edited' ? '✎ edit' : img.source === 'generated' ? '✨ imagine' : '⬆ upload'}</span>
-            {img.prompt && <span className="pic-prompt">{img.prompt}</span>}
-          </span>
-        </button>
+        <div key={img.id} className="pic-card-wrap">
+          <button
+            type="button"
+            className="pic-card"
+            disabled={busy}
+            onClick={() => onPick?.(img)}
+            title={img.prompt || img.source}
+          >
+            <img className="pic-thumb" src={img.url} alt={img.prompt || 'picture'} loading="lazy" />
+            <span className="pic-meta">
+              <span className="pic-source">{img.source === 'edited' ? '✎ edit' : img.source === 'generated' ? '✨ imagine' : '⬆ upload'}</span>
+              {img.prompt && <span className="pic-prompt">{img.prompt}</span>}
+            </span>
+          </button>
+          <button
+            type="button"
+            className="pic-del"
+            onClick={() => remove(img.id)}
+            title="Delete this picture"
+            aria-label="Delete picture"
+          >
+            ✕
+          </button>
+        </div>
       ))}
     </div>
   )

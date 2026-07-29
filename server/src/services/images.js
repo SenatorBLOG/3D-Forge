@@ -103,6 +103,35 @@ export async function getImage(id) {
   return rec ? publicImage(rec) : null
 }
 
+/** Delete an image (metadata + its bytes on disk). Returns true if anything was
+ *  removed. Cloud (R2/GridFS) bytes are left — the metadata going is enough to
+ *  drop it from the Pictures gallery, and cloud storage is cheap/shared. */
+export async function deleteImage(id) {
+  let removed = false
+  const rec = memImages.get(id)
+  if (rec) {
+    memImages.delete(id)
+    saveImages()
+    removed = true
+    if (rec.url?.startsWith('/images/')) {
+      try {
+        rmSync(join(IMAGE_DIR, basename(rec.url)), { force: true })
+      } catch {
+        /* best-effort */
+      }
+    }
+  }
+  if (dbReady()) {
+    try {
+      const res = await Image.deleteOne({ imageId: id })
+      if (res.deletedCount) removed = true
+    } catch {
+      /* non-fatal */
+    }
+  }
+  return removed
+}
+
 /** Images directly derived from `parentId` (its immediate children). */
 async function getChildren(parentId) {
   const local = [...memImages.values()].filter((r) => r.parentId === parentId).map(publicImage)

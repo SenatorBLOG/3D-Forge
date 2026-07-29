@@ -2,7 +2,7 @@ import express, { Router } from 'express'
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { optionalAuth } from '../middleware/auth.js'
-import { createImage, getImage, listImages, listVersions, readImageBytes, IMAGE_DIR } from '../services/images.js'
+import { createImage, getImage, listImages, listVersions, readImageBytes, deleteImage, IMAGE_DIR } from '../services/images.js'
 import { detectImage } from '../services/imageType.js'
 import { isImageGenMock, generateImage, editImage } from '../services/imageGen.js'
 import { cloudFilesEnabled, saveCloudFile } from '../services/files.js'
@@ -261,6 +261,18 @@ router.get('/:id/versions', async (req, res) => {
   } catch (err) {
     console.error('list versions failed:', err)
     res.status(500).json({ error: 'failed to load image versions' })
+  }
+})
+
+// DELETE /api/images/:id — remove a picture from the gallery (metadata + local
+// bytes). → { ok: true } (idempotent: unknown id still returns ok).
+router.delete('/:id', optionalAuth, async (req, res) => {
+  try {
+    await deleteImage(req.params.id)
+    res.json({ ok: true })
+  } catch (err) {
+    console.error('delete image failed:', err)
+    res.status(500).json({ error: 'failed to delete the picture' })
   }
 })
 
