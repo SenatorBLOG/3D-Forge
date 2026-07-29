@@ -1,5 +1,5 @@
 import { Router } from 'express'
-import { segmentModel, segmentTripoByTaskId, segmentByMarks, hitTestPart, partSwap, extractPart, extractRegion, stitchPart, stitchRegion } from '../services/segment.js'
+import { segmentModel, segmentTripoByTaskId, segmentByMarks, bakeGroups, hitTestPart, partSwap, extractPart, extractRegion, stitchPart, stitchRegion } from '../services/segment.js'
 import { optionalAuth } from '../middleware/auth.js'
 import { labelParts as aiLabelParts, isClaudeEnabled } from '../services/claude.js'
 import { recordTask, updateTask, listMemory } from '../services/history.js'
@@ -126,6 +126,44 @@ router.post('/segment-marks', optionalAuth, async (req, res) => {
     if (err.code === 'NO_GEOMETRY') return res.status(400).json({ error: err.message })
     console.error('segment-marks failed:', err)
     res.status(500).json({ error: 'Failed to segment by marks' })
+  }
+})
+
+// POST /api/edit/bake-groups { modelUrl, groups:[{ name, partIds:[…] }] } — turn
+// UI groups into real merged parts (#1): rebuilds the model so each group's
+// segments become one named node. Fixes over-segmented Tripo output. → new model
+// URL + parts (same shape as /segment). Free, geometric.
+router.post('/bake-groups', optionalAuth, async (req, res) => {
+  const modelUrl = typeof req.body?.modelUrl === 'string' ? req.body.modelUrl : ''
+  const groups = Array.isArray(req.body?.groups) ? req.body.groups : null
+  if (!modelUrl || !groups?.length) {
+    return res.status(400).json({ error: 'modelUrl and a non-empty groups array are required' })
+  }
+  try {
+    const result = await bakeGroups(modelUrl, groups)
+    const segTaskId = `bake-seg-${Date.now()}`
+    recordTask({ kind: 'generate', taskId: segTaskId, prompt: 'Segmented (baked groups)', mock: true, ownerId: req.user?.id ?? null })
+    updateTask(segTaskId, 'SUCCEEDED', result.modelUrl)
+    if (dbReady()) {
+      try {
+        await GeneratedModel.create({
+          prompt: 'Segmented (baked groups)',
+          meshyTaskId: segTaskId,
+          status: 'SUCCEEDED',
+          modelUrl: result.modelUrl,
+          mock: true,
+          ownerId: req.user?.id ?? null,
+        })
+      } catch (err) {
+        console.error('bake-groups library record failed:', err)
+      }
+    }
+    res.json(result)
+  } catch (err) {
+    if (err.code === 'NOT_FOUND') return res.status(404).json({ error: err.message })
+    if (err.code === 'NO_GROUPS') return res.status(400).json({ error: err.message })
+    console.error('bake-groups failed:', err)
+    res.status(500).json({ error: 'Failed to bake groups' })
   }
 })
 

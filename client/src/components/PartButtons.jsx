@@ -57,7 +57,7 @@ function allConnected(members, tol) {
   return seen.size === members.length
 }
 
-export default function PartButtons({ modelUrl, description = '', onHoverPart, onPickPart, onParts, selectedId = null, busy }) {
+export default function PartButtons({ modelUrl, description = '', onHoverPart, onPickPart, onParts, onBake, selectedId = null, busy }) {
   const [parts, setParts] = useState([])
   const [loading, setLoading] = useState(false)
   const [groups, setGroups] = useState([]) // [{ id, name, partIds:[], names:[], bbox, center }]
@@ -66,6 +66,17 @@ export default function PartButtons({ modelUrl, description = '', onHoverPart, o
   const [nameDraft, setNameDraft] = useState('')
   const [labeling, setLabeling] = useState(false) // AI auto-label in flight
   const [labelErr, setLabelErr] = useState(null)
+  const [baking, setBaking] = useState(false) // group-bake in flight
+
+  const bakeGroups = async () => {
+    if (baking || busy || !groups.length) return
+    setBaking(true)
+    try {
+      await onBake?.(groups.map((g) => ({ name: g.name, partIds: g.partIds })))
+    } finally {
+      setBaking(false)
+    }
+  }
 
   useEffect(() => {
     let cancelled = false
@@ -261,6 +272,17 @@ export default function PartButtons({ modelUrl, description = '', onHoverPart, o
           >
             {labeling ? 'Labeling…' : '🏷 Auto-label (AI)'}
           </button>
+          {groups.length > 0 && (
+            <button
+              type="button"
+              className="part-group-make"
+              disabled={busy || baking}
+              onClick={bakeGroups}
+              title="Merge each group's segments into ONE real part (fixes over-segmentation)"
+            >
+              {baking ? 'Baking…' : `⚙ Bake ${groups.length} group${groups.length > 1 ? 's' : ''}`}
+            </button>
+          )}
           {labelErr && <span className="part-group-warn">⚠ {labelErr}</span>}
         </>
       ) : (

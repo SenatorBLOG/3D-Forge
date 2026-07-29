@@ -390,6 +390,87 @@ export async function segmentByMarks(modelUrl, seeds) {
   return { modelUrl: url, parts, cached: false, engine: 'marks', dropped }
 }
 
+// Collapse several triangle-soup primitives into ONE (de-indexed) so a node ends
+// up single-primitive — extractParts then names the part from the NODE. A lone
+// prim is returned untouched (keeps its indices/UVs/texture); a merge across
+// materials drops texture (can't share one UV set) and falls back to flat colour.
+function mergeToOnePrim(prims) {
+  if (prims.length === 1) return prims[0]
+  const pos = []
+  const nrm = []
+  const keepNrm = prims.every((p) => p.normals)
+  for (const p of prims) {
+    const idx = p.indices
+    const count = idx ? idx.length : p.positions.length / 3
+    for (let t = 0; t < count; t++) {
+      const vi = idx ? idx[t] : t
+      pos.push(p.positions[vi * 3], p.positions[vi * 3 + 1], p.positions[vi * 3 + 2])
+      if (keepNrm) nrm.push(p.normals[vi * 3], p.normals[vi * 3 + 1], p.normals[vi * 3 + 2])
+    }
+  }
+  return {
+    positions: new Float32Array(pos),
+    normals: keepNrm ? new Float32Array(nrm) : null,
+    indices: null,
+    uvs: null,
+    color: prims[0].color,
+    metallic: prims[0].metallic,
+    roughness: prims[0].roughness,
+    texture: null,
+  }
+}
+
+// --- Task 7/#1: bake grouped segments into real merged parts ----------------
+
+/**
+ * "Bake" the user's groups into geometry: today a group is only a UI overlay, so
+ * it can't be extracted/animated/persisted. This rebuilds the model as a clean
+ * segmented GLB where every group's member segments are MERGED into one named
+ * node, and every ungrouped part stays its own node — so the group becomes a
+ * genuine part. `groups` = [{ name, partIds:[…] }]. Directly fixes over-segmented
+ * Tripo output (e.g. a leg split into 5 → group → one leg). Free, geometric.
+ */
+export async function bakeGroups(modelUrl, groups) {
+  const bytes = await readModelBytes(modelUrl)
+  if (!bytes) throw Object.assign(new Error('model not found'), { code: 'NOT_FOUND' })
+  const srcDoc = await new NodeIO().readBinary(new Uint8Array(bytes))
+  const { parts } = await segmentModel(modelUrl)
+  const byId = new Map(parts.map((p) => [p.id, p]))
+
+  const cleanGroups = (groups || [])
+    .map((g) => ({
+      name: (typeof g.name === 'string' && g.name.trim()) || 'Group',
+      members: (g.partIds || []).map((id) => byId.get(id)).filter(Boolean),
+    }))
+    .filter((g) => g.members.length)
+  if (!cleanGroups.length) throw Object.assign(new Error('no valid groups to bake'), { code: 'NO_GROUPS' })
+
+  const groupedIds = new Set(cleanGroups.flatMap((g) => g.members.map((m) => m.id)))
+  const doc = new Document()
+  const buffer = doc.createBuffer()
+  const scene = doc.createScene()
+
+  const soupOf = (part) =>
+    collectWorldPrimitives(srcDoc, part.index, Number.isInteger(part.primIndex) ? part.primIndex : null)
+  const addNode = (name, partList) => {
+    const prims = partList.flatMap(soupOf)
+    if (!prims.length) return
+    const mesh = doc.createMesh(name)
+    addPrimsToMesh(doc, buffer, mesh, [mergeToOnePrim(prims)])
+    scene.addChild(doc.createNode(name).setMesh(mesh))
+  }
+
+  for (const g of cleanGroups) addNode(g.name, g.members) // merged group → one node
+  for (const p of parts) if (!groupedIds.has(p.id)) addNode(p.name, [p]) // ungrouped stay
+
+  const out = await new NodeIO().writeBinary(doc)
+  const url = await storeModelBytes(out, 'model-baked-seg')
+  const baked = extractParts(doc)
+  memCache.set(url, baked)
+  saveCache()
+  return { modelUrl: url, parts: baked, cached: false, engine: 'bake' }
+}
+
 // --- B-H2: hit-test a spatial point to a part ------------------------------
 
 const inside = (box, p) =>

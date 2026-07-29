@@ -1082,6 +1082,19 @@ export default function ForgePage() {
             if (p) openPartEdit(p)
             else setActivePart(null)
           }}
+          onBake={async (groups) => {
+            // #1 group-bake: merge each group's segments into one real part
+            const res = await fetch('/api/edit/bake-groups', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ modelUrl, groups }),
+            })
+            const data = await res.json().catch(() => ({}))
+            if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`)
+            setBaseModelPrompt('Segmented (baked groups)')
+            setLastEditPrompt(null)
+            swapModel(data.url, { version: { as: 'child', label: 'Baked groups' } })
+          }}
         />
         {modelUrl && (
           <MarkPartsPanel
