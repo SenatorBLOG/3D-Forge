@@ -58,15 +58,19 @@ export default function ModelViewer({
   markMode = false, // seed-marking: single-click drops a segmentation seed (no popup)
   marks = [], // [{ label, point:{x,y,z} }] seed markers to render
   onAddMark = null, // called with { x, y, z } when the user clicks in mark mode
+  partClickMode = false, // single-click a part reports it (group-select by clicking the model)
+  onPartClick = null, // called with the clicked part's mesh/node name
 }) {
   const containerRef = useRef(null)
   // keep latest callbacks/points without re-creating the whole scene on re-render
   const callbacksRef = useRef({})
-  callbacksRef.current = { onAddPoint, onSelectPoint, onLoaded, onError, onPickPartAt, onAddMark }
+  callbacksRef.current = { onAddPoint, onSelectPoint, onLoaded, onError, onPickPartAt, onAddMark, onPartClick }
   const spatialClickRef = useRef(true)
   spatialClickRef.current = spatialClick
   const markModeRef = useRef(false)
   markModeRef.current = markMode
+  const partClickModeRef = useRef(false)
+  partClickModeRef.current = partClickMode
   const pointsRef = useRef(points)
   pointsRef.current = points
   const marksRef = useRef(marks)
@@ -620,6 +624,19 @@ export default function ModelViewer({
         raycaster.setFromCamera(pointer, camera)
         const hit = raycaster.intersectObject(model, true)[0]
         if (hit) callbacksRef.current.onAddMark?.({ x: hit.point.x, y: hit.point.y, z: hit.point.z })
+        return
+      }
+
+      // part-click mode: a single click reports the clicked part (group-select by
+      // clicking the model itself, same as ticking its chip)
+      if (partClickModeRef.current) {
+        const rect = renderer.domElement.getBoundingClientRect()
+        pointer.x = ((e.clientX - rect.left) / rect.width) * 2 - 1
+        pointer.y = -((e.clientY - rect.top) / rect.height) * 2 + 1
+        raycaster.setFromCamera(pointer, camera)
+        const hit = raycaster.intersectObject(model, true)[0]
+        const name = hit && (hit.object?.name || hit.object?.parent?.name)
+        if (name) callbacksRef.current.onPartClick?.(name)
         return
       }
       if (!spatialClickRef.current) return // spatial click-to-prompt disabled

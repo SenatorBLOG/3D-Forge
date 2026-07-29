@@ -218,6 +218,10 @@ export default function ForgePage() {
   // then "Segment by marks" splits it so parts come out exactly as marked
   const [markMode, setMarkMode] = useState(false)
   const [marks, setMarks] = useState([]) // [{ label, point:{x,y,z} }]
+  // group-select mode (from PartButtons): while on, a single click on the model
+  // toggles that part in the group selection (same as ticking its chip)
+  const [groupMode, setGroupMode] = useState(false)
+  const [partClickSignal, setPartClickSignal] = useState(null) // {name, ts}
   const addMark = (point) =>
     setMarks((prev) => [...prev, { label: `part ${prev.length + 1}`, point }])
   const renameMark = (i, label) => setMarks((prev) => prev.map((m, k) => (k === i ? { ...m, label } : m)))
@@ -235,7 +239,7 @@ export default function ForgePage() {
     setMarks([])
     setBaseModelPrompt('Segmented (marks)')
     setLastEditPrompt(null)
-    swapModel(data.url, { version: { as: 'child', label: 'Segmented (marks)' } })
+    swapModel(data.modelUrl, { version: { as: 'child', label: 'Segmented (marks)' } })
     return data
   }
 
@@ -1073,6 +1077,8 @@ export default function ForgePage() {
           modelUrl={modelUrl}
           busy={swapBusy || busy || markMode}
           selectedId={selectedId}
+          onGroupingChange={setGroupMode}
+          partClickSignal={partClickSignal}
           onParts={(parts) => (partsRef.current = parts)}
           onHoverPart={setHighlightBox}
           onPickPart={(p) => {
@@ -1093,7 +1099,7 @@ export default function ForgePage() {
             if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`)
             setBaseModelPrompt('Segmented (baked groups)')
             setLastEditPrompt(null)
-            swapModel(data.url, { version: { as: 'child', label: 'Baked groups' } })
+            swapModel(data.modelUrl, { version: { as: 'child', label: 'Grouped part' } })
           }}
         />
         {modelUrl && (
@@ -1217,10 +1223,12 @@ export default function ForgePage() {
               }
               manualHost={manualHost}
               spatialClick={false} // no click-to-prompt popup for now (distracting)
-              onPickPartAt={markMode ? null : pickPartByName} // double-click a part → select + open edit
+              onPickPartAt={markMode || groupMode ? null : pickPartByName} // dbl-click part → edit
               markMode={markMode}
               marks={marks}
               onAddMark={addMark}
+              partClickMode={groupMode}
+              onPartClick={(name) => setPartClickSignal({ name, ts: Date.now() })}
             />
             <ModelVersionStrip
               versions={modelVersions}
