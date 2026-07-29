@@ -148,6 +148,7 @@ export default function PartEditPanel({ modelUrl, part, onClose, onStitched }) {
       const { views } = await captureViews(partUrlRef.current, pvCount)
       if (!views?.length) throw new Error('Could not render part views')
       const ids = []
+      let edits = 0 // how many view-edits actually succeeded
       for (const v of views) {
         const blob = await (await fetch(v.dataUrl)).blob()
         const up = await fetch('/api/images', {
@@ -159,16 +160,29 @@ export default function PartEditPanel({ modelUrl, part, onClose, onStitched }) {
         if (!up.ok) throw new Error(upData.error || `HTTP ${up.status}`)
         let imgId = upData.image.id
         if (lastEdit?.instruction) {
-          const ed = await fetch(`/api/images/${encodeURIComponent(imgId)}/edit`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ instruction: lastEdit.instruction }),
-          })
-          const edData = await ed.json()
-          if (!ed.ok) throw new Error(edData.error || `HTTP ${ed.status}`)
-          imgId = edData.image.id
+          // best-effort: applying the edit to each of the 4 views fires 4 rapid
+          // Gemini calls and can hit its rate limit — if ONE view's edit fails,
+          // fall back to the un-edited view instead of failing the whole rebuild
+          try {
+            const ed = await fetch(`/api/images/${encodeURIComponent(imgId)}/edit`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ instruction: lastEdit.instruction }),
+            })
+            const edData = await ed.json().catch(() => ({}))
+            if (ed.ok && edData.image?.id) {
+              imgId = edData.image.id
+              edits++
+            }
+          } catch {
+            /* keep the un-edited view */
+          }
+          await new Promise((r) => setTimeout(r, 1100)) // space out calls to dodge the rate limit
         }
         ids.push(imgId)
+      }
+      if (lastEdit?.instruction && !edits) {
+        throw new Error('Image edit service is busy (rate limit) — try again, or use “1 · quick”.')
       }
       gen.start('/api/generate/multiview', { imageIds: ids }, { prompt: `part: ${part.name}` })
     } catch (e) {
