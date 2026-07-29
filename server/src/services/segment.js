@@ -888,7 +888,12 @@ export async function stitchRegion(modelUrl, partList, partModelUrl, targetBbox,
   const eps = 1e-9
   const size = (b) => [b.max[0] - b.min[0], b.max[1] - b.min[1], b.max[2] - b.min[2]]
   const diag = (s) => Math.max(Math.hypot(s[0], s[1], s[2]), eps)
-  const uni = diag(size(t)) / diag(size(src))
+  // A rebuilt part is a standalone blob dropped into the old part's bbox, so its
+  // edges don't quite reach the neighbours → a seam/void where they used to join.
+  // Scale it a touch OVER the bbox (overlap) so its edges tuck under the neighbours
+  // and close the gap. Tunable via STITCH_OVERLAP (default 1.08).
+  const overlap = Math.max(1, Number(process.env.STITCH_OVERLAP) || 1.08)
+  const uni = (diag(size(t)) / diag(size(src))) * overlap
   const srcC = [0, 1, 2].map((a) => (src.min[a] + src.max[a]) / 2)
   const tC = [0, 1, 2].map((a) => (t.min[a] + t.max[a]) / 2)
   const mapPoint = (p) => [0, 1, 2].map((a) => tC[a] + (p[a] - srcC[a]) * uni)
