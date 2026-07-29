@@ -460,7 +460,7 @@ export async function segmentByColors(glbBytes) {
   const prims = collectWorldPrimitives(srcDoc)
   if (!prims.length) throw Object.assign(new Error('model has no geometry'), { code: 'NOT_FOUND' })
 
-  const q = (v) => Math.round(Math.max(0, Math.min(1, v)) * 8) / 8 // coarse grid → clean groups
+  const q = (v) => Math.round(Math.max(0, Math.min(1, v)) * 16) / 16 // grid fine enough to keep distinct seed colours apart, coarse enough to absorb ubyte export rounding
   const buckets = new Map() // colourKey -> { order, byPrim: Map(pi -> soup accumulator) }
   let order = 0
   prims.forEach((prim, pi) => {

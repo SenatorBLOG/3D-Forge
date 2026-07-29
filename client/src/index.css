@@ -6629,7 +6629,7 @@ button.tag:hover {
 }
 .pic-thumb {
   width: 100%;
-  aspect-ratio: 1;
+  height: 128px; /* a touch taller than model cards, but never overflow the panel */
   object-fit: cover;
   background: var(--panel);
   display: block;

@@ -76,12 +76,12 @@ function renderThumbnail(modelUrl) {
           const center = box.getCenter(new THREE.Vector3())
           const size = box.getSize(new THREE.Vector3()).length()
           model.position.sub(center)
-          // One camera for EVERY model (no per-engine mirror) so all cards + all
-          // version thumbnails face the SAME way. Camera on -x → the model faces
-          // LEFT, i.e. toward the centre/main model (the cards + version strip both
-          // sit on the RIGHT edge, so facing left points them inward).
-          const sx = -1
-          camera.position.set(size * 0.6 * sx, size * 0.45, size * 0.85)
+          // One camera for EVERY model. Camera on (+x, -z) → a ¾ view rotated 180°
+          // from the old (+x,+z) front, so the model faces the viewer/centre the
+          // way Javid wants (the old angle showed the back turned away).
+          const camX = size * 0.6
+          const camZ = -size * 0.85
+          camera.position.set(camX, size * 0.45, camZ)
           camera.near = size / 100
           camera.far = size * 10
           camera.lookAt(0, 0, 0)
@@ -95,7 +95,7 @@ function renderThumbnail(modelUrl) {
           // pass 2 — three more shaded angles, orbiting at the same radius and
           // elevation (feeds the hover-reveal multi-angle strip on cards)
           const radius = Math.hypot(0.6, 0.85) * size
-          const baseAz = Math.atan2(0.6 * sx, 0.85)
+          const baseAz = Math.atan2(camX, camZ)
           const views = []
           for (const quarter of [1, 2, 3]) {
             const az = baseAz + (quarter * Math.PI) / 2
@@ -105,7 +105,7 @@ function renderThumbnail(modelUrl) {
             views.push(canvas.toDataURL('image/png'))
           }
           // back to the front angle for the wireframe pass
-          camera.position.set(size * 0.6 * sx, size * 0.45, size * 0.85)
+          camera.position.set(camX, size * 0.45, camZ)
           camera.lookAt(0, 0, 0)
 
           // pass 3 — cyan wireframe (stash originals so we can dispose them)

@@ -226,13 +226,13 @@ export default function ModelViewer({
     // Each mesh keeps its original material in userData.origMat for "shaded".
     const solidMat = new THREE.MeshStandardMaterial({ color: 0x9aa3b2, metalness: 0.1, roughness: 0.78 })
     const wireMat = new THREE.MeshBasicMaterial({ color: 0x22d3ee, wireframe: true })
-    // colour a mesh by its PART (the nearest named glTF node), so all primitives
-    // of one part — e.g. a merged/baked group with several materials — read as ONE
-    // colour instead of several (which looked un-merged)
+    // colour a mesh by its PART = the top-level node directly under the model, so
+    // ALL primitives of one part (a merged/baked group has several material
+    // primitives → several child meshes) read as ONE colour, not several.
     const partKeyOf = (o) => {
       let n = o
-      while (n && n !== model && !n.name) n = n.parent
-      return (n && n !== model && n.name) || o.uuid
+      while (n.parent && n.parent !== model) n = n.parent
+      return n.uuid
     }
     const applyDisplayMode = (m) => {
       if (!model) return
@@ -838,10 +838,16 @@ export default function ModelViewer({
           colorAttr = new THREE.BufferAttribute(new Float32Array(posAttr.count * 3), 3)
           geo.setAttribute('color', colorAttr)
         }
-        const c = new THREE.Color(PART_PALETTE[ci++ % PART_PALETTE.length])
+        // seed each mesh a UNIQUE colour (golden-ratio hue) so segments the user
+        // DOESN'T paint stay separate parts — a cycling 12-palette collided (seg 0
+        // and 12 same colour → merged unintentionally, e.g. only ~5 parts came out)
+        const c = new THREE.Color().setHSL((ci * 0.61803398875) % 1, 0.72, 0.55)
+        ci++
         for (let i = 0; i < colorAttr.count; i++) colorAttr.setXYZ(i, c.r, c.g, c.b)
         colorAttr.needsUpdate = true
-        if (!o.userData.csOrigMat) o.userData.csOrigMat = o.material
+        // capture the TRUE original material (texture), not whatever display mode
+        // is active — otherwise the export baked the flat Parts colours as texture
+        if (!o.userData.csOrigMat) o.userData.csOrigMat = o.userData.origMat || o.material
         o.material = new THREE.MeshStandardMaterial({ vertexColors: true, metalness: 0.05, roughness: 0.85 })
       })
       colorSegRef.current.active = true
