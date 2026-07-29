@@ -223,9 +223,18 @@ export default function ModelViewer({
     // Each mesh keeps its original material in userData.origMat for "shaded".
     const solidMat = new THREE.MeshStandardMaterial({ color: 0x9aa3b2, metalness: 0.1, roughness: 0.78 })
     const wireMat = new THREE.MeshBasicMaterial({ color: 0x22d3ee, wireframe: true })
+    // colour a mesh by its PART (the nearest named glTF node), so all primitives
+    // of one part — e.g. a merged/baked group with several materials — read as ONE
+    // colour instead of several (which looked un-merged)
+    const partKeyOf = (o) => {
+      let n = o
+      while (n && n !== model && !n.name) n = n.parent
+      return (n && n !== model && n.name) || o.uuid
+    }
     const applyDisplayMode = (m) => {
       if (!model) return
-      let idx = 0
+      const partColorIdx = new Map() // part key -> palette index
+      let nextIdx = 0
       model.traverse((o) => {
         if (!o.isMesh) return
         // meshes added AFTER load (kitbash parts) never got an origMat at load
@@ -233,19 +242,23 @@ export default function ModelViewer({
         // blanking their material (which made placed parts vanish)
         if (!o.userData.origMat) o.userData.origMat = o.material
         if (m === 'parts') {
-          // one flat colour per mesh (segmented parts read distinctly), cached
-          if (!o.userData.partsMat) {
+          const key = partKeyOf(o)
+          if (!partColorIdx.has(key)) partColorIdx.set(key, nextIdx++)
+          const ci = partColorIdx.get(key)
+          // one flat colour per PART (cached; rebuilt if the part's colour changed)
+          if (!o.userData.partsMat || o.userData.partsColorIdx !== ci) {
+            o.userData.partsMat?.dispose?.()
             o.userData.partsMat = new THREE.MeshStandardMaterial({
-              color: PART_PALETTE[idx % PART_PALETTE.length],
+              color: PART_PALETTE[ci % PART_PALETTE.length],
               metalness: 0.05,
               roughness: 0.8,
             })
+            o.userData.partsColorIdx = ci
           }
           o.material = o.userData.partsMat
         } else {
           o.material = m === 'wireframe' ? wireMat : m === 'solid' ? solidMat : o.userData.origMat
         }
-        idx++
       })
     }
 

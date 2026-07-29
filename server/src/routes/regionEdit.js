@@ -56,27 +56,11 @@ router.post('/segment-tripo', async (req, res) => {
       })
     }
     const result = await segmentTripoByTaskId(tripoId, modelUrl)
-    // mirror into History so the segmented model persists as a card
+    // History only — the segmented model is a working version (persisted via the
+    // version tree). It reaches the Library only when the user sends it there.
     const segTaskId = `tripo-seg-${Date.now()}`
     recordTask({ kind: 'generate', taskId: segTaskId, prompt: 'Segmented (Tripo)', mock: false })
     updateTask(segTaskId, 'SUCCEEDED', result.modelUrl)
-    // ALSO persist to the Library (GeneratedModel), so the segmented model —
-    // which cost real Tripo credits — survives a reload and can always be
-    // reloaded as a segmented base. Without this it lived only in memory.
-    if (dbReady()) {
-      try {
-        await GeneratedModel.create({
-          prompt: 'Segmented (Tripo)',
-          meshyTaskId: segTaskId,
-          status: 'SUCCEEDED',
-          modelUrl: result.modelUrl,
-          mock: false,
-          ownerId: null,
-        })
-      } catch (err) {
-        console.error('segment library record failed:', err)
-      }
-    }
     res.json(result)
   } catch (err) {
     if (err.code === 'NO_KEY') return res.status(400).json({ error: err.message })
@@ -102,24 +86,12 @@ router.post('/segment-marks', optionalAuth, async (req, res) => {
   }
   try {
     const result = await segmentByMarks(modelUrl, clean)
-    // mirror to History + Library so the marked model persists as a card
+    // log to History only — NOT the Library. A segmentation is a working version
+    // on the right strip (persisted via the version tree); it lands in the Library
+    // only when the user explicitly sends it there.
     const segTaskId = `marks-seg-${Date.now()}`
     recordTask({ kind: 'generate', taskId: segTaskId, prompt: 'Segmented (marks)', mock: true, ownerId: req.user?.id ?? null })
     updateTask(segTaskId, 'SUCCEEDED', result.modelUrl)
-    if (dbReady()) {
-      try {
-        await GeneratedModel.create({
-          prompt: 'Segmented (marks)',
-          meshyTaskId: segTaskId,
-          status: 'SUCCEEDED',
-          modelUrl: result.modelUrl,
-          mock: true,
-          ownerId: req.user?.id ?? null,
-        })
-      } catch (err) {
-        console.error('marks-seg library record failed:', err)
-      }
-    }
     res.json(result)
   } catch (err) {
     if (err.code === 'NOT_FOUND') return res.status(404).json({ error: err.message })
@@ -141,23 +113,10 @@ router.post('/bake-groups', optionalAuth, async (req, res) => {
   }
   try {
     const result = await bakeGroups(modelUrl, groups)
+    // History only — not the Library (see segment-marks note above)
     const segTaskId = `bake-seg-${Date.now()}`
-    recordTask({ kind: 'generate', taskId: segTaskId, prompt: 'Segmented (baked groups)', mock: true, ownerId: req.user?.id ?? null })
+    recordTask({ kind: 'generate', taskId: segTaskId, prompt: 'Grouped part', mock: true, ownerId: req.user?.id ?? null })
     updateTask(segTaskId, 'SUCCEEDED', result.modelUrl)
-    if (dbReady()) {
-      try {
-        await GeneratedModel.create({
-          prompt: 'Segmented (baked groups)',
-          meshyTaskId: segTaskId,
-          status: 'SUCCEEDED',
-          modelUrl: result.modelUrl,
-          mock: true,
-          ownerId: req.user?.id ?? null,
-        })
-      } catch (err) {
-        console.error('bake-groups library record failed:', err)
-      }
-    }
     res.json(result)
   } catch (err) {
     if (err.code === 'NOT_FOUND') return res.status(404).json({ error: err.message })
@@ -200,25 +159,11 @@ router.post('/partswap', optionalAuth, async (req, res) => {
     if (!part) return res.status(404).json({ error: 'no matching part for the given point/partId' })
     const result = await partSwap(modelUrl, part)
 
-    // mirror a finished generation so the swap lands in History + Library
+    // History only — not the Library (a working version on the right strip)
     const label = `part-swap: ${part.name}${instruction ? ` — ${instruction}` : ''}`.slice(0, 120)
     const taskId = `partswap-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
     recordTask({ kind: 'generate', taskId, prompt: label, mock: true, ownerId: req.user?.id ?? null })
     updateTask(taskId, 'SUCCEEDED', result.modelUrl)
-    if (dbReady()) {
-      try {
-        await GeneratedModel.create({
-          prompt: label,
-          meshyTaskId: taskId,
-          status: 'SUCCEEDED',
-          modelUrl: result.modelUrl,
-          mock: true,
-          ownerId: req.user?.id ?? null,
-        })
-      } catch (err) {
-        console.error('partswap library record failed:', err)
-      }
-    }
 
     res.json({ ...result, instruction, mock: true, engine: 'hyper3d' })
   } catch (err) {
@@ -294,25 +239,11 @@ router.post('/stitch', optionalAuth, async (req, res) => {
       result = await stitchPart(modelUrl, part, partModelUrl)
     }
 
-    // mirror a finished generation so the stitch lands in History + Library
+    // History only — not the Library (a working version on the right strip)
     const label = `part-stitch: ${part.name}`.slice(0, 120)
     const taskId = `stitch-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
     recordTask({ kind: 'generate', taskId, prompt: label, mock: true, ownerId: req.user?.id ?? null })
     updateTask(taskId, 'SUCCEEDED', result.modelUrl)
-    if (dbReady()) {
-      try {
-        await GeneratedModel.create({
-          prompt: label,
-          meshyTaskId: taskId,
-          status: 'SUCCEEDED',
-          modelUrl: result.modelUrl,
-          mock: true,
-          ownerId: req.user?.id ?? null,
-        })
-      } catch (err) {
-        console.error('stitch library record failed:', err)
-      }
-    }
 
     res.json(result)
   } catch (err) {
