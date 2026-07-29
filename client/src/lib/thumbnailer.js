@@ -76,9 +76,9 @@ function renderThumbnail(modelUrl) {
           const center = box.getCenter(new THREE.Vector3())
           const size = box.getSize(new THREE.Vector3()).length()
           model.position.sub(center)
-          // rotate every model 45° so both engines (Tripo & Meshy export facing
+          // rotate every model 90° so both engines (Tripo & Meshy export facing
           // 90° apart) end up facing the viewer — one turned left, one right
-          model.rotation.y += Math.PI / 4
+          model.rotation.y += Math.PI / 2
           model.updateMatrixWorld(true)
           // One camera for EVERY model. Camera on (+x, -z) → a ¾ view rotated 180°
           // from the old (+x,+z) front, so the model faces the viewer/centre the
