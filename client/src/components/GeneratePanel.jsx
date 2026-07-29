@@ -42,6 +42,7 @@ export default function GeneratePanel({
   initialMode = 'text',
   initialPrompt = '',
   initialImageId = null,
+  initialImageUrl = null, // when picking a saved Picture: show it without a re-fetch
   initialEngine = 'meshy',
   initialTextured = false,
   autostart = false,
@@ -63,7 +64,9 @@ export default function GeneratePanel({
   // views from the front image via Gemini, then feeds Tripo multi-view. Tripo only.
   const [genViews, setGenViews] = useState(1)
   // image mode: the uploaded reference (server id) + a local preview URL
-  const [image, setImage] = useState(initialImageId ? { id: initialImageId } : null)
+  const [image, setImage] = useState(
+    initialImageId ? { id: initialImageId, url: initialImageUrl || undefined } : null,
+  )
   const [preview, setPreview] = useState(null) // object URL for instant preview
   const [uploading, setUploading] = useState(false)
   const [imgError, setImgError] = useState(null)

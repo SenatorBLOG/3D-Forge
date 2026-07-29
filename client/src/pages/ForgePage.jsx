@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom'
 import ModelViewer from '../components/ModelViewer.jsx'
 import GeneratePanel from '../components/GeneratePanel.jsx'
 import LibraryPanel from '../components/LibraryPanel.jsx'
+import PicturesPanel from '../components/PicturesPanel.jsx'
 import CompareView from '../components/CompareView.jsx'
 import PublishPanel from '../components/PublishPanel.jsx'
 import ModelVersionStrip from '../components/ModelVersionStrip.jsx'
@@ -137,6 +138,15 @@ export default function ForgePage() {
   const [compare, setCompare] = useState(null)
   // which left activity-bar tool is open: generate | model | edit | recolor
   const [activeTab, setActiveTab] = useState('generate')
+  // right Library tab: models grid | saved pictures gallery
+  const [libTab, setLibTab] = useState('models')
+  // a Picture picked from the library to start a new generation from (id + url);
+  // remounts GeneratePanel in image mode showing it
+  const [pickedImage, setPickedImage] = useState(null)
+  const useImageAsBase = (img) => {
+    setPickedImage({ id: img.id, url: img.url })
+    setActiveTab('generate') // land in Generate (image mode) with the picture loaded
+  }
   // DOM node in the Edit tab where ModelViewer portals its manual tools + brightness
   const [manualHost, setManualHost] = useState(null)
   // collapse the left tool panel to just the icon rail
@@ -801,10 +811,18 @@ export default function ForgePage() {
       <aside className={`sidebar forge-panel ${navCollapsed ? 'forge-panel--collapsed' : ''}`}>
         <div className="tab-pane" style={{ display: activeTab === 'generate' ? 'flex' : 'none' }}>
         <GeneratePanel
+          key={pickedImage?.id || 'gen-default'} // remount in image mode on a picked Picture
           disabled={editTask.generating}
-          initialMode={['image', 'imagine'].includes(searchParams.get('mode')) ? searchParams.get('mode') : 'text'}
-          initialPrompt={searchParams.get('prompt') || ''}
-          initialImageId={searchParams.get('imageId') || null}
+          initialMode={
+            pickedImage
+              ? 'image'
+              : ['image', 'imagine'].includes(searchParams.get('mode'))
+                ? searchParams.get('mode')
+                : 'text'
+          }
+          initialPrompt={pickedImage ? '' : searchParams.get('prompt') || ''}
+          initialImageId={pickedImage?.id || searchParams.get('imageId') || null}
+          initialImageUrl={pickedImage?.url || null}
           initialEngine={searchParams.get('engine') === 'tripo' ? 'tripo' : 'meshy'}
           initialTextured={searchParams.get('textured') === '1'}
           autostart={searchParams.get('autostart') === '1'}
@@ -1188,19 +1206,38 @@ export default function ForgePage() {
         {modelUrl && (
           <PublishPanel modelUrl={modelUrl} description={baseModelPrompt} kind={modelKind} />
         )}
-        <LibraryPanel
-          refreshKey={historyKey}
-          busy={busy}
-          onLoad={(entry) => {
-            setBaseModelPrompt(entry.prompt ?? null)
-            // library entries label image runs as "image → 3D" — recover the kind
-            const kind = entry.prompt === 'image → 3D' ? 'image' : entry.prompt ? 'text' : null
-            setModelKind(kind)
-            setLastEditPrompt(null)
-            // restore this model's saved version tree if it has one, else fresh root
-            openModelWithHistory(entry.modelUrl, { label: entry.prompt || 'Library model', kind })
-          }}
-        />
+        <div className="lib-scope">
+          {[
+            ['models', 'Models'],
+            ['pictures', 'Pictures'],
+          ].map(([id, label]) => (
+            <button
+              key={id}
+              type="button"
+              className={`lib-scope-tab ${libTab === id ? 'active' : ''}`}
+              onClick={() => setLibTab(id)}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+        {libTab === 'models' ? (
+          <LibraryPanel
+            refreshKey={historyKey}
+            busy={busy}
+            onLoad={(entry) => {
+              setBaseModelPrompt(entry.prompt ?? null)
+              // library entries label image runs as "image → 3D" — recover the kind
+              const kind = entry.prompt === 'image → 3D' ? 'image' : entry.prompt ? 'text' : null
+              setModelKind(kind)
+              setLastEditPrompt(null)
+              // restore this model's saved version tree if it has one, else fresh root
+              openModelWithHistory(entry.modelUrl, { label: entry.prompt || 'Library model', kind })
+            }}
+          />
+        ) : (
+          <PicturesPanel refreshKey={historyKey} busy={busy} onPick={useImageAsBase} />
+        )}
       </aside>
       {libCollapsed && (
         <button
