@@ -8,16 +8,7 @@ import { useState } from 'react'
  * as marked. Free, geometric. The seed list here mirrors the markers the viewer
  * draws; clicking the model is what ADDS a seed (via ForgePage.addMark).
  */
-export default function MarkPartsPanel({
-  active,
-  marks,
-  onToggle,
-  onRename,
-  onRemove,
-  onClear,
-  onSegment,
-  busy,
-}) {
+export default function MarkPartsPanel({ marks, onRename, onRemove, onClear, onSegment, busy }) {
   const [running, setRunning] = useState(false)
   const [error, setError] = useState(null)
 
@@ -36,68 +27,50 @@ export default function MarkPartsPanel({
 
   return (
     <div className="mark-parts">
-      <div className="mark-parts-head">
-        <span className="part-buttons-label">Mark parts</span>
-        <button
-          type="button"
-          className={`part-label-ai ${active ? 'part-chip--active' : ''}`}
-          disabled={busy}
-          onClick={() => onToggle(!active)}
-          title="Turn on marking, then click the model to drop a seed on each part"
-        >
-          {active ? '✋ Marking… (click the model)' : '✋ Mark parts by hand'}
-        </button>
-      </div>
+      <p className="spatial-blurb spatial-blurb--sm">
+        Click each part of the model to drop a seed, then name it. Every triangle goes to its
+        nearest seed — a sword, a shield, a helmet come out as exactly the parts you mark.
+      </p>
 
-      {active && (
-        <>
-          <p className="spatial-blurb spatial-blurb--sm">
-            Click each part of the model to drop a seed, then name it. Every triangle
-            goes to its nearest seed — a sword, a shield, a helmet come out as exactly
-            the parts you mark. Free, no credits.
-          </p>
-
-          {marks.length === 0 ? (
-            <p className="hint">No seeds yet — click the model to add one.</p>
-          ) : (
-            <ul className="mark-list">
-              {marks.map((m, i) => (
-                <li key={i} className="mark-row">
-                  <span className="mark-dot" style={{ background: PALETTE[i % PALETTE.length] }} />
-                  <input
-                    className="mark-name"
-                    value={m.label}
-                    onChange={(e) => onRename(i, e.target.value.slice(0, 40))}
-                    placeholder={`part ${i + 1}`}
-                    maxLength={40}
-                  />
-                  <button type="button" className="mark-x" onClick={() => onRemove(i)} title="Remove seed">
-                    ✕
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
-
-          <div className="mark-actions">
-            <button
-              className="submit"
-              onClick={run}
-              disabled={running || busy || marks.length < 2}
-              title={marks.length < 2 ? 'Drop at least two seeds' : 'Split the model by your seeds'}
-            >
-              {running ? 'Segmenting…' : `✂ Segment by marks (${marks.length})`}
-            </button>
-            {marks.length > 0 && (
-              <button type="button" className="part-group-cancel" onClick={onClear} disabled={running}>
-                Clear
+      {marks.length === 0 ? (
+        <p className="hint">No seeds yet — click the model to add one.</p>
+      ) : (
+        <ul className="mark-list">
+          {marks.map((m, i) => (
+            <li key={i} className="mark-row">
+              <span className="mark-dot" style={{ background: PALETTE[i % PALETTE.length] }} />
+              <input
+                className="mark-name"
+                value={m.label}
+                onChange={(e) => onRename(i, e.target.value.slice(0, 40))}
+                placeholder={`part ${i + 1}`}
+                maxLength={40}
+              />
+              <button type="button" className="mark-x" onClick={() => onRemove(i)} title="Remove seed">
+                ✕
               </button>
-            )}
-          </div>
-          {marks.length === 1 && <span className="hint">Add at least one more seed.</span>}
-          {error && <span className="url-error">{error}</span>}
-        </>
+            </li>
+          ))}
+        </ul>
       )}
+
+      <div className="mark-actions">
+        <button
+          className="submit"
+          onClick={run}
+          disabled={running || busy || marks.length < 2}
+          title={marks.length < 2 ? 'Drop at least two seeds' : 'Split the model by your seeds'}
+        >
+          {running ? 'Segmenting…' : `✂ Segment by marks (${marks.length})`}
+        </button>
+        {marks.length > 0 && (
+          <button type="button" className="part-group-cancel" onClick={onClear} disabled={running}>
+            Clear
+          </button>
+        )}
+      </div>
+      {marks.length === 1 && <span className="hint">Add at least one more seed.</span>}
+      {error && <span className="url-error">{error}</span>}
     </div>
   )
 }

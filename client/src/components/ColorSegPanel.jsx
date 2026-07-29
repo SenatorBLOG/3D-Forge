@@ -16,7 +16,7 @@ const nameOf = (hex) => NAMED.find(([c]) => c.toLowerCase() === (hex || '').toLo
  * existing colour. "Segment by colour" bakes the painted labels into real parts.
  * Exit (✕) leaves the model untouched.
  */
-export default function ColorSegPanel({ active, tool, hex, size, onToggle, onSetTool, onPickColor, onSize, onUndo, onSegment, busy }) {
+export default function ColorSegPanel({ tool, hex, size, onSetTool, onPickColor, onSize, onUndo, onSegment, busy }) {
   const [running, setRunning] = useState(false)
   const [error, setError] = useState(null)
 
@@ -35,28 +35,13 @@ export default function ColorSegPanel({ active, tool, hex, size, onToggle, onSet
 
   return (
     <div className="mark-parts">
-      <div className="mark-parts-head">
-        <span className="part-buttons-label">Paint parts</span>
-        <button
-          type="button"
-          className={`part-label-ai ${active ? 'part-chip--active' : ''}`}
-          disabled={busy}
-          onClick={() => onToggle(!active)}
-          title="Colour the model — same colour = one part"
-        >
-          {active ? '🎨 Painting… (✕ to exit)' : '🎨 Segment by paint'}
-        </button>
-      </div>
+      <p className="spatial-blurb spatial-blurb--sm">
+        Same colour = one part. <strong>Fill</strong> recolours a whole segment (merge/assign),
+        <strong> Brush</strong> paints finer splits, <strong>Pick</strong> grabs a colour to match.
+        Then hit <strong>Segment</strong>.
+      </p>
 
-      {active && (
-        <>
-          <p className="spatial-blurb spatial-blurb--sm">
-            Same colour = one part. <strong>Fill</strong> recolours a whole segment (merge/assign),
-            <strong> Brush</strong> paints finer splits, <strong>Eyedropper</strong> grabs a colour to
-            match. Then hit <strong>Segment</strong>.
-          </p>
-
-          <div className="cs-tools">
+      <div className="cs-tools">
             {[
               ['fill', '▣ Fill'],
               ['brush', '✎ Brush'],
@@ -106,17 +91,15 @@ export default function ColorSegPanel({ active, tool, hex, size, onToggle, onSet
             </label>
           )}
 
-          <div className="mark-actions">
-            <button className="submit" onClick={run} disabled={running || busy}>
-              {running ? 'Segmenting…' : '✂ Segment by colour'}
-            </button>
-            <button type="button" className="part-group-cancel" onClick={onUndo} title="Undo the last paint action">
-              ↶ Undo
-            </button>
-          </div>
-          {error && <span className="url-error">{error}</span>}
-        </>
-      )}
+      <div className="mark-actions">
+        <button className="submit" onClick={run} disabled={running || busy}>
+          {running ? 'Segmenting…' : '✂ Segment by colour'}
+        </button>
+        <button type="button" className="part-group-cancel" onClick={onUndo} title="Undo the last paint action">
+          ↶ Undo
+        </button>
+      </div>
+      {error && <span className="url-error">{error}</span>}
     </div>
   )
 }

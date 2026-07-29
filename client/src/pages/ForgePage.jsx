@@ -229,6 +229,30 @@ export default function ForgePage() {
   const [colorSegTool, setColorSegTool] = useState('fill')
   const [colorSegHex, setColorSegHex] = useState('#ff4d4d')
   const [colorSegSize, setColorSegSize] = useState(0.4)
+  // unified "Segment parts" method: by clicks (marks) or by paint. The method
+  // button IS the activation (no separate Start button) — click one to turn it
+  // on (and the other off); click the active one again to turn it off.
+  const [segMethod, setSegMethod] = useState(null) // null | 'marks' | 'paint'
+  const chooseSeg = (m) => {
+    const turningOff = segMethod === m
+    if (markMode) {
+      setMarkMode(false)
+      clearMarks()
+    }
+    if (colorSegMode) toggleColorSeg(false)
+    if (turningOff) {
+      setSegMethod(null)
+      return
+    }
+    if (m === 'marks') {
+      selectForEdit(null)
+      setActivePart(null)
+      setMarkMode(true)
+    } else {
+      toggleColorSeg(true) // begins paint mode (seeds colours, swaps display)
+    }
+    setSegMethod(m)
+  }
   const toggleColorSeg = (on) => {
     const api = viewerApiRef.current
     if (on) {
@@ -1151,39 +1175,48 @@ export default function ForgePage() {
           }}
         />
         {modelUrl && (
-          <MarkPartsPanel
-            active={markMode}
-            marks={marks}
-            busy={swapBusy || busy}
-            onToggle={(on) => {
-              setMarkMode(on)
-              if (on) {
-                selectForEdit(null) // marking owns clicks — drop any part selection
-                setActivePart(null)
-              } else {
-                clearMarks()
-              }
-            }}
-            onRename={renameMark}
-            onRemove={removeMark}
-            onClear={clearMarks}
-            onSegment={runMarkSegment}
-          />
-        )}
-        {modelUrl && (
-          <ColorSegPanel
-            active={colorSegMode}
-            tool={colorSegTool}
-            hex={colorSegHex}
-            size={colorSegSize}
-            busy={swapBusy || busy}
-            onToggle={toggleColorSeg}
-            onSetTool={setColorSegToolAnd}
-            onPickColor={pickColorSegColor}
-            onSize={setColorSegSize}
-            onUndo={() => viewerApiRef.current?.colorSegUndo?.()}
-            onSegment={runColorSegment}
-          />
+          <div className="tool-block">
+            <span className="tool-label">Segment parts</span>
+            <div className="tool-seg">
+              <button
+                type="button"
+                className={`tool-seg-btn ${segMethod === 'marks' ? 'on' : ''}`}
+                onClick={() => chooseSeg('marks')}
+              >
+                By clicks
+              </button>
+              <button
+                type="button"
+                className={`tool-seg-btn ${segMethod === 'paint' ? 'on' : ''}`}
+                onClick={() => chooseSeg('paint')}
+              >
+                By paint
+              </button>
+            </div>
+            {segMethod === 'marks' && (
+              <MarkPartsPanel
+                marks={marks}
+                busy={swapBusy || busy}
+                onRename={renameMark}
+                onRemove={removeMark}
+                onClear={clearMarks}
+                onSegment={runMarkSegment}
+              />
+            )}
+            {segMethod === 'paint' && (
+              <ColorSegPanel
+                tool={colorSegTool}
+                hex={colorSegHex}
+                size={colorSegSize}
+                busy={swapBusy || busy}
+                onSetTool={setColorSegToolAnd}
+                onPickColor={pickColorSegColor}
+                onSize={setColorSegSize}
+                onUndo={() => viewerApiRef.current?.colorSegUndo?.()}
+                onSegment={runColorSegment}
+              />
+            )}
+          </div>
         )}
         <PhotoEditPanel
             modelUrl={modelUrl}
