@@ -142,6 +142,12 @@ export function getThumbnail(modelUrl) {
   if (cache.has(modelUrl)) return cache.get(modelUrl)
   const p = queue.then(() => renderThumbnail(modelUrl))
   queue = p.catch(() => {}) // keep the queue alive even if one render fails
+  // DON'T keep a failed render cached — a just-created version's GLB may not be
+  // fetchable on the very first try; dropping the entry lets a retry re-render it
+  // (this is why new thumbnails used to stay blank until a full F5 cleared it).
+  p.catch(() => {
+    if (cache.get(modelUrl) === p) cache.delete(modelUrl)
+  })
   cache.set(modelUrl, p)
   return p
 }

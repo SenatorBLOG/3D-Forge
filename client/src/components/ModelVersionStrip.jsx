@@ -7,9 +7,18 @@ function VersionThumb({ version, index, active, onSelect, onDelete }) {
   useEffect(() => {
     let cancelled = false
     setThumb(null)
-    getThumbnail(version.modelUrl)
-      .then((u) => !cancelled && setThumb(u.shaded))
-      .catch(() => {})
+    // a version's GLB is written the instant it's created; the first render can
+    // race that write, so retry a few times before giving up (fixes new cards
+    // sitting blank until an F5)
+    let tries = 0
+    const attempt = () => {
+      getThumbnail(version.modelUrl)
+        .then((u) => !cancelled && setThumb(u.shaded))
+        .catch(() => {
+          if (!cancelled && tries++ < 5) setTimeout(attempt, 700)
+        })
+    }
+    attempt()
     return () => {
       cancelled = true
     }
