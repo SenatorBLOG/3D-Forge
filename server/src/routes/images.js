@@ -2,7 +2,7 @@ import express, { Router } from 'express'
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { optionalAuth } from '../middleware/auth.js'
-import { createImage, getImage, listVersions, readImageBytes, IMAGE_DIR } from '../services/images.js'
+import { createImage, getImage, listImages, listVersions, readImageBytes, IMAGE_DIR } from '../services/images.js'
 import { detectImage } from '../services/imageType.js'
 import { isImageGenMock, generateImage, editImage } from '../services/imageGen.js'
 import { cloudFilesEnabled, saveCloudFile } from '../services/files.js'
@@ -233,6 +233,20 @@ router.post('/:id/edit', optionalAuth, async (req, res) => {
     if (err.code === 'ENOENT') return res.status(404).json({ error: 'image file not found' })
     console.error('image edit failed:', err)
     res.status(502).json({ error: 'Image edit service failed' })
+  }
+})
+
+// GET /api/images?limit=… — the user's saved pictures, newest-first (the Library
+// "Pictures" gallery). Anonymous sessions share the ownerId=null pool for now.
+// → { images: [{ id, url, source, prompt, mime, parentId, createdAt }] }
+router.get('/', optionalAuth, async (req, res) => {
+  const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 60, 1), 200)
+  try {
+    const images = await listImages(req.user?.id ?? null, limit)
+    res.json({ images })
+  } catch (err) {
+    console.error('list images failed:', err)
+    res.status(500).json({ error: 'failed to load pictures' })
   }
 })
 
