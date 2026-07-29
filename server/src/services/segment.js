@@ -444,6 +444,94 @@ export async function bakeGroups(modelUrl, groups) {
   return { modelUrl: url, parts: baked, cached: false, engine: 'bake' }
 }
 
+// --- #3: paint-by-colour segmentation ---------------------------------------
+
+/**
+ * Segment a model the user PAINTED: the client sends a GLB whose vertices carry
+ * COLOR_0 labels (same colour = same part). Group triangles by their (quantized)
+ * vertex colour → one named node per colour, keeping each triangle's original
+ * material/texture. Same "cut" mechanism as marks, but the label comes from paint
+ * instead of nearest-seed — so a user can merge segments (paint them one colour),
+ * split a fused region (paint sub-parts different colours), or fix ugly auto-seg.
+ * `glbBytes` = the exported painted GLB. Free, geometric.
+ */
+export async function segmentByColors(glbBytes) {
+  const srcDoc = await new NodeIO().readBinary(new Uint8Array(glbBytes))
+  const prims = collectWorldPrimitives(srcDoc)
+  if (!prims.length) throw Object.assign(new Error('model has no geometry'), { code: 'NOT_FOUND' })
+
+  const q = (v) => Math.round(Math.max(0, Math.min(1, v)) * 8) / 8 // coarse grid → clean groups
+  const buckets = new Map() // colourKey -> { order, byPrim: Map(pi -> soup accumulator) }
+  let order = 0
+  prims.forEach((prim, pi) => {
+    const pos = prim.positions
+    const idx = prim.indices
+    const col = prim.colors
+    // each vertex → its quantized colour key; a triangle takes the MAJORITY of its
+    // three vertices (not the average) so a colour boundary snaps to one side
+    // instead of spawning sliver "in-between" parts
+    const vkey = (i) => (col ? `${q(col[i * 3])}_${q(col[i * 3 + 1])}_${q(col[i * 3 + 2])}` : '0.75_0.75_0.75')
+    const triCount = idx ? idx.length / 3 : pos.length / 9
+    for (let t = 0; t < triCount; t++) {
+      const a = idx ? idx[t * 3] : t * 3
+      const b = idx ? idx[t * 3 + 1] : t * 3 + 1
+      const c = idx ? idx[t * 3 + 2] : t * 3 + 2
+      const ka = vkey(a)
+      const kb = vkey(b)
+      const kc = vkey(c)
+      const key = ka === kb || ka === kc ? ka : kb === kc ? kb : ka
+      let bk = buckets.get(key)
+      if (!bk) {
+        bk = { order: order++, byPrim: new Map() }
+        buckets.set(key, bk)
+      }
+      let pb = bk.byPrim.get(pi)
+      if (!pb) {
+        pb = { srcPrim: prim, pos: [], nrm: prim.normals ? [] : null, uv: prim.uvs ? [] : null }
+        bk.byPrim.set(pi, pb)
+      }
+      for (const vi of [a, b, c]) {
+        pb.pos.push(pos[vi * 3], pos[vi * 3 + 1], pos[vi * 3 + 2])
+        if (pb.nrm) pb.nrm.push(prim.normals[vi * 3], prim.normals[vi * 3 + 1], prim.normals[vi * 3 + 2])
+        if (pb.uv) pb.uv.push(prim.uvs[vi * 2], prim.uvs[vi * 2 + 1])
+      }
+    }
+  })
+
+  const doc = new Document()
+  const buffer = doc.createBuffer()
+  const scene = doc.createScene()
+  const ordered = [...buckets.values()].sort((a, b) => a.order - b.order)
+  let n = 0
+  for (const bk of ordered) {
+    const name = `Part ${++n}`
+    const soup = [...bk.byPrim.values()].map((pb) => ({
+      positions: new Float32Array(pb.pos),
+      normals: pb.nrm ? new Float32Array(pb.nrm) : null,
+      indices: null,
+      uvs: pb.uv ? new Float32Array(pb.uv) : null,
+      material: pb.srcPrim.material,
+      color: pb.srcPrim.color,
+      metallic: pb.srcPrim.metallic,
+      roughness: pb.srcPrim.roughness,
+      texture: pb.srcPrim.texture,
+    }))
+    const mesh = doc.createMesh(name)
+    addPrimsToMesh(doc, buffer, mesh, soup)
+    scene.addChild(doc.createNode(name).setMesh(mesh))
+  }
+  if (!scene.listChildren().length) {
+    throw Object.assign(new Error('nothing painted to segment'), { code: 'NO_GEOMETRY' })
+  }
+
+  const out = await new NodeIO().writeBinary(doc)
+  const url = await storeModelBytes(out, 'model-color-seg')
+  const parts = extractParts(doc)
+  memCache.set(url, parts)
+  saveCache()
+  return { modelUrl: url, parts, cached: false, engine: 'colors' }
+}
+
 // --- B-H2: hit-test a spatial point to a part ------------------------------
 
 const inside = (box, p) =>
@@ -593,11 +681,28 @@ function collectWorldPrimitives(doc, onlyIndex = null, onlyPrim = null) {
           occlusion: grabTex(mat.getOcclusionTexture?.()),
           occlusionStrength: mat.getOcclusionStrength?.() ?? 1,
         }
+        // vertex colours (COLOR_0), denormalized to 0..1 — the paint tool writes
+        // these as per-part labels; segmentByColors groups triangles by them
+        const colAcc = prim.getAttribute('COLOR_0')
+        let colors = null
+        if (colAcc) {
+          const cn = colAcc.getCount()
+          const data = new Float32Array(cn * 3)
+          const tmp = []
+          for (let i = 0; i < cn; i++) {
+            colAcc.getElement(i, tmp)
+            data[i * 3] = tmp[0]
+            data[i * 3 + 1] = tmp[1]
+            data[i * 3 + 2] = tmp[2]
+          }
+          colors = data
+        }
         prims.push({
           positions,
           normals: nrm ? new Float32Array(nrm.getArray()) : null,
           indices: idxAcc ? idxAcc.getArray().slice() : null,
           uvs: uvAcc ? new Float32Array(uvAcc.getArray()) : null,
+          colors,
           material,
           // legacy flat fields kept for callers/paths that don't read `material`
           color: mat?.getBaseColorFactor() || [0.62, 0.65, 0.7, 1],

@@ -11,6 +11,7 @@ import PhotoEditPanel from '../components/PhotoEditPanel.jsx'
 import RecolorPanel from '../components/RecolorPanel.jsx'
 import PartButtons from '../components/PartButtons.jsx'
 import MarkPartsPanel from '../components/MarkPartsPanel.jsx'
+import ColorSegPanel from '../components/ColorSegPanel.jsx'
 import PartEditPanel from '../components/PartEditPanel.jsx'
 import AnimatePanel from '../components/AnimatePanel.jsx'
 import MicButton from '../components/MicButton.jsx'
@@ -222,6 +223,52 @@ export default function ForgePage() {
   // toggles that part in the group selection (same as ticking its chip)
   const [groupMode, setGroupMode] = useState(false)
   const [partClickSignal, setPartClickSignal] = useState(null) // {name, ts}
+
+  // #3 — paint-by-colour segmentation
+  const [colorSegMode, setColorSegMode] = useState(false)
+  const [colorSegTool, setColorSegTool] = useState('fill')
+  const [colorSegHex, setColorSegHex] = useState('#ff4d4d')
+  const toggleColorSeg = (on) => {
+    const api = viewerApiRef.current
+    if (on) {
+      selectForEdit(null)
+      setActivePart(null)
+      api?.colorSegBegin?.()
+      api?.colorSegSet?.(colorSegTool, colorSegHex)
+      setColorSegMode(true)
+    } else {
+      api?.colorSegEnd?.()
+      setColorSegMode(false)
+    }
+  }
+  const setColorSegToolAnd = (t) => {
+    setColorSegTool(t)
+    viewerApiRef.current?.colorSegSet?.(t, colorSegHex)
+  }
+  const pickColorSegColor = (hex) => {
+    setColorSegHex(hex)
+    // picking a colour implies you want to paint with it — leave eyedropper
+    const t = colorSegTool === 'eyedropper' ? 'brush' : colorSegTool
+    setColorSegTool(t)
+    viewerApiRef.current?.colorSegSet?.(t, hex)
+  }
+  const runColorSegment = async () => {
+    const api = viewerApiRef.current
+    if (!api?.colorSegExport) throw new Error('Load a model first')
+    const buf = await api.colorSegExport()
+    const res = await fetch('/api/edit/segment-colors', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/octet-stream' },
+      body: buf,
+    })
+    const data = await res.json().catch(() => ({}))
+    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`)
+    api.colorSegEnd?.()
+    setColorSegMode(false)
+    setBaseModelPrompt('Segmented (paint)')
+    setLastEditPrompt(null)
+    swapModel(data.modelUrl, { version: { as: 'child', label: 'Segmented (paint)' } })
+  }
   const addMark = (point) =>
     setMarks((prev) => [...prev, { label: `part ${prev.length + 1}`, point }])
   const renameMark = (i, label) => setMarks((prev) => prev.map((m, k) => (k === i ? { ...m, label } : m)))
@@ -1122,6 +1169,18 @@ export default function ForgePage() {
             onSegment={runMarkSegment}
           />
         )}
+        {modelUrl && (
+          <ColorSegPanel
+            active={colorSegMode}
+            tool={colorSegTool}
+            hex={colorSegHex}
+            busy={swapBusy || busy}
+            onToggle={toggleColorSeg}
+            onSetTool={setColorSegToolAnd}
+            onPickColor={pickColorSegColor}
+            onSegment={runColorSegment}
+          />
+        )}
         <PhotoEditPanel
             modelUrl={modelUrl}
             onModelReady3D={(url, label) => {
@@ -1223,12 +1282,13 @@ export default function ForgePage() {
               }
               manualHost={manualHost}
               spatialClick={false} // no click-to-prompt popup for now (distracting)
-              onPickPartAt={markMode || groupMode ? null : pickPartByName} // dbl-click part → edit
+              onPickPartAt={markMode || groupMode || colorSegMode ? null : pickPartByName} // dbl-click part → edit
               markMode={markMode}
               marks={marks}
               onAddMark={addMark}
               partClickMode={groupMode}
               onPartClick={(name) => setPartClickSignal({ name, ts: Date.now() })}
+              onEyedrop={pickColorSegColor}
             />
             <ModelVersionStrip
               versions={modelVersions}

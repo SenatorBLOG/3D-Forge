@@ -60,11 +60,14 @@ export default function ModelViewer({
   onAddMark = null, // called with { x, y, z } when the user clicks in mark mode
   partClickMode = false, // single-click a part reports it (group-select by clicking the model)
   onPartClick = null, // called with the clicked part's mesh/node name
+  onEyedrop = null, // #3 paint: eyedropper picked a colour (hex) under the cursor
 }) {
   const containerRef = useRef(null)
   // keep latest callbacks/points without re-creating the whole scene on re-render
   const callbacksRef = useRef({})
-  callbacksRef.current = { onAddPoint, onSelectPoint, onLoaded, onError, onPickPartAt, onAddMark, onPartClick }
+  callbacksRef.current = { onAddPoint, onSelectPoint, onLoaded, onError, onPickPartAt, onAddMark, onPartClick, onEyedrop }
+  // #3 paint-by-colour segmentation state (imperative — driven by ColorSegPanel)
+  const colorSegRef = useRef({ active: false, tool: 'brush', hex: '#ff4d4d' })
   const spatialClickRef = useRef(true)
   spatialClickRef.current = spatialClick
   const markModeRef = useRef(false)
@@ -351,6 +354,10 @@ export default function ModelViewer({
       controls,
       syncMarkers,
       syncMarks,
+      colorSegSet: (tool, hex) => {
+        if (tool) colorSegRef.current.tool = tool
+        if (hex) colorSegRef.current.hex = hex
+      },
       updateLabels,
       playClip,
       getClips: () => Object.keys(clipActions),
@@ -812,8 +819,112 @@ export default function ModelViewer({
       setDirtyRef.current()
     }
 
+    // --- #3: paint-by-colour segmentation (vertex colours as part labels) -----
+    const csTmp = new THREE.Vector3()
+    const csWorld = new THREE.Vector3()
+    // enter paint mode: give every mesh a COLOR_0 attribute, seed each mesh a
+    // distinct palette colour (so existing segments read as colours to fix), and
+    // show a flat vertex-colour material so the labels are visible
+    const colorSegBegin = () => {
+      if (!model) return
+      let ci = 0
+      model.traverse((o) => {
+        if (!o.isMesh) return
+        const geo = o.geometry
+        const posAttr = geo.getAttribute('position')
+        if (!posAttr) return
+        let colorAttr = geo.getAttribute('color')
+        if (!colorAttr || colorAttr.count !== posAttr.count) {
+          colorAttr = new THREE.BufferAttribute(new Float32Array(posAttr.count * 3), 3)
+          geo.setAttribute('color', colorAttr)
+        }
+        const c = new THREE.Color(PART_PALETTE[ci++ % PART_PALETTE.length])
+        for (let i = 0; i < colorAttr.count; i++) colorAttr.setXYZ(i, c.r, c.g, c.b)
+        colorAttr.needsUpdate = true
+        if (!o.userData.csOrigMat) o.userData.csOrigMat = o.material
+        o.material = new THREE.MeshStandardMaterial({ vertexColors: true, metalness: 0.05, roughness: 0.85 })
+      })
+      colorSegRef.current.active = true
+    }
+    const colorSegEnd = () => {
+      colorSegRef.current.active = false
+      if (!model) return
+      model.traverse((o) => {
+        if (o.isMesh && o.userData.csOrigMat) {
+          o.material?.dispose?.()
+          o.material = o.userData.csOrigMat
+        }
+      })
+    }
+    // paint the picked triangle's neighbourhood (brush), the whole mesh (fill),
+    // or read the colour under the cursor (eyedropper)
+    const colorSegPaint = (e) => {
+      const hit = pick(e)
+      if (!hit?.object?.isMesh) return
+      const mesh = hit.object
+      const geo = mesh.geometry
+      const colorAttr = geo.getAttribute('color')
+      if (!colorAttr) return
+      const cs = colorSegRef.current
+      const posAttr = geo.getAttribute('position')
+
+      if (cs.tool === 'eyedropper') {
+        const i = hit.face?.a ?? 0
+        const hex = `#${new THREE.Color(colorAttr.getX(i), colorAttr.getY(i), colorAttr.getZ(i)).getHexString()}`
+        callbacksRef.current.onEyedrop?.(hex)
+        return
+      }
+      const col = new THREE.Color(cs.hex)
+      if (cs.tool === 'fill') {
+        // click a whole segment → recolour every vertex of that mesh (merge/assign)
+        for (let i = 0; i < colorAttr.count; i++) colorAttr.setXYZ(i, col.r, col.g, col.b)
+        colorAttr.needsUpdate = true
+        return
+      }
+      // brush: paint vertices within a world-space radius of the hit point
+      const r = modelSize * 0.06 * (0.4 + sizeRef.current)
+      const r2 = r * r
+      for (let i = 0; i < posAttr.count; i++) {
+        csTmp.fromBufferAttribute(posAttr, i)
+        csWorld.copy(csTmp).applyMatrix4(mesh.matrixWorld)
+        if (csWorld.distanceToSquared(hit.point) <= r2) colorAttr.setXYZ(i, col.r, col.g, col.b)
+      }
+      colorAttr.needsUpdate = true
+    }
+    // export the painted model: original materials (textures) + COLOR_0 labels
+    const colorSegExport = () =>
+      new Promise((resolve, reject) => {
+        const swapped = []
+        model.traverse((o) => {
+          if (!o.isMesh || !o.userData.csOrigMat) return
+          const em = o.userData.csOrigMat.clone()
+          em.vertexColors = true // so GLTFExporter writes COLOR_0
+          swapped.push([o, o.material])
+          o.material = em
+        })
+        const restore = () => swapped.forEach(([o, m]) => { o.material?.dispose?.(); o.material = m })
+        new GLTFExporter().parse(
+          model,
+          (glb) => { restore(); resolve(glb) },
+          (err) => { restore(); reject(err) },
+          { binary: true },
+        )
+      })
+    // expose the paint API now that the functions exist (apiRef was built earlier)
+    apiRef.current.colorSegBegin = colorSegBegin
+    apiRef.current.colorSegEnd = colorSegEnd
+    apiRef.current.colorSegExport = colorSegExport
+
     let stroking = false
     const onToolDown = (e) => {
+      // paint-by-colour owns clicks while active (independent of the tool tray)
+      if (colorSegRef.current.active && model && e.button === 0) {
+        const brush = colorSegRef.current.tool === 'brush'
+        controls.enabled = !brush // only the brush stroke owns the drag; fill/pick keep orbit
+        stroking = brush
+        colorSegPaint(e)
+        return
+      }
       if (!toolRef.current || !model || e.button !== 0) return
       // Move tool: click a part to select it; the gizmo (its own handles) then
       // owns the drag. If the click landed on a gizmo handle, let it be.
@@ -840,6 +951,10 @@ export default function ModelViewer({
     }
     const onToolMove = (e) => {
       if (!stroking) return
+      if (colorSegRef.current.active) {
+        colorSegPaint(e)
+        return
+      }
       const hit = pick(e)
       if (!hit) return
       if (toolRef.current === 'paint') paintAt(hit)

@@ -1237,6 +1237,49 @@ body::before {
   gap: 8px;
 }
 
+/* #3 paint segmentation */
+.cs-tools {
+  display: flex;
+  gap: 6px;
+  margin: 8px 0;
+}
+.cs-tool {
+  flex: 1;
+  padding: 6px 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel-2);
+  color: var(--text-dim);
+  font-size: 12px;
+  cursor: pointer;
+  transition: color 0.12s, border-color 0.12s;
+}
+.cs-tool:hover {
+  color: var(--text);
+}
+.cs-tool.active {
+  color: var(--forge);
+  border-color: var(--forge);
+}
+.cs-palette {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+.cs-swatch {
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  border: 2px solid transparent;
+  cursor: pointer;
+  padding: 0;
+}
+.cs-swatch.active {
+  border-color: #fff;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.4);
+}
+
 .part-group-name {
   width: 118px;
   padding: 4px 8px;

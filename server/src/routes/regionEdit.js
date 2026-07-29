@@ -1,5 +1,6 @@
 import { Router } from 'express'
-import { segmentModel, segmentTripoByTaskId, segmentByMarks, bakeGroups, hitTestPart, partSwap, extractPart, extractRegion, stitchPart, stitchRegion } from '../services/segment.js'
+import express from 'express'
+import { segmentModel, segmentTripoByTaskId, segmentByMarks, segmentByColors, bakeGroups, hitTestPart, partSwap, extractPart, extractRegion, stitchPart, stitchRegion } from '../services/segment.js'
 import { optionalAuth } from '../middleware/auth.js'
 import { labelParts as aiLabelParts, isClaudeEnabled } from '../services/claude.js'
 import { recordTask, updateTask, listMemory } from '../services/history.js'
@@ -123,6 +124,27 @@ router.post('/bake-groups', optionalAuth, async (req, res) => {
     if (err.code === 'NO_GROUPS') return res.status(400).json({ error: err.message })
     console.error('bake-groups failed:', err)
     res.status(500).json({ error: 'Failed to bake groups' })
+  }
+})
+
+// POST /api/edit/segment-colors — #3 paint segmentation. Body is the raw painted
+// GLB (vertices carry COLOR_0 labels; same colour = same part). Groups triangles
+// by colour → new segmented model. → { modelUrl, parts }. Free, geometric.
+router.post('/segment-colors', optionalAuth, express.raw({ type: '*/*', limit: '64mb' }), async (req, res) => {
+  const body = req.body
+  if (!Buffer.isBuffer(body) || body.length < 12 || body.toString('utf8', 0, 4) !== 'glTF') {
+    return res.status(400).json({ error: 'send the painted .glb as the raw request body' })
+  }
+  try {
+    const result = await segmentByColors(body)
+    const segTaskId = `color-seg-${Date.now()}`
+    recordTask({ kind: 'generate', taskId: segTaskId, prompt: 'Segmented (paint)', mock: true, ownerId: req.user?.id ?? null })
+    updateTask(segTaskId, 'SUCCEEDED', result.modelUrl)
+    res.json(result)
+  } catch (err) {
+    if (err.code === 'NOT_FOUND' || err.code === 'NO_GEOMETRY') return res.status(400).json({ error: err.message })
+    console.error('segment-colors failed:', err)
+    res.status(500).json({ error: 'Failed to segment by colour' })
   }
 })
 
