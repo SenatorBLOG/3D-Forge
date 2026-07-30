@@ -173,10 +173,15 @@ const viewPlan = (count) =>
     : count === 2
       ? [{ label: 'Front', az: 0 }, { label: 'Side', az: Math.PI / 4 }]
       : [
+          // ORDER MATTERS: Tripo multiview expects EXACTLY [front, left, back,
+          // right] (see createTripoMultiviewTask). Back must be slot 3, not 4 —
+          // otherwise Tripo gets a SIDE view as the "back", never sees the real
+          // rear, and hallucinates the back by mirroring the front (→ a face on
+          // the back). Left/Right stay 3/4 level shots (reconstruct cleaner).
           { label: 'Front', az: 0 },
           { label: 'Left', az: -Math.PI / 4 },
-          { label: 'Right', az: Math.PI / 4 },
           { label: 'Back', az: Math.PI },
+          { label: 'Right', az: Math.PI / 4 },
         ]
 
 function renderViews(modelUrl, count) {
