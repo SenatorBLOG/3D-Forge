@@ -130,7 +130,7 @@ router.post('/bake-groups', optionalAuth, async (req, res) => {
 // POST /api/edit/segment-colors — #3 paint segmentation. Body is the raw painted
 // GLB (vertices carry COLOR_0 labels; same colour = same part). Groups triangles
 // by colour → new segmented model. → { modelUrl, parts }. Free, geometric.
-router.post('/segment-colors', optionalAuth, express.raw({ type: '*/*', limit: '64mb' }), async (req, res) => {
+router.post('/segment-colors', optionalAuth, express.raw({ type: '*/*', limit: '200mb' }), async (req, res) => {
   const body = req.body
   if (!Buffer.isBuffer(body) || body.length < 12 || body.toString('utf8', 0, 4) !== 'glTF') {
     return res.status(400).json({ error: 'send the painted .glb as the raw request body' })

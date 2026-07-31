@@ -2,6 +2,27 @@ import { useEffect, useRef, useState } from 'react'
 import useGenerationTask from '../hooks/useGenerationTask.js'
 import MicButton from './MicButton.jsx'
 
+// Parse a JSON response WITHOUT throwing the cryptic "Unexpected end of JSON
+// input" when the body is empty/truncated — which happens on a slow generate if
+// the dev server blips (node --watch) and the response comes back empty. Turn
+// that into a clear, retryable message instead of crashing the flow.
+async function safeJson(res) {
+  const text = await res.text()
+  let data = {}
+  try {
+    data = text ? JSON.parse(text) : {}
+  } catch {
+    /* non-JSON body (empty / HTML error page) */
+  }
+  if (!res.ok) {
+    throw new Error(
+      data.error || `HTTP ${res.status}${text ? '' : ' — empty response (server busy? try again)'}`,
+    )
+  }
+  if (!text) throw new Error('Empty response from server — please try again')
+  return data
+}
+
 // one-click starter prompts — fast onboarding and quick demos
 const QUICK_PROMPTS = ['a small dragon', 'a medieval sword', 'a sci-fi helmet', 'a wooden chair']
 
@@ -200,7 +221,7 @@ export default function GeneratePanel({
         headers: { 'Content-Type': file.type },
         body: file,
       })
-      const data = await res.json()
+      const data = await safeJson(res)
       if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`)
       setImage(data.image)
       setPreview((prev) => {
@@ -291,7 +312,7 @@ export default function GeneratePanel({
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ instruction: VIEW_PROMPT[side] }),
         })
-        const data = await res.json()
+        const data = await safeJson(res)
         if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`)
         ids.push(data.image.id)
       }
@@ -305,7 +326,7 @@ export default function GeneratePanel({
   // generate or an edit so the cards + numbering stay authoritative)
   const loadVersions = async (id) => {
     const res = await fetch(`/api/images/${encodeURIComponent(id)}/versions`)
-    const data = await res.json()
+    const data = await safeJson(res)
     if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`)
     setVersions(data.versions)
     setCurrentId(id)
@@ -325,7 +346,7 @@ export default function GeneratePanel({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ prompt: trimmed }),
       })
-      const data = await res.json()
+      const data = await safeJson(res)
       if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`)
       setGenImgStub(!!data.stub)
       await loadVersions(data.image.id)
@@ -349,7 +370,7 @@ export default function GeneratePanel({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ instruction: instr }),
       })
-      const data = await res.json()
+      const data = await safeJson(res)
       if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`)
       setGenImgStub(!!data.stub)
       setEditInstruction('')

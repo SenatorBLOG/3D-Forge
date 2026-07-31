@@ -44,7 +44,7 @@ async function storeImageBytes(name, data, mime) {
 // POST /api/images — store a user-uploaded reference image. Body is the raw image
 // bytes (Content-Type is ignored; we sniff the magic bytes). Returns the stored
 // image record the Model step (B4) can consume by id.
-router.post('/', optionalAuth, express.raw({ type: '*/*', limit: '15mb' }), async (req, res) => {
+router.post('/', optionalAuth, express.raw({ type: '*/*', limit: '64mb' }), async (req, res) => {
   const body = req.body
   if (!Buffer.isBuffer(body) || body.length === 0) {
     return res.status(400).json({ error: 'send the image file as the raw request body' })

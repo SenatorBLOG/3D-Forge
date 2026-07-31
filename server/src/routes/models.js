@@ -19,7 +19,7 @@ export const UPLOAD_DIR = fileURLToPath(new URL('../../.devdata/uploads/', impor
 // POST /api/models/upload — store a user-uploaded .glb and record it in history
 // so it persists and reloads via the History "Load" button. Body is the raw
 // file bytes (Content-Type ignored); ?name=<label> sets the history title.
-router.post('/upload', optionalAuth, express.raw({ type: '*/*', limit: '60mb' }), async (req, res) => {
+router.post('/upload', optionalAuth, express.raw({ type: '*/*', limit: '200mb' }), async (req, res) => {
   const body = req.body
   if (!Buffer.isBuffer(body) || body.length === 0) {
     return res.status(400).json({ error: 'send the .glb file as the raw request body' })
