@@ -171,7 +171,11 @@ const viewPlan = (count) =>
   count <= 1
     ? [{ label: 'Front', az: 0 }]
     : count === 2
-      ? [{ label: 'Front', az: 0 }, { label: 'Side', az: Math.PI / 4 }]
+      ? // straight-on FRONT + straight-on BACK (level, az 0 and 180) — Javid's
+        // experiment: giving Tripo the exact opposite faces reconstructs the body
+        // better than front+¾-side. Slot mapping (front→slot0, back→slot2) is sent
+        // as `slots` by the caller so Back lands in Tripo's real BACK slot.
+        [{ label: 'Front', az: 0 }, { label: 'Back', az: Math.PI }]
       : [
           // ORDER MATTERS: Tripo multiview expects EXACTLY [front, left, back,
           // right] (see createTripoMultiviewTask). Back must be slot 3, not 4 —
@@ -184,7 +188,7 @@ const viewPlan = (count) =>
           { label: 'Right', az: Math.PI / 4 },
         ]
 
-function renderViews(modelUrl, count) {
+function renderViews(modelUrl, count, frontAz) {
   return new Promise((resolve, reject) => {
     const canvas = document.createElement('canvas')
     canvas.width = VIEW_SIZE
@@ -241,11 +245,13 @@ function renderViews(modelUrl, count) {
           const fov = (45 * Math.PI) / 180
           const R = (size / 2 / Math.sin(fov / 2)) * 1.15
           const E = size * 0.06 // near-level → clean straight-on profiles
-          // "Front" = the SAME angle the live viewer shows the model from (its
-          // camera sits at x=0.7, z=0.9), so the labelled front matches what the
-          // user sees; the other views are ±90°/180° around that. This aligns
-          // labels to the model's apparent front without hardcoding per-model.
-          const FRONT_AZ = Math.atan2(0.7, 0.9)
+          // "Front" = the angle the LIVE viewer currently shows the model from.
+          // frontAz is the viewer's OrbitControls azimuth (getAzimuthalAngle()),
+          // which uses the SAME convention as `az` below (theta = atan2(x, z)), so
+          // slot "Front" is captured from exactly where the user is looking — turn
+          // the model to face you, hit Capture, and the labels match. Falls back to
+          // the default live-camera yaw (x=0.7, z=0.9) when no azimuth is passed.
+          const FRONT_AZ = Number.isFinite(frontAz) ? frontAz : Math.atan2(0.7, 0.9)
           const views = []
           for (const v of viewPlan(count)) {
             const az = v.az + FRONT_AZ
@@ -273,9 +279,9 @@ function renderViews(modelUrl, count) {
 
 /** Render `count` (1|2|4) clean straight-on views of a model, queued like the
  *  thumbnail renders so we never hold multiple WebGL contexts at once. */
-export function captureViews(modelUrl, count = 4) {
+export function captureViews(modelUrl, count = 4, frontAz) {
   if (!modelUrl) return Promise.reject(new Error('no modelUrl'))
-  const p = queue.then(() => renderViews(modelUrl, count))
+  const p = queue.then(() => renderViews(modelUrl, count, frontAz))
   queue = p.catch(() => {})
   return p
 }

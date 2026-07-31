@@ -7,6 +7,17 @@ const BASE_URL = 'https://generativelanguage.googleapis.com/v1beta/models'
 const apiKey = () => process.env.GEMINI_API_KEY
 const model = () => process.env.GEMINI_IMAGE_MODEL || 'gemini-2.5-flash-image'
 
+// Every Gemini image (text→image, edits, and the multiview per-view edits) must
+// come back on a plain solid PURE-WHITE background. Javid's call: Gemini was
+// randomly returning grey/black/white backdrops, and the dark ones bled into the
+// Tripo reconstruction (darker, muddier model) and hurt recolor. A consistent
+// white backdrop reconstructs cleaner and is easier to key out. Appended to
+// EVERY prompt server-side so no caller can forget it.
+const WHITE_BG =
+  ' The background MUST be a plain solid pure white (#ffffff) studio background —' +
+  ' no scenery, no gradient, no grey or black, no floor, no shadows cast on the' +
+  ' background. Only the subject on clean white.'
+
 export const isImageGenMock = () => !apiKey() || apiKey() === 'mock'
 
 // --- quota guard: cap real image calls per day ----------------------------
@@ -72,7 +83,7 @@ async function callGemini(parts) {
 /** Generate an image from a text prompt. Returns { bytes, mime }. */
 export async function generateImage(prompt) {
   enforceImageDailyLimit()
-  return callGemini([{ text: prompt }])
+  return callGemini([{ text: `${prompt}${WHITE_BG}` }])
 }
 
 /**
@@ -87,8 +98,8 @@ export async function editImage(imageBytes, mime, instruction, reference = null)
   // makes the 4 reconstructed views drift apart (different shoulders/body/pose).
   const guarded =
     `Edit the FIRST image: ${instruction}. Change ONLY that. Keep everything else ` +
-    `exactly the same — the same pose, body, shoulders, proportions, colours, ` +
-    `lighting and plain background. Do not redraw or restyle the rest of the figure.`
+    `exactly the same — the same pose, body, shoulders, proportions, colours and ` +
+    `lighting.${WHITE_BG} Do not redraw or restyle the rest of the figure.`
   const parts = [
     { inlineData: { mimeType: mime, data: Buffer.from(imageBytes).toString('base64') } },
   ]

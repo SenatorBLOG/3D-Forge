@@ -29,7 +29,7 @@ async function readJson(res) {
  *        re-roll / add-prompt like the photo loop). The original model is never lost.
  * P1c (next) — rebuild the chosen photo back into 3D.
  */
-export default function PhotoEditPanel({ modelUrl, onModelReady3D }) {
+export default function PhotoEditPanel({ modelUrl, onModelReady3D, getFrontAz }) {
   const [capturing, setCapturing] = useState(false)
   const [error, setError] = useState(null)
   // the edit-version family of the captured render (same shape as Image Lab)
@@ -121,7 +121,8 @@ export default function PhotoEditPanel({ modelUrl, onModelReady3D }) {
     setMvError(null)
     setMvViews(null)
     try {
-      const { views } = await captureViews(modelUrl, mvCount) // clean, count views
+      // Front slot = the live viewer's current yaw, so labels match what you see.
+      const { views } = await captureViews(modelUrl, mvCount, getFrontAz?.())
       if (!views?.length) throw new Error('Could not render views')
       const prepared = []
       for (const v of views) {
@@ -170,7 +171,12 @@ export default function PhotoEditPanel({ modelUrl, onModelReady3D }) {
       } else {
         await genMV.start(
           '/api/generate/multiview',
-          { imageIds: mvViews.map((v) => v.id) },
+          // send slot labels so Back lands in Tripo's real BACK slot (front+back
+          // 2-view would otherwise map Back → the LEFT slot and mangle the model)
+          {
+            imageIds: mvViews.map((v) => v.id),
+            slots: mvViews.map((v) => (v.label || '').toLowerCase()),
+          },
           { prompt: 'multi-view' },
         )
       }

@@ -24,7 +24,9 @@ import { seedDemoData } from './services/seed.js'
 
 const app = express()
 app.use(cors())
-app.use(express.json({ limit: '1mb' }))
+// 25mb so JSON routes that carry a modelUrl which may be a large data:/blob GLB
+// (extract / segment-marks / bake-groups / stitch / partswap) don't 413.
+app.use(express.json({ limit: '25mb' }))
 // serve user-uploaded models (saved by POST /api/models/upload)
 app.use('/uploads', express.static(UPLOAD_DIR))
 // serve reference images (saved by POST /api/images[/generate])

@@ -10,7 +10,7 @@ import MicButton from './MicButton.jsx'
  * Everything outside the part stays byte-identical; seams are the accepted
  * tradeoff. Mock-safe end to end (stub photo edits, mock 3D, real stitch).
  */
-export default function PartEditPanel({ modelUrl, part, onClose, onStitched }) {
+export default function PartEditPanel({ modelUrl, part, onClose, onStitched, getFrontAz }) {
   const [phase, setPhase] = useState('extracting') // extracting | ready | stitching
   const [image, setImage] = useState(null) // current photo of the part { id, url }
   const [instruction, setInstruction] = useState('')
@@ -145,9 +145,11 @@ export default function PartEditPanel({ modelUrl, part, onClose, onStitched }) {
     }
     setError(null)
     try {
-      const { views } = await captureViews(partUrlRef.current, pvCount)
+      // Front slot = the live viewer's current yaw, so labels match what you see.
+      const { views } = await captureViews(partUrlRef.current, pvCount, getFrontAz?.())
       if (!views?.length) throw new Error('Could not render part views')
       const ids = []
+      const slots = [] // slot label per view, so Back → Tripo's real BACK slot
       let edits = 0 // how many view-edits actually succeeded
       for (const v of views) {
         const blob = await (await fetch(v.dataUrl)).blob()
@@ -180,11 +182,12 @@ export default function PartEditPanel({ modelUrl, part, onClose, onStitched }) {
           await new Promise((r) => setTimeout(r, 1100)) // space out calls to dodge the rate limit
         }
         ids.push(imgId)
+        slots.push((v.label || '').toLowerCase())
       }
       if (lastEdit?.instruction && !edits) {
         throw new Error('Image edit service is busy (rate limit) — try again, or use “1 · quick”.')
       }
-      gen.start('/api/generate/multiview', { imageIds: ids }, { prompt: `part: ${part.name}` })
+      gen.start('/api/generate/multiview', { imageIds: ids, slots }, { prompt: `part: ${part.name}` })
     } catch (e) {
       setError(e.message)
     }
