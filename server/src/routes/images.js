@@ -2,7 +2,7 @@ import express, { Router } from 'express'
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { optionalAuth } from '../middleware/auth.js'
-import { createImage, getImage, listVersions, readImageBytes, IMAGE_DIR } from '../services/images.js'
+import { createImage, getImage, listImages, listVersions, readImageBytes, deleteImage, IMAGE_DIR } from '../services/images.js'
 import { detectImage } from '../services/imageType.js'
 import { isImageGenMock, generateImage, editImage } from '../services/imageGen.js'
 import { cloudFilesEnabled, saveCloudFile } from '../services/files.js'
@@ -236,6 +236,20 @@ router.post('/:id/edit', optionalAuth, async (req, res) => {
   }
 })
 
+// GET /api/images?limit=… — the user's saved pictures, newest-first (the Library
+// "Pictures" gallery). Anonymous sessions share the ownerId=null pool for now.
+// → { images: [{ id, url, source, prompt, mime, parentId, createdAt }] }
+router.get('/', optionalAuth, async (req, res) => {
+  const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 60, 1), 200)
+  try {
+    const images = await listImages(req.user?.id ?? null, limit)
+    res.json({ images })
+  } catch (err) {
+    console.error('list images failed:', err)
+    res.status(500).json({ error: 'failed to load pictures' })
+  }
+})
+
 // GET /api/images/:id/versions — the whole edit family (root + all branches),
 // oldest-first with 1-based `version` numbers. Feeds the Image Lab version cards
 // so the client renders the loop with a single request.
@@ -247,6 +261,18 @@ router.get('/:id/versions', async (req, res) => {
   } catch (err) {
     console.error('list versions failed:', err)
     res.status(500).json({ error: 'failed to load image versions' })
+  }
+})
+
+// DELETE /api/images/:id — remove a picture from the gallery (metadata + local
+// bytes). → { ok: true } (idempotent: unknown id still returns ok).
+router.delete('/:id', optionalAuth, async (req, res) => {
+  try {
+    await deleteImage(req.params.id)
+    res.json({ ok: true })
+  } catch (err) {
+    console.error('delete image failed:', err)
+    res.status(500).json({ error: 'failed to delete the picture' })
   }
 })
 

@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom'
 import ModelViewer from '../components/ModelViewer.jsx'
 import GeneratePanel from '../components/GeneratePanel.jsx'
 import LibraryPanel from '../components/LibraryPanel.jsx'
+import PicturesPanel from '../components/PicturesPanel.jsx'
 import CompareView from '../components/CompareView.jsx'
 import PublishPanel from '../components/PublishPanel.jsx'
 import ModelVersionStrip from '../components/ModelVersionStrip.jsx'
@@ -10,6 +11,7 @@ import PhotoEditPanel from '../components/PhotoEditPanel.jsx'
 import RecolorPanel from '../components/RecolorPanel.jsx'
 import PartButtons from '../components/PartButtons.jsx'
 import MarkPartsPanel from '../components/MarkPartsPanel.jsx'
+import ColorSegPanel from '../components/ColorSegPanel.jsx'
 import PartEditPanel from '../components/PartEditPanel.jsx'
 import AnimatePanel from '../components/AnimatePanel.jsx'
 import MicButton from '../components/MicButton.jsx'
@@ -137,6 +139,15 @@ export default function ForgePage() {
   const [compare, setCompare] = useState(null)
   // which left activity-bar tool is open: generate | model | edit | recolor
   const [activeTab, setActiveTab] = useState('generate')
+  // right Library tab: models grid | saved pictures gallery
+  const [libTab, setLibTab] = useState('models')
+  // a Picture picked from the library to start a new generation from (id + url);
+  // remounts GeneratePanel in image mode showing it
+  const [pickedImage, setPickedImage] = useState(null)
+  const useImageAsBase = (img) => {
+    setPickedImage({ id: img.id, url: img.url })
+    setActiveTab('generate') // land in Generate (image mode) with the picture loaded
+  }
   // DOM node in the Edit tab where ModelViewer portals its manual tools + brightness
   const [manualHost, setManualHost] = useState(null)
   // collapse the left tool panel to just the icon rail
@@ -162,10 +173,12 @@ export default function ForgePage() {
   const [currentVersionId, setCurrentVersionId] = useState(restored?.currentVersionId || null)
   const versionSeq = useRef(restored?.versionSeq || 0)
   const currentVersionIdRef = useRef(null)
+  const modelUrlRef = useRef(null) // latest working model (guards async hydrate)
   // imperative handle into the live viewer (recolor/exportModel), populated by
   // ModelViewer via its apiOut prop; used by the local (free) recolor flow
   const viewerApiRef = useRef({})
   currentVersionIdRef.current = currentVersionId
+  modelUrlRef.current = modelUrl
 
   // Task 6 — animation session. rigTaskId + applied clips persist across F5 and
   // are stored per-version, so an already-rigged model adds another clip for +10
@@ -195,8 +208,22 @@ export default function ForgePage() {
   // parts of the current model (lifted from PartButtons) so a double-click on the
   // 3D model can resolve the clicked mesh → part → select + open its edit panel
   const partsRef = useRef([])
-  const pickPartByName = (name) => {
-    const part = partsRef.current.find((p) => p.name === name)
+  const pickPartByName = (name, point) => {
+    const parts = partsRef.current
+    // 1) exact name match (works for clean single-mesh parts)
+    let part = parts.find((p) => p.name === name)
+    // 2) fallback by the clicked POINT — merged/painted parts render as several
+    // child meshes whose names don't match the part, so name lookup misses them.
+    // Pick the part whose box contains the point, else the nearest centre.
+    if (!part && point && parts.length) {
+      const inside = (b, q) =>
+        b && q[0] >= b.min[0] && q[0] <= b.max[0] && q[1] >= b.min[1] && q[1] <= b.max[1] && q[2] >= b.min[2] && q[2] <= b.max[2]
+      const q = [point.x, point.y, point.z]
+      const d2 = (c) => (c[0] - q[0]) ** 2 + (c[1] - q[1]) ** 2 + (c[2] - q[2]) ** 2
+      part =
+        parts.find((p) => inside(p.hitBox || p.bbox, q)) ||
+        parts.reduce((best, p) => (best && d2(best.center) <= d2(p.center) ? best : p), null)
+    }
     if (!part) return
     selectForEdit(part)
     openPartEdit(part)
@@ -206,6 +233,81 @@ export default function ForgePage() {
   // then "Segment by marks" splits it so parts come out exactly as marked
   const [markMode, setMarkMode] = useState(false)
   const [marks, setMarks] = useState([]) // [{ label, point:{x,y,z} }]
+  // group-select mode (from PartButtons): while on, a single click on the model
+  // toggles that part in the group selection (same as ticking its chip)
+  const [groupMode, setGroupMode] = useState(false)
+  const [partClickSignal, setPartClickSignal] = useState(null) // {name, ts}
+
+  // #3 — paint-by-colour segmentation
+  const [colorSegMode, setColorSegMode] = useState(false)
+  const [colorSegTool, setColorSegTool] = useState('fill')
+  const [colorSegHex, setColorSegHex] = useState('#ff4d4d')
+  const [colorSegSize, setColorSegSize] = useState(0.4)
+  // unified "Segment parts" method: by clicks (marks) or by paint. The method
+  // button IS the activation (no separate Start button) — click one to turn it
+  // on (and the other off); click the active one again to turn it off.
+  const [segMethod, setSegMethod] = useState(null) // null | 'marks' | 'paint'
+  const chooseSeg = (m) => {
+    const turningOff = segMethod === m
+    if (markMode) {
+      setMarkMode(false)
+      clearMarks()
+    }
+    if (colorSegMode) toggleColorSeg(false)
+    if (turningOff) {
+      setSegMethod(null)
+      return
+    }
+    if (m === 'marks') {
+      selectForEdit(null)
+      setActivePart(null)
+      setMarkMode(true)
+    } else {
+      toggleColorSeg(true) // begins paint mode (seeds colours, swaps display)
+    }
+    setSegMethod(m)
+  }
+  const toggleColorSeg = (on) => {
+    const api = viewerApiRef.current
+    if (on) {
+      selectForEdit(null)
+      setActivePart(null)
+      api?.colorSegBegin?.()
+      api?.colorSegSet?.(colorSegTool, colorSegHex)
+      setColorSegMode(true)
+    } else {
+      api?.colorSegEnd?.()
+      setColorSegMode(false)
+    }
+  }
+  const setColorSegToolAnd = (t) => {
+    setColorSegTool(t)
+    viewerApiRef.current?.colorSegSet?.(t, colorSegHex)
+  }
+  const pickColorSegColor = (hex) => {
+    setColorSegHex(hex)
+    // picking a colour implies you want to paint with it — leave eyedropper
+    const t = colorSegTool === 'eyedropper' ? 'brush' : colorSegTool
+    setColorSegTool(t)
+    viewerApiRef.current?.colorSegSet?.(t, hex)
+  }
+  const runColorSegment = async () => {
+    const api = viewerApiRef.current
+    if (!api?.colorSegExport) throw new Error('Load a model first')
+    const buf = await api.colorSegExport()
+    const res = await fetch('/api/edit/segment-colors', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/octet-stream' },
+      body: buf,
+    })
+    const data = await res.json().catch(() => ({}))
+    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`)
+    api.colorSegEnd?.()
+    setColorSegMode(false)
+    setBaseModelPrompt('Segmented (paint)')
+    setLastEditPrompt(null)
+    swapModel(data.modelUrl, { version: { as: 'child', label: 'Segmented (paint)' } })
+  }
   const addMark = (point) =>
     setMarks((prev) => [...prev, { label: `part ${prev.length + 1}`, point }])
   const renameMark = (i, label) => setMarks((prev) => prev.map((m, k) => (k === i ? { ...m, label } : m)))
@@ -223,7 +325,7 @@ export default function ForgePage() {
     setMarks([])
     setBaseModelPrompt('Segmented (marks)')
     setLastEditPrompt(null)
-    swapModel(data.url, { version: { as: 'child', label: 'Segmented (marks)' } })
+    swapModel(data.modelUrl, { version: { as: 'child', label: 'Segmented (marks)' } })
     return data
   }
 
@@ -271,10 +373,60 @@ export default function ForgePage() {
     }
   }, [modelUrl, modelVersions, currentVersionId, baseModelPrompt, modelKind, rigTaskId, appliedClips])
 
+  // first load (a shared ?model= link, or a session restored with only a root):
+  // pull the server-side version tree so the strip isn't a lone card
+  useEffect(() => {
+    if (modelUrl && modelVersions.length < 2) hydrateVersionsFromServer(modelUrl, currentVersionId)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   // model-dependent tools fall back to Generate when the canvas is cleared
   useEffect(() => {
     if (!modelUrl && (activeTab === 'edit' || activeTab === 'recolor')) setActiveTab('generate')
   }, [modelUrl, activeTab])
+
+  // Restore a base model's durable version history from the server. The client
+  // saves the strip on every change (PUT /api/versions) but only ever restored it
+  // from THIS browser's localStorage — so returning to a model from the Library,
+  // or opening it on another browser/machine, showed a lone root even though its
+  // versions live in Mongo. This pulls that tree. Guarded: only applies while the
+  // model is still loaded AND the strip is still just the root we set, so it can
+  // never clobber an edit the user made while the fetch was in flight.
+  const hydrateVersionsFromServer = async (url, rootId) => {
+    try {
+      const res = await fetch(`/api/versions?modelUrl=${encodeURIComponent(url)}`)
+      if (!res.ok) return
+      const { tree } = await res.json()
+      const versions = (tree?.versions || []).filter((v) => persistable(v.modelUrl))
+      if (versions.length < 2) return // nothing richer than the lone root
+      if (modelUrlRef.current !== url) return // user moved on
+      let applied = false
+      setModelVersions((prev) => {
+        if (prev.length > 1) return prev // an edit landed meanwhile — don't clobber
+        applied = true
+        return versions
+      })
+      if (!applied) return
+      // point "current" at the node we actually loaded (or the tree's saved current)
+      const cur = versions.find((v) => v.modelUrl === url)?.id || tree.currentVersionId || rootId
+      setCurrentVersionId(cur)
+      // never reuse an id: bump the counter past every restored one
+      const maxN = versions.reduce(
+        (m, v) => Math.max(m, parseInt(String(v.id).replace(/^v/, ''), 10) || 0),
+        versionSeq.current,
+      )
+      versionSeq.current = maxN
+      // restore the animation session of the current node (rig → +10 clips, no re-rig)
+      const node = versions.find((v) => v.id === cur)
+      if (node?.rigTaskId) {
+        setRigTaskId(node.rigTaskId)
+        setAppliedClips(node.clips || [])
+        animEntriesRef.current = node.animEntries || []
+      }
+    } catch {
+      /* offline / no tree — keep the lone root */
+    }
+  }
 
   // switch the on-screen model, and optionally record it as a version:
   //   version:{ as:'root' }  — start a fresh chain (a loaded/generated base)
@@ -307,6 +459,9 @@ export default function ForgePage() {
       const id = `v${++versionSeq.current}`
       setModelVersions([{ id, modelUrl: url, label: version.label || 'Model', parentId: null, kind: version.kind }])
       setCurrentVersionId(id)
+      // this base may already have an edit history on the server (a past session,
+      // another browser, a teammate) — pull it so the strip isn't a lone root
+      hydrateVersionsFromServer(url, id)
     } else if (version?.as === 'child') {
       const id = `v${++versionSeq.current}`
       const parentId = currentVersionIdRef.current
@@ -801,10 +956,18 @@ export default function ForgePage() {
       <aside className={`sidebar forge-panel ${navCollapsed ? 'forge-panel--collapsed' : ''}`}>
         <div className="tab-pane" style={{ display: activeTab === 'generate' ? 'flex' : 'none' }}>
         <GeneratePanel
+          key={pickedImage?.id || 'gen-default'} // remount in image mode on a picked Picture
           disabled={editTask.generating}
-          initialMode={['image', 'imagine'].includes(searchParams.get('mode')) ? searchParams.get('mode') : 'text'}
-          initialPrompt={searchParams.get('prompt') || ''}
-          initialImageId={searchParams.get('imageId') || null}
+          initialMode={
+            pickedImage
+              ? 'image'
+              : ['image', 'imagine'].includes(searchParams.get('mode'))
+                ? searchParams.get('mode')
+                : 'text'
+          }
+          initialPrompt={pickedImage ? '' : searchParams.get('prompt') || ''}
+          initialImageId={pickedImage?.id || searchParams.get('imageId') || null}
+          initialImageUrl={pickedImage?.url || null}
           initialEngine={searchParams.get('engine') === 'tripo' ? 'tripo' : 'meshy'}
           initialTextured={searchParams.get('textured') === '1'}
           autostart={searchParams.get('autostart') === '1'}
@@ -1000,6 +1163,8 @@ export default function ForgePage() {
           modelUrl={modelUrl}
           busy={swapBusy || busy || markMode}
           selectedId={selectedId}
+          onGroupingChange={setGroupMode}
+          partClickSignal={partClickSignal}
           onParts={(parts) => (partsRef.current = parts)}
           onHoverPart={setHighlightBox}
           onPickPart={(p) => {
@@ -1009,26 +1174,63 @@ export default function ForgePage() {
             if (p) openPartEdit(p)
             else setActivePart(null)
           }}
+          onBake={async (groups) => {
+            // #1 group-bake: merge each group's segments into one real part
+            const res = await fetch('/api/edit/bake-groups', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ modelUrl, groups }),
+            })
+            const data = await res.json().catch(() => ({}))
+            if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`)
+            setBaseModelPrompt('Segmented (baked groups)')
+            setLastEditPrompt(null)
+            swapModel(data.modelUrl, { version: { as: 'child', label: 'Grouped part' } })
+          }}
         />
         {modelUrl && (
-          <MarkPartsPanel
-            active={markMode}
-            marks={marks}
-            busy={swapBusy || busy}
-            onToggle={(on) => {
-              setMarkMode(on)
-              if (on) {
-                selectForEdit(null) // marking owns clicks — drop any part selection
-                setActivePart(null)
-              } else {
-                clearMarks()
-              }
-            }}
-            onRename={renameMark}
-            onRemove={removeMark}
-            onClear={clearMarks}
-            onSegment={runMarkSegment}
-          />
+          <div className="tool-block">
+            <span className="tool-label">Segment parts</span>
+            <div className="tool-seg">
+              <button
+                type="button"
+                className={`tool-seg-btn ${segMethod === 'marks' ? 'on' : ''}`}
+                onClick={() => chooseSeg('marks')}
+              >
+                By clicks
+              </button>
+              <button
+                type="button"
+                className={`tool-seg-btn ${segMethod === 'paint' ? 'on' : ''}`}
+                onClick={() => chooseSeg('paint')}
+              >
+                By paint
+              </button>
+            </div>
+            {segMethod === 'marks' && (
+              <MarkPartsPanel
+                marks={marks}
+                busy={swapBusy || busy}
+                onRename={renameMark}
+                onRemove={removeMark}
+                onClear={clearMarks}
+                onSegment={runMarkSegment}
+              />
+            )}
+            {segMethod === 'paint' && (
+              <ColorSegPanel
+                tool={colorSegTool}
+                hex={colorSegHex}
+                size={colorSegSize}
+                busy={swapBusy || busy}
+                onSetTool={setColorSegToolAnd}
+                onPickColor={pickColorSegColor}
+                onSize={setColorSegSize}
+                onUndo={() => viewerApiRef.current?.colorSegUndo?.()}
+                onSegment={runColorSegment}
+              />
+            )}
+          </div>
         )}
         <PhotoEditPanel
             modelUrl={modelUrl}
@@ -1131,10 +1333,17 @@ export default function ForgePage() {
               }
               manualHost={manualHost}
               spatialClick={false} // no click-to-prompt popup for now (distracting)
-              onPickPartAt={markMode ? null : pickPartByName} // double-click a part → select + open edit
+              onPickPartAt={markMode || groupMode || colorSegMode ? null : pickPartByName} // dbl-click part → edit
               markMode={markMode}
               marks={marks}
               onAddMark={addMark}
+              partClickMode={groupMode}
+              onPartClick={(name) => setPartClickSignal({ name, ts: Date.now() })}
+              onEyedrop={pickColorSegColor}
+              colorSegMode={colorSegMode}
+              colorSegTool={colorSegTool}
+              colorSegColor={colorSegHex}
+              colorSegSize={colorSegSize}
             />
             <ModelVersionStrip
               versions={modelVersions}
@@ -1188,19 +1397,38 @@ export default function ForgePage() {
         {modelUrl && (
           <PublishPanel modelUrl={modelUrl} description={baseModelPrompt} kind={modelKind} />
         )}
-        <LibraryPanel
-          refreshKey={historyKey}
-          busy={busy}
-          onLoad={(entry) => {
-            setBaseModelPrompt(entry.prompt ?? null)
-            // library entries label image runs as "image → 3D" — recover the kind
-            const kind = entry.prompt === 'image → 3D' ? 'image' : entry.prompt ? 'text' : null
-            setModelKind(kind)
-            setLastEditPrompt(null)
-            // restore this model's saved version tree if it has one, else fresh root
-            openModelWithHistory(entry.modelUrl, { label: entry.prompt || 'Library model', kind })
-          }}
-        />
+        <div className="lib-scope">
+          {[
+            ['models', 'Models'],
+            ['pictures', 'Pictures'],
+          ].map(([id, label]) => (
+            <button
+              key={id}
+              type="button"
+              className={`lib-scope-tab ${libTab === id ? 'active' : ''}`}
+              onClick={() => setLibTab(id)}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+        {libTab === 'models' ? (
+          <LibraryPanel
+            refreshKey={historyKey}
+            busy={busy}
+            onLoad={(entry) => {
+              setBaseModelPrompt(entry.prompt ?? null)
+              // library entries label image runs as "image → 3D" — recover the kind
+              const kind = entry.prompt === 'image → 3D' ? 'image' : entry.prompt ? 'text' : null
+              setModelKind(kind)
+              setLastEditPrompt(null)
+              // restore this model's saved version tree if it has one, else fresh root
+              openModelWithHistory(entry.modelUrl, { label: entry.prompt || 'Library model', kind })
+            }}
+          />
+        ) : (
+          <PicturesPanel refreshKey={historyKey} busy={busy} onPick={useImageAsBase} />
+        )}
       </aside>
       {libCollapsed && (
         <button

@@ -57,7 +57,18 @@ function allConnected(members, tol) {
   return seen.size === members.length
 }
 
-export default function PartButtons({ modelUrl, description = '', onHoverPart, onPickPart, onParts, selectedId = null, busy }) {
+export default function PartButtons({
+  modelUrl,
+  description = '',
+  onHoverPart,
+  onPickPart,
+  onParts,
+  onBake,
+  onGroupingChange,
+  partClickSignal = null, // {name, ts} — a part clicked directly in the 3D viewer
+  selectedId = null,
+  busy,
+}) {
   const [parts, setParts] = useState([])
   const [loading, setLoading] = useState(false)
   const [groups, setGroups] = useState([]) // [{ id, name, partIds:[], names:[], bbox, center }]
@@ -66,6 +77,21 @@ export default function PartButtons({ modelUrl, description = '', onHoverPart, o
   const [nameDraft, setNameDraft] = useState('')
   const [labeling, setLabeling] = useState(false) // AI auto-label in flight
   const [labelErr, setLabelErr] = useState(null)
+  const [baking, setBaking] = useState(false) // group→bake in flight
+
+  // let the parent (and viewer) know when group-select mode is on, so a single
+  // click on the model toggles a part's membership (same as ticking its chip)
+  useEffect(() => {
+    onGroupingChange?.(grouping)
+  }, [grouping, onGroupingChange])
+
+  // a part clicked directly in the 3D model → toggle it in the group selection
+  useEffect(() => {
+    if (!partClickSignal || !grouping) return
+    const hit = parts.find((p) => p.name === partClickSignal.name && !groupedIds.has(p.id))
+    if (hit) toggleSelect(hit.id)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [partClickSignal])
 
   useEffect(() => {
     let cancelled = false
@@ -119,25 +145,22 @@ export default function PartButtons({ modelUrl, description = '', onHoverPart, o
     })
   }
 
-  const makeGroup = () => {
+  // ONE step: grouping the selected parts BAKES them into a single real merged
+  // part (server rebuilds the model, result loads as a new version). No separate
+  // "bake" click — a group only mattered once it's a real part.
+  const makeGroup = async () => {
     const members = parts.filter((p) => selected.has(p.id))
-    if (members.length < 2 || !allConnected(members, tol)) return
-    const bbox = unionBox(members.map((m) => m.bbox))
-    const name = nameDraft.trim() || `Group ${groups.length + 1}`
-    setGroups((prev) => [
-      ...prev,
-      {
-        id: `grp-${Date.now()}`,
-        name,
-        partIds: members.map((m) => m.id),
-        names: members.map((m) => m.name), // mesh/node names — used to recolor the group
-        bbox,
-        center: centerOf(bbox),
-      },
-    ])
-    setSelected(new Set())
-    setNameDraft('')
-    setGrouping(false)
+    if (members.length < 2 || !allConnected(members, tol) || baking) return
+    const name = nameDraft.trim() || 'Group'
+    setBaking(true)
+    try {
+      await onBake?.([{ name, partIds: members.map((m) => m.id) }])
+      setSelected(new Set())
+      setNameDraft('')
+      setGrouping(false)
+    } finally {
+      setBaking(false)
+    }
   }
 
   const ungroup = (id) => setGroups((prev) => prev.filter((g) => g.id !== id))
@@ -275,17 +298,17 @@ export default function PartButtons({ modelUrl, description = '', onHoverPart, o
           <button
             type="button"
             className="part-group-make"
-            disabled={selected.size < 2 || !connected}
+            disabled={selected.size < 2 || !connected || baking}
             onClick={makeGroup}
             title={
               selected.size < 2
-                ? 'Tick at least two parts'
+                ? 'Pick at least two parts (tick a chip or click the part on the model)'
                 : connected
-                  ? 'Create the group from the selected parts'
+                  ? 'Merge the selected parts into ONE real part'
                   : 'These parts are not all connected'
             }
           >
-            Group ({selected.size})
+            {baking ? 'Merging…' : `Merge (${selected.size})`}
           </button>
           <button
             type="button"

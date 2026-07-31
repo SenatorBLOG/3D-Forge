@@ -76,13 +76,16 @@ function renderThumbnail(modelUrl) {
           const center = box.getCenter(new THREE.Vector3())
           const size = box.getSize(new THREE.Vector3()).length()
           model.position.sub(center)
-          // Tripo exports face the opposite way to Meshy, so with the same camera
-          // One camera for EVERY model (no per-engine mirror) so all cards + all
-          // version thumbnails face the SAME way — and the SAME way the live viewer
-          // shows the model (viewer camera is at +x too). The old Tripo-only mirror
-          // made Tripo cards show their back → cards faced inconsistent directions.
-          const sx = 1
-          camera.position.set(size * 0.6 * sx, size * 0.45, size * 0.85)
+          // rotate every model 90° so both engines (Tripo & Meshy export facing
+          // 90° apart) end up facing the viewer — one turned left, one right
+          model.rotation.y += Math.PI / 2
+          model.updateMatrixWorld(true)
+          // One camera for EVERY model. Camera on (+x, -z) → a ¾ view rotated 180°
+          // from the old (+x,+z) front, so the model faces the viewer/centre the
+          // way Javid wants (the old angle showed the back turned away).
+          const camX = size * 0.6
+          const camZ = -size * 0.85
+          camera.position.set(camX, size * 0.45, camZ)
           camera.near = size / 100
           camera.far = size * 10
           camera.lookAt(0, 0, 0)
@@ -96,7 +99,7 @@ function renderThumbnail(modelUrl) {
           // pass 2 — three more shaded angles, orbiting at the same radius and
           // elevation (feeds the hover-reveal multi-angle strip on cards)
           const radius = Math.hypot(0.6, 0.85) * size
-          const baseAz = Math.atan2(0.6 * sx, 0.85)
+          const baseAz = Math.atan2(camX, camZ)
           const views = []
           for (const quarter of [1, 2, 3]) {
             const az = baseAz + (quarter * Math.PI) / 2
@@ -106,7 +109,7 @@ function renderThumbnail(modelUrl) {
             views.push(canvas.toDataURL('image/png'))
           }
           // back to the front angle for the wireframe pass
-          camera.position.set(size * 0.6 * sx, size * 0.45, size * 0.85)
+          camera.position.set(camX, size * 0.45, camZ)
           camera.lookAt(0, 0, 0)
 
           // pass 3 — cyan wireframe (stash originals so we can dispose them)
@@ -142,6 +145,12 @@ export function getThumbnail(modelUrl) {
   if (cache.has(modelUrl)) return cache.get(modelUrl)
   const p = queue.then(() => renderThumbnail(modelUrl))
   queue = p.catch(() => {}) // keep the queue alive even if one render fails
+  // DON'T keep a failed render cached — a just-created version's GLB may not be
+  // fetchable on the very first try; dropping the entry lets a retry re-render it
+  // (this is why new thumbnails used to stay blank until a full F5 cleared it).
+  p.catch(() => {
+    if (cache.get(modelUrl) === p) cache.delete(modelUrl)
+  })
   cache.set(modelUrl, p)
   return p
 }

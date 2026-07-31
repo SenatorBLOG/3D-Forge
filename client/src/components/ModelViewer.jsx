@@ -58,15 +58,30 @@ export default function ModelViewer({
   markMode = false, // seed-marking: single-click drops a segmentation seed (no popup)
   marks = [], // [{ label, point:{x,y,z} }] seed markers to render
   onAddMark = null, // called with { x, y, z } when the user clicks in mark mode
+  partClickMode = false, // single-click a part reports it (group-select by clicking the model)
+  onPartClick = null, // called with the clicked part's mesh/node name
+  onEyedrop = null, // #3 paint: eyedropper picked a colour (hex) under the cursor
+  colorSegMode = false, // #3 paint active (drives the brush ring / cursor)
+  colorSegTool = 'fill', // 'fill' | 'brush' | 'eyedropper'
+  colorSegColor = '#ff4d4d', // active paint colour (ring tint)
+  colorSegSize = 0.4, // brush radius 0..1
 }) {
   const containerRef = useRef(null)
   // keep latest callbacks/points without re-creating the whole scene on re-render
   const callbacksRef = useRef({})
-  callbacksRef.current = { onAddPoint, onSelectPoint, onLoaded, onError, onPickPartAt, onAddMark }
+  callbacksRef.current = { onAddPoint, onSelectPoint, onLoaded, onError, onPickPartAt, onAddMark, onPartClick, onEyedrop }
+  // #3 paint-by-colour segmentation. `active` is set imperatively by begin/end
+  // (they add COLOR_0 + swap materials); tool/hex/size mirror the props each render
+  const colorSegRef = useRef({ active: false, tool: 'fill', hex: '#ff4d4d', size: 0.4 })
+  colorSegRef.current.tool = colorSegTool
+  colorSegRef.current.hex = colorSegColor
+  colorSegRef.current.size = colorSegSize
   const spatialClickRef = useRef(true)
   spatialClickRef.current = spatialClick
   const markModeRef = useRef(false)
   markModeRef.current = markMode
+  const partClickModeRef = useRef(false)
+  partClickModeRef.current = partClickMode
   const pointsRef = useRef(points)
   pointsRef.current = points
   const marksRef = useRef(marks)
@@ -219,9 +234,18 @@ export default function ModelViewer({
     // Each mesh keeps its original material in userData.origMat for "shaded".
     const solidMat = new THREE.MeshStandardMaterial({ color: 0x9aa3b2, metalness: 0.1, roughness: 0.78 })
     const wireMat = new THREE.MeshBasicMaterial({ color: 0x22d3ee, wireframe: true })
+    // colour a mesh by its PART = the top-level node directly under the model, so
+    // ALL primitives of one part (a merged/baked group has several material
+    // primitives → several child meshes) read as ONE colour, not several.
+    const partKeyOf = (o) => {
+      let n = o
+      while (n.parent && n.parent !== model) n = n.parent
+      return n.uuid
+    }
     const applyDisplayMode = (m) => {
       if (!model) return
-      let idx = 0
+      const partColorIdx = new Map() // part key -> palette index
+      let nextIdx = 0
       model.traverse((o) => {
         if (!o.isMesh) return
         // meshes added AFTER load (kitbash parts) never got an origMat at load
@@ -229,19 +253,23 @@ export default function ModelViewer({
         // blanking their material (which made placed parts vanish)
         if (!o.userData.origMat) o.userData.origMat = o.material
         if (m === 'parts') {
-          // one flat colour per mesh (segmented parts read distinctly), cached
-          if (!o.userData.partsMat) {
+          const key = partKeyOf(o)
+          if (!partColorIdx.has(key)) partColorIdx.set(key, nextIdx++)
+          const ci = partColorIdx.get(key)
+          // one flat colour per PART (cached; rebuilt if the part's colour changed)
+          if (!o.userData.partsMat || o.userData.partsColorIdx !== ci) {
+            o.userData.partsMat?.dispose?.()
             o.userData.partsMat = new THREE.MeshStandardMaterial({
-              color: PART_PALETTE[idx % PART_PALETTE.length],
+              color: PART_PALETTE[ci % PART_PALETTE.length],
               metalness: 0.05,
               roughness: 0.8,
             })
+            o.userData.partsColorIdx = ci
           }
           o.material = o.userData.partsMat
         } else {
           o.material = m === 'wireframe' ? wireMat : m === 'solid' ? solidMat : o.userData.origMat
         }
-        idx++
       })
     }
 
@@ -334,6 +362,10 @@ export default function ModelViewer({
       controls,
       syncMarkers,
       syncMarks,
+      colorSegSet: (tool, hex) => {
+        if (tool) colorSegRef.current.tool = tool
+        if (hex) colorSegRef.current.hex = hex
+      },
       updateLabels,
       playClip,
       getClips: () => Object.keys(clipActions),
@@ -515,15 +547,33 @@ export default function ModelViewer({
         model.position.sub(center)
         modelCenter.copy(center)
         modelSize = size
-        // record each mesh's outward direction (from center) for the explode toggle
+        // explode moves each PART (top-level node under the model) as a UNIT, not
+        // each primitive-mesh — so a merged/painted part stays whole instead of
+        // tearing along its old material seams (all its prims share one direction)
         model.updateWorldMatrix(true, true)
+        const topNodeOf = (o) => {
+          let n = o
+          while (n.parent && n.parent !== model) n = n.parent
+          return n
+        }
+        const nodeGroups = new Map() // top node -> { meshes:[{mesh,origPos}], box }
         model.traverse((o) => {
           if (!o.isMesh) return
-          const c = new THREE.Box3().setFromObject(o).getCenter(new THREE.Vector3())
+          const top = topNodeOf(o)
+          let g = nodeGroups.get(top)
+          if (!g) {
+            g = { meshes: [], box: new THREE.Box3() }
+            nodeGroups.set(top, g)
+          }
+          g.meshes.push({ mesh: o, origPos: o.position.clone() })
+          g.box.expandByObject(o)
+        })
+        for (const g of nodeGroups.values()) {
+          const c = g.box.getCenter(new THREE.Vector3())
           const dir =
             c.lengthSq() > 1e-6 ? c.clone().normalize().multiplyScalar(size * 0.5) : new THREE.Vector3()
-          explodeParts.push({ mesh: o, origPos: o.position.clone(), dir })
-        })
+          for (const m of g.meshes) explodeParts.push({ mesh: m.mesh, origPos: m.origPos, dir })
+        }
         // Default view: a 3/4 FRONT shot so the model faces the camera (slightly
         // turned to the viewer's right), for Meshy and Tripo alike. Earlier we
         // flipped the camera behind Tripo models on the theory they export
@@ -622,6 +672,19 @@ export default function ModelViewer({
         if (hit) callbacksRef.current.onAddMark?.({ x: hit.point.x, y: hit.point.y, z: hit.point.z })
         return
       }
+
+      // part-click mode: a single click reports the clicked part (group-select by
+      // clicking the model itself, same as ticking its chip)
+      if (partClickModeRef.current) {
+        const rect = renderer.domElement.getBoundingClientRect()
+        pointer.x = ((e.clientX - rect.left) / rect.width) * 2 - 1
+        pointer.y = -((e.clientY - rect.top) / rect.height) * 2 + 1
+        raycaster.setFromCamera(pointer, camera)
+        const hit = raycaster.intersectObject(model, true)[0]
+        const name = hit && (hit.object?.name || hit.object?.parent?.name)
+        if (name) callbacksRef.current.onPartClick?.(name)
+        return
+      }
       if (!spatialClickRef.current) return // spatial click-to-prompt disabled
 
       const rect = renderer.domElement.getBoundingClientRect()
@@ -646,8 +709,11 @@ export default function ModelViewer({
       pointer.y = -((e.clientY - rect.top) / rect.height) * 2 + 1
       raycaster.setFromCamera(pointer, camera)
       const hit = raycaster.intersectObject(model, true)[0]
-      const name = hit?.object?.name || hit?.object?.parent?.name
-      if (name) callbacksRef.current.onPickPartAt?.(name)
+      if (!hit) return
+      const name = hit.object?.name || hit.object?.parent?.name
+      // pass the hit POINT too — merged/painted parts have several child meshes
+      // whose names don't match the part, so the parent resolves them by point
+      callbacksRef.current.onPickPartAt?.(name, { x: hit.point.x, y: hit.point.y, z: hit.point.z })
     }
 
     renderer.domElement.addEventListener('pointerdown', onPointerDown)
@@ -782,8 +848,151 @@ export default function ModelViewer({
       setDirtyRef.current()
     }
 
+    // --- #3: paint-by-colour segmentation (vertex colours as part labels) -----
+    const csTmp = new THREE.Vector3()
+    const csWorld = new THREE.Vector3()
+    // enter paint mode: give every mesh a COLOR_0 attribute, seed each mesh a
+    // distinct palette colour (so existing segments read as colours to fix), and
+    // show a flat vertex-colour material so the labels are visible
+    const colorSegBegin = () => {
+      if (!model) return
+      let ci = 0
+      model.traverse((o) => {
+        if (!o.isMesh) return
+        const geo = o.geometry
+        const posAttr = geo.getAttribute('position')
+        if (!posAttr) return
+        let colorAttr = geo.getAttribute('color')
+        if (!colorAttr || colorAttr.count !== posAttr.count) {
+          colorAttr = new THREE.BufferAttribute(new Float32Array(posAttr.count * 3), 3)
+          geo.setAttribute('color', colorAttr)
+        }
+        // seed each mesh a UNIQUE colour (golden-ratio hue) so segments the user
+        // DOESN'T paint stay separate parts — a cycling 12-palette collided (seg 0
+        // and 12 same colour → merged unintentionally, e.g. only ~5 parts came out)
+        const c = new THREE.Color().setHSL((ci * 0.61803398875) % 1, 0.72, 0.55)
+        ci++
+        for (let i = 0; i < colorAttr.count; i++) colorAttr.setXYZ(i, c.r, c.g, c.b)
+        colorAttr.needsUpdate = true
+        // capture the TRUE original material (texture), not whatever display mode
+        // is active — otherwise the export baked the flat Parts colours as texture
+        if (!o.userData.csOrigMat) o.userData.csOrigMat = o.userData.origMat || o.material
+        // unlit vertex-colour material → vivid flat labels (a lit material made the
+        // paint colours look dull vs the bright Parts view)
+        o.material = new THREE.MeshBasicMaterial({ vertexColors: true })
+      })
+      colorSegRef.current.active = true
+    }
+    const colorSegEnd = () => {
+      colorSegRef.current.active = false
+      csUndoStack.length = 0
+      if (!model) return
+      model.traverse((o) => {
+        if (o.isMesh && o.userData.csOrigMat) {
+          o.material?.dispose?.()
+          o.material = o.userData.origMat || o.userData.csOrigMat
+        }
+      })
+    }
+    // undo: snapshot every mesh's colour attribute before an action; undo restores
+    const csUndoStack = []
+    const csSnapshot = () => {
+      const snap = new Map()
+      model.traverse((o) => {
+        const ca = o.isMesh && o.geometry?.getAttribute('color')
+        if (ca) snap.set(o.uuid, { mesh: o, arr: ca.array.slice() })
+      })
+      csUndoStack.push(snap)
+      if (csUndoStack.length > 12) csUndoStack.shift()
+    }
+    const colorSegUndo = () => {
+      const snap = csUndoStack.pop()
+      if (!snap) return
+      for (const { mesh, arr } of snap.values()) {
+        const ca = mesh.geometry.getAttribute('color')
+        if (ca) {
+          ca.array.set(arr)
+          ca.needsUpdate = true
+        }
+      }
+    }
+    // paint the picked triangle's neighbourhood (brush), the whole mesh (fill),
+    // or read the colour under the cursor (eyedropper)
+    const colorSegPaint = (e) => {
+      const hit = pick(e)
+      if (!hit?.object?.isMesh) return
+      const mesh = hit.object
+      const geo = mesh.geometry
+      const colorAttr = geo.getAttribute('color')
+      if (!colorAttr) return
+      const cs = colorSegRef.current
+      const posAttr = geo.getAttribute('position')
+
+      if (cs.tool === 'eyedropper') {
+        const i = hit.face?.a ?? 0
+        const hex = `#${new THREE.Color(colorAttr.getX(i), colorAttr.getY(i), colorAttr.getZ(i)).getHexString()}`
+        callbacksRef.current.onEyedrop?.(hex)
+        return
+      }
+      const col = new THREE.Color(cs.hex)
+      if (cs.tool === 'fill') {
+        // click a whole segment → recolour every vertex of that mesh (merge/assign)
+        for (let i = 0; i < colorAttr.count; i++) colorAttr.setXYZ(i, col.r, col.g, col.b)
+        colorAttr.needsUpdate = true
+        return
+      }
+      // brush: paint vertices within a world-space radius of the hit point
+      const r = modelSize * (0.02 + cs.size * 0.14)
+      const r2 = r * r
+      for (let i = 0; i < posAttr.count; i++) {
+        csTmp.fromBufferAttribute(posAttr, i)
+        csWorld.copy(csTmp).applyMatrix4(mesh.matrixWorld)
+        if (csWorld.distanceToSquared(hit.point) <= r2) colorAttr.setXYZ(i, col.r, col.g, col.b)
+      }
+      colorAttr.needsUpdate = true
+    }
+    // export the painted model: original materials (textures) + COLOR_0 labels
+    const colorSegExport = () =>
+      new Promise((resolve, reject) => {
+        const swapped = []
+        model.traverse((o) => {
+          if (!o.isMesh || !o.userData.csOrigMat) return
+          const em = o.userData.csOrigMat.clone()
+          em.vertexColors = true // so GLTFExporter writes COLOR_0
+          swapped.push([o, o.material])
+          o.material = em
+        })
+        const restore = () => swapped.forEach(([o, m]) => { o.material?.dispose?.(); o.material = m })
+        new GLTFExporter().parse(
+          model,
+          (glb) => { restore(); resolve(glb) },
+          (err) => { restore(); reject(err) },
+          { binary: true },
+        )
+      })
+    // expose the paint API now that the functions exist (apiRef was built earlier)
+    apiRef.current.colorSegBegin = colorSegBegin
+    apiRef.current.colorSegEnd = colorSegEnd
+    apiRef.current.colorSegExport = colorSegExport
+    apiRef.current.colorSegUndo = colorSegUndo
+
     let stroking = false
     const onToolDown = (e) => {
+      // paint-by-colour owns clicks while active (independent of the tool tray)
+      if (colorSegRef.current.active && model && e.button === 0) {
+        const cs = colorSegRef.current
+        const hit = pick(e)
+        if (!hit?.object?.isMesh) {
+          controls.enabled = true // clicked empty space → orbit the model, even with Brush
+          return
+        }
+        const brush = cs.tool === 'brush'
+        controls.enabled = !brush // only a brush stroke ON the mesh owns the drag
+        stroking = brush
+        if (cs.tool !== 'eyedropper') csSnapshot() // one undo step per action
+        colorSegPaint(e)
+        return
+      }
       if (!toolRef.current || !model || e.button !== 0) return
       // Move tool: click a part to select it; the gizmo (its own handles) then
       // owns the drag. If the click landed on a gizmo handle, let it be.
@@ -810,6 +1019,10 @@ export default function ModelViewer({
     }
     const onToolMove = (e) => {
       if (!stroking) return
+      if (colorSegRef.current.active) {
+        colorSegPaint(e)
+        return
+      }
       const hit = pick(e)
       if (!hit) return
       if (toolRef.current === 'paint') paintAt(hit)
@@ -1151,14 +1364,17 @@ export default function ModelViewer({
     </div>
   )
 
-  return (
+    return (
     <div
-      className={`viewer${tool && tool !== 'move' ? ' tool-active' : ''}${tool === 'move' ? ' tool-move' : ''}`}
+      className={`viewer${tool && tool !== 'move' ? ' tool-active' : ''}${tool === 'move' ? ' tool-move' : ''}${
+        colorSegMode ? ` cs-${colorSegTool}` : ''
+      }`}
       ref={containerRef}
       style={viewerBg ? { background: viewerBg } : undefined}
       onPointerMove={(e) => {
-        if (!tool || tool === 'move') return // move uses the gizmo, no brush ring
-        // over a control panel → normal cursor, no brush ring (so you can click)
+        // brush ring follows the pointer for edit tools AND the #3 paint brush
+        const showRing = (tool && tool !== 'move') || (colorSegMode && colorSegTool === 'brush')
+        if (!showRing) return
         if (e.target.closest?.(UI_SELECTOR)) {
           if (brushCursor) setBrushCursor(null)
           return
@@ -1168,15 +1384,15 @@ export default function ModelViewer({
       }}
       onPointerLeave={() => brushCursor && setBrushCursor(null)}
     >
-      {tool && tool !== 'move' && brushCursor && (
+      {((tool && tool !== 'move') || (colorSegMode && colorSegTool === 'brush')) && brushCursor && (
         <div
           className="brush-cursor"
           style={{
             left: brushCursor.x,
             top: brushCursor.y,
-            width: (10 + brushSize * 44) * 2,
-            height: (10 + brushSize * 44) * 2,
-            borderColor: tool === 'sculpt' ? '#22d3ee' : paintColor,
+            width: (10 + (colorSegMode ? colorSegSize : brushSize) * 44) * 2,
+            height: (10 + (colorSegMode ? colorSegSize : brushSize) * 44) * 2,
+            borderColor: colorSegMode ? colorSegColor : tool === 'sculpt' ? '#22d3ee' : paintColor,
           }}
         />
       )}

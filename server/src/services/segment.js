@@ -102,6 +102,16 @@ export async function readModelBytes(modelUrl) {
  * merged mesh into vertical bands so there's always something to click.
  */
 function extractParts(doc) {
+  // Count mesh-bearing nodes first. A MULTI-node model (our segmented outputs:
+  // tripo-seg / marks-seg / baked-seg — one node per part) gets one part per
+  // NODE and never splits a node's primitives — splitting would shatter a
+  // multi-material part (e.g. a merged leg) across its materials and, worse,
+  // name the pieces after the material. A SINGLE-node model (sample GLBs = one
+  // mesh with a primitive per logical part) still splits by primitive.
+  let meshNodes = 0
+  for (const scene of doc.getRoot().listScenes()) scene.traverse((n) => n.getMesh() && meshNodes++)
+  const nodeLevel = meshNodes > 1
+
   const parts = []
   let nodeIndex = 0
   for (const scene of doc.getRoot().listScenes()) {
@@ -113,10 +123,9 @@ function extractParts(doc) {
       const prims = mesh.listPrimitives().filter((p) => p.getAttribute('POSITION'))
       if (!prims.length) return
       const name = node.getName() || mesh.getName() || `part ${idx + 1}`
-      if (prims.length > 1) {
-        // generated GLBs are often ONE mesh with a primitive per logical part
-        // (our sample models are) — segment at primitive level so a swap
-        // touches just that piece
+      if (!nodeLevel && prims.length > 1) {
+        // single-mesh sample GLB — segment at primitive level so a swap touches
+        // just that piece
         prims.forEach((prim, k) => {
           const pos = prim.getAttribute('POSITION')
           const box = worldBox(world, pos.getMin([]), pos.getMax([]))
@@ -132,8 +141,13 @@ function extractParts(doc) {
         })
         return
       }
-      const pos = prims[0].getAttribute('POSITION')
-      const box = worldBox(world, pos.getMin([]), pos.getMax([]))
+      // node-level: union bbox over every primitive → one part named by the node
+      let box = null
+      for (const prim of prims) {
+        const pos = prim.getAttribute('POSITION')
+        const b = worldBox(world, pos.getMin([]), pos.getMax([]))
+        box = box ? unionBox([box, b]) : b
+      }
       parts.push({ id: `${slug(name) || 'part'}-${idx}`, name, index: idx, bbox: box, center: center(box) })
     })
   }
@@ -345,35 +359,21 @@ export async function segmentByMarks(modelUrl, seeds) {
       dropped.push(seedPts[li].label)
       continue
     }
-    // MERGE every source-prim bucket of this seed into ONE primitive per node —
-    // so extractParts sees a single-primitive node and names the part from the
-    // NODE (the user's label), not the material. A single-bucket seed keeps its
-    // texture; a seed spanning several source materials falls back to a flat
-    // colour (its dominant material) — textures across materials can't share one
-    // UV set. Naming + clean split is the point here.
-    const single = bks.length === 1 ? bks[0] : null
-    const positions = new Float32Array(bks.reduce((n, b) => n + b.pos.length, 0))
-    const hasNrm = bks.every((b) => b.nrm)
-    const normals = hasNrm ? new Float32Array(positions.length) : null
-    let off = 0
-    for (const b of bks) {
-      positions.set(b.pos, off)
-      if (normals) normals.set(b.nrm, off)
-      off += b.pos.length
-    }
-    const keepTex = single && single.uv && single.srcPrim.texture
-    const soup = [
-      {
-        positions,
-        normals,
-        indices: null, // de-indexed
-        uvs: keepTex ? new Float32Array(single.uv) : null,
-        color: bks[0].srcPrim.color,
-        metallic: bks[0].srcPrim.metallic,
-        roughness: bks[0].srcPrim.roughness,
-        texture: keepTex ? single.srcPrim.texture : null,
-      },
-    ]
+    // one primitive PER source-material bucket (de-indexed), each keeping its own
+    // full material + UVs — so a seed spanning several materials keeps every
+    // texture. extractParts is node-level for this multi-node output, so the
+    // seed's node stays ONE part named by the user's label.
+    const soup = bks.map((b) => ({
+      positions: new Float32Array(b.pos),
+      normals: b.nrm ? new Float32Array(b.nrm) : null,
+      indices: null, // de-indexed
+      uvs: b.uv ? new Float32Array(b.uv) : null,
+      material: b.srcPrim.material,
+      color: b.srcPrim.color,
+      metallic: b.srcPrim.metallic,
+      roughness: b.srcPrim.roughness,
+      texture: b.srcPrim.texture,
+    }))
     const mesh = doc.createMesh(seedPts[li].label)
     addPrimsToMesh(doc, buffer, mesh, soup)
     scene.addChild(doc.createNode(seedPts[li].label).setMesh(mesh))
@@ -388,6 +388,148 @@ export async function segmentByMarks(modelUrl, seeds) {
   memCache.set(url, parts)
   saveCache()
   return { modelUrl: url, parts, cached: false, engine: 'marks', dropped }
+}
+
+// --- Task 7/#1: bake grouped segments into real merged parts ----------------
+
+/**
+ * "Bake" the user's groups into geometry: today a group is only a UI overlay, so
+ * it can't be extracted/animated/persisted. This rebuilds the model as a clean
+ * segmented GLB where every group's member segments are MERGED into one named
+ * node, and every ungrouped part stays its own node — so the group becomes a
+ * genuine part. `groups` = [{ name, partIds:[…] }]. Directly fixes over-segmented
+ * Tripo output (e.g. a leg split into 5 → group → one leg). Free, geometric.
+ */
+export async function bakeGroups(modelUrl, groups) {
+  const bytes = await readModelBytes(modelUrl)
+  if (!bytes) throw Object.assign(new Error('model not found'), { code: 'NOT_FOUND' })
+  const srcDoc = await new NodeIO().readBinary(new Uint8Array(bytes))
+  const { parts } = await segmentModel(modelUrl)
+  const byId = new Map(parts.map((p) => [p.id, p]))
+
+  const cleanGroups = (groups || [])
+    .map((g) => ({
+      name: (typeof g.name === 'string' && g.name.trim()) || 'Group',
+      members: (g.partIds || []).map((id) => byId.get(id)).filter(Boolean),
+    }))
+    .filter((g) => g.members.length)
+  if (!cleanGroups.length) throw Object.assign(new Error('no valid groups to bake'), { code: 'NO_GROUPS' })
+
+  const groupedIds = new Set(cleanGroups.flatMap((g) => g.members.map((m) => m.id)))
+  const doc = new Document()
+  const buffer = doc.createBuffer()
+  const scene = doc.createScene()
+
+  const soupOf = (part) =>
+    collectWorldPrimitives(srcDoc, part.index, Number.isInteger(part.primIndex) ? part.primIndex : null)
+  const addNode = (name, partList) => {
+    const prims = partList.flatMap(soupOf)
+    if (!prims.length) return
+    // keep each source primitive (its own material/texture) — extractParts is
+    // node-level for this multi-node output, so the node stays ONE part while
+    // every piece keeps its texture (no white/flat merged part)
+    const mesh = doc.createMesh(name)
+    addPrimsToMesh(doc, buffer, mesh, prims)
+    scene.addChild(doc.createNode(name).setMesh(mesh))
+  }
+
+  for (const g of cleanGroups) addNode(g.name, g.members) // merged group → one node
+  for (const p of parts) if (!groupedIds.has(p.id)) addNode(p.name, [p]) // ungrouped stay
+
+  const out = await new NodeIO().writeBinary(doc)
+  const url = await storeModelBytes(out, 'model-baked-seg')
+  const baked = extractParts(doc)
+  memCache.set(url, baked)
+  saveCache()
+  return { modelUrl: url, parts: baked, cached: false, engine: 'bake' }
+}
+
+// --- #3: paint-by-colour segmentation ---------------------------------------
+
+/**
+ * Segment a model the user PAINTED: the client sends a GLB whose vertices carry
+ * COLOR_0 labels (same colour = same part). Group triangles by their (quantized)
+ * vertex colour → one named node per colour, keeping each triangle's original
+ * material/texture. Same "cut" mechanism as marks, but the label comes from paint
+ * instead of nearest-seed — so a user can merge segments (paint them one colour),
+ * split a fused region (paint sub-parts different colours), or fix ugly auto-seg.
+ * `glbBytes` = the exported painted GLB. Free, geometric.
+ */
+export async function segmentByColors(glbBytes) {
+  const srcDoc = await new NodeIO().readBinary(new Uint8Array(glbBytes))
+  const prims = collectWorldPrimitives(srcDoc)
+  if (!prims.length) throw Object.assign(new Error('model has no geometry'), { code: 'NOT_FOUND' })
+
+  const q = (v) => Math.round(Math.max(0, Math.min(1, v)) * 16) / 16 // grid fine enough to keep distinct seed colours apart, coarse enough to absorb ubyte export rounding
+  const buckets = new Map() // colourKey -> { order, byPrim: Map(pi -> soup accumulator) }
+  let order = 0
+  prims.forEach((prim, pi) => {
+    const pos = prim.positions
+    const idx = prim.indices
+    const col = prim.colors
+    // each vertex → its quantized colour key; a triangle takes the MAJORITY of its
+    // three vertices (not the average) so a colour boundary snaps to one side
+    // instead of spawning sliver "in-between" parts
+    const vkey = (i) => (col ? `${q(col[i * 3])}_${q(col[i * 3 + 1])}_${q(col[i * 3 + 2])}` : '0.75_0.75_0.75')
+    const triCount = idx ? idx.length / 3 : pos.length / 9
+    for (let t = 0; t < triCount; t++) {
+      const a = idx ? idx[t * 3] : t * 3
+      const b = idx ? idx[t * 3 + 1] : t * 3 + 1
+      const c = idx ? idx[t * 3 + 2] : t * 3 + 2
+      const ka = vkey(a)
+      const kb = vkey(b)
+      const kc = vkey(c)
+      const key = ka === kb || ka === kc ? ka : kb === kc ? kb : ka
+      let bk = buckets.get(key)
+      if (!bk) {
+        bk = { order: order++, byPrim: new Map() }
+        buckets.set(key, bk)
+      }
+      let pb = bk.byPrim.get(pi)
+      if (!pb) {
+        pb = { srcPrim: prim, pos: [], nrm: prim.normals ? [] : null, uv: prim.uvs ? [] : null }
+        bk.byPrim.set(pi, pb)
+      }
+      for (const vi of [a, b, c]) {
+        pb.pos.push(pos[vi * 3], pos[vi * 3 + 1], pos[vi * 3 + 2])
+        if (pb.nrm) pb.nrm.push(prim.normals[vi * 3], prim.normals[vi * 3 + 1], prim.normals[vi * 3 + 2])
+        if (pb.uv) pb.uv.push(prim.uvs[vi * 2], prim.uvs[vi * 2 + 1])
+      }
+    }
+  })
+
+  const doc = new Document()
+  const buffer = doc.createBuffer()
+  const scene = doc.createScene()
+  const ordered = [...buckets.values()].sort((a, b) => a.order - b.order)
+  let n = 0
+  for (const bk of ordered) {
+    const name = `Part ${++n}`
+    const soup = [...bk.byPrim.values()].map((pb) => ({
+      positions: new Float32Array(pb.pos),
+      normals: pb.nrm ? new Float32Array(pb.nrm) : null,
+      indices: null,
+      uvs: pb.uv ? new Float32Array(pb.uv) : null,
+      material: pb.srcPrim.material,
+      color: pb.srcPrim.color,
+      metallic: pb.srcPrim.metallic,
+      roughness: pb.srcPrim.roughness,
+      texture: pb.srcPrim.texture,
+    }))
+    const mesh = doc.createMesh(name)
+    addPrimsToMesh(doc, buffer, mesh, soup)
+    scene.addChild(doc.createNode(name).setMesh(mesh))
+  }
+  if (!scene.listChildren().length) {
+    throw Object.assign(new Error('nothing painted to segment'), { code: 'NO_GEOMETRY' })
+  }
+
+  const out = await new NodeIO().writeBinary(doc)
+  const url = await storeModelBytes(out, 'model-color-seg')
+  const parts = extractParts(doc)
+  memCache.set(url, parts)
+  saveCache()
+  return { modelUrl: url, parts, cached: false, engine: 'colors' }
 }
 
 // --- B-H2: hit-test a spatial point to a part ------------------------------
@@ -515,21 +657,58 @@ function collectWorldPrimitives(doc, onlyIndex = null, onlyPrim = null) {
         const idxAcc = prim.getIndices()
         const uvAcc = prim.getAttribute('TEXCOORD_0')
         const mat = prim.getMaterial()
-        // carry the base-colour TEXTURE through the stitch (not just a flat colour)
-        // so a rebuilt/multiview part keeps its texture instead of going plain grey
-        let texture = null
-        const baseTex = mat?.getBaseColorTexture?.()
-        const img = baseTex?.getImage?.()
-        if (img) texture = { bytes: img, mime: baseTex.getMimeType?.() || 'image/png' }
+        // Carry the FULL PBR material through a rebuild — not just base colour.
+        // Dropping emissive/normal/metallic-roughness/occlusion is exactly why a
+        // rebuilt part came out dark & flat (no glow on emissive cracks, no shine,
+        // no surface detail). Every map is re-captured with its bytes so the part
+        // renders the same as the original.
+        const grabTex = (t) => {
+          const img = t?.getImage?.()
+          return img ? { bytes: img, mime: t.getMimeType?.() || 'image/png' } : null
+        }
+        const material = mat && {
+          baseColorFactor: mat.getBaseColorFactor?.() || [1, 1, 1, 1],
+          metallic: mat.getMetallicFactor?.() ?? 0,
+          roughness: mat.getRoughnessFactor?.() ?? 1,
+          emissiveFactor: mat.getEmissiveFactor?.() || [0, 0, 0],
+          alphaMode: mat.getAlphaMode?.() || 'OPAQUE',
+          doubleSided: mat.getDoubleSided?.() ?? false,
+          base: grabTex(mat.getBaseColorTexture?.()),
+          metallicRoughness: grabTex(mat.getMetallicRoughnessTexture?.()),
+          normal: grabTex(mat.getNormalTexture?.()),
+          normalScale: mat.getNormalScale?.() ?? 1,
+          emissive: grabTex(mat.getEmissiveTexture?.()),
+          occlusion: grabTex(mat.getOcclusionTexture?.()),
+          occlusionStrength: mat.getOcclusionStrength?.() ?? 1,
+        }
+        // vertex colours (COLOR_0), denormalized to 0..1 — the paint tool writes
+        // these as per-part labels; segmentByColors groups triangles by them
+        const colAcc = prim.getAttribute('COLOR_0')
+        let colors = null
+        if (colAcc) {
+          const cn = colAcc.getCount()
+          const data = new Float32Array(cn * 3)
+          const tmp = []
+          for (let i = 0; i < cn; i++) {
+            colAcc.getElement(i, tmp)
+            data[i * 3] = tmp[0]
+            data[i * 3 + 1] = tmp[1]
+            data[i * 3 + 2] = tmp[2]
+          }
+          colors = data
+        }
         prims.push({
           positions,
           normals: nrm ? new Float32Array(nrm.getArray()) : null,
           indices: idxAcc ? idxAcc.getArray().slice() : null,
           uvs: uvAcc ? new Float32Array(uvAcc.getArray()) : null,
+          colors,
+          material,
+          // legacy flat fields kept for callers/paths that don't read `material`
           color: mat?.getBaseColorFactor() || [0.62, 0.65, 0.7, 1],
           metallic: mat?.getMetallicFactor?.() ?? 0,
           roughness: mat?.getRoughnessFactor?.() ?? 0.7,
-          texture,
+          texture: material?.base || null,
         })
       }
     })
@@ -563,22 +742,46 @@ function addPrimsToMesh(doc, buffer, mesh, prims, mapPoint = null) {
         doc.createAccessor().setType('SCALAR').setArray(new Uint32Array(p.indices)).setBuffer(buffer),
       )
     }
-    // UVs + material: if the source carried a texture, re-create it and keep the
-    // UVs so the stitched region shows its texture; otherwise fall back to the
-    // flat base colour (the old behaviour).
-    const mat = doc
-      .createMaterial('part-mat')
-      .setMetallicFactor(p.metallic ?? 0)
-      .setRoughnessFactor(p.roughness ?? 0.7)
-    if (p.texture && p.uvs) {
-      prim.setAttribute(
-        'TEXCOORD_0',
-        doc.createAccessor().setType('VEC2').setArray(p.uvs).setBuffer(buffer),
-      )
-      const tex = doc.createTexture('part-tex').setImage(p.texture.bytes).setMimeType(p.texture.mime)
-      mat.setBaseColorTexture(tex).setBaseColorFactor([1, 1, 1, 1])
+    const mat = doc.createMaterial('part-mat')
+    const M = p.material
+    if (M) {
+      // full PBR re-apply — every map (base/metallic-rough/normal/emissive/AO)
+      // + factors, so the part looks identical to the source (glow, shine, detail)
+      mat
+        .setMetallicFactor(M.metallic)
+        .setRoughnessFactor(M.roughness)
+        .setEmissiveFactor(M.emissiveFactor)
+        .setAlphaMode(M.alphaMode)
+        .setDoubleSided(M.doubleSided)
+      const anyTex = M.base || M.metallicRoughness || M.normal || M.emissive || M.occlusion
+      if (anyTex && p.uvs) {
+        prim.setAttribute(
+          'TEXCOORD_0',
+          doc.createAccessor().setType('VEC2').setArray(p.uvs).setBuffer(buffer),
+        )
+        const mk = (t, name) => doc.createTexture(name).setImage(t.bytes).setMimeType(t.mime)
+        if (M.base) mat.setBaseColorTexture(mk(M.base, 'base')).setBaseColorFactor([1, 1, 1, 1])
+        else mat.setBaseColorFactor(M.baseColorFactor)
+        if (M.metallicRoughness) mat.setMetallicRoughnessTexture(mk(M.metallicRoughness, 'mr'))
+        if (M.normal) mat.setNormalTexture(mk(M.normal, 'nrm')).setNormalScale(M.normalScale)
+        if (M.emissive) mat.setEmissiveTexture(mk(M.emissive, 'em'))
+        if (M.occlusion) mat.setOcclusionTexture(mk(M.occlusion, 'ao')).setOcclusionStrength(M.occlusionStrength)
+      } else {
+        mat.setBaseColorFactor(M.baseColorFactor)
+      }
     } else {
-      mat.setBaseColorFactor(p.color)
+      // legacy fallback: base texture or flat colour only
+      mat.setMetallicFactor(p.metallic ?? 0).setRoughnessFactor(p.roughness ?? 0.7)
+      if (p.texture && p.uvs) {
+        prim.setAttribute(
+          'TEXCOORD_0',
+          doc.createAccessor().setType('VEC2').setArray(p.uvs).setBuffer(buffer),
+        )
+        const tex = doc.createTexture('part-tex').setImage(p.texture.bytes).setMimeType(p.texture.mime)
+        mat.setBaseColorTexture(tex).setBaseColorFactor([1, 1, 1, 1])
+      } else {
+        mat.setBaseColorFactor(p.color)
+      }
     }
     prim.setMaterial(mat)
     mesh.addPrimitive(prim)
@@ -685,7 +888,12 @@ export async function stitchRegion(modelUrl, partList, partModelUrl, targetBbox,
   const eps = 1e-9
   const size = (b) => [b.max[0] - b.min[0], b.max[1] - b.min[1], b.max[2] - b.min[2]]
   const diag = (s) => Math.max(Math.hypot(s[0], s[1], s[2]), eps)
-  const uni = diag(size(t)) / diag(size(src))
+  // A rebuilt part is a standalone blob dropped into the old part's bbox, so its
+  // edges don't quite reach the neighbours → a seam/void where they used to join.
+  // Scale it a touch OVER the bbox (overlap) so its edges tuck under the neighbours
+  // and close the gap. Tunable via STITCH_OVERLAP (default 1.08).
+  const overlap = Math.max(1, Number(process.env.STITCH_OVERLAP) || 1.08)
+  const uni = (diag(size(t)) / diag(size(src))) * overlap
   const srcC = [0, 1, 2].map((a) => (src.min[a] + src.max[a]) / 2)
   const tC = [0, 1, 2].map((a) => (t.min[a] + t.max[a]) / 2)
   const mapPoint = (p) => [0, 1, 2].map((a) => tC[a] + (p[a] - srcC[a]) * uni)
