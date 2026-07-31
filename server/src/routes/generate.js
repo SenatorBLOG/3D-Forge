@@ -296,6 +296,25 @@ router.post('/multiview', optionalAuth, async (req, res) => {
   const missing = imageIds.filter((_, i) => !images[i])
   if (missing.length) return res.status(404).json({ error: 'Unknown imageId(s)', imageIds: missing })
 
+  // Optional per-view slot labels. Tripo's multiview_to_model expects positional
+  // [front, left, back, right]; without labels we keep that positional order
+  // (backward compatible). WITH labels the caller can send just [front, back] and
+  // have "back" land in the real BACK slot (index 2) instead of the LEFT slot —
+  // otherwise Tripo treats the rear image as a side view and mangles the model.
+  const SLOT_INDEX = { front: 0, left: 1, back: 2, right: 3 }
+  const slotsRaw = req.body?.slots
+  const slots =
+    Array.isArray(slotsRaw) && slotsRaw.length === imageIds.length
+      ? slotsRaw.map((s) => (typeof s === 'string' ? s.toLowerCase() : ''))
+      : null
+  let ordered = images // positional [front, left, back, right] by default
+  if (slots && slots.every((s) => s in SLOT_INDEX) && new Set(slots).size === slots.length) {
+    ordered = [null, null, null, null]
+    images.forEach((im, i) => {
+      ordered[SLOT_INDEX[slots[i]]] = im
+    })
+  }
+
   const mock = isTripoMock()
   // cost gating (real Tripo only — mock stays free/ungated), same pattern as POST /
   const charge = await chargeGeneration(req, { kind: 'preview', aiModel: 'meshy-5', mock })
@@ -305,10 +324,11 @@ router.post('/multiview', optionalAuth, async (req, res) => {
   try {
     let views
     if (mock) {
-      views = images.map((im) => ({ url: im.url })) // mock ignores the bytes
+      views = ordered.map((im) => (im ? { url: im.url } : {})) // mock ignores the bytes
     } else {
       views = await Promise.all(
-        images.map(async (im) => {
+        ordered.map(async (im) => {
+          if (!im) return {} // empty slot (e.g. left/right when only front+back sent)
           const f = await readImageBytes(im)
           if (!f) throw new Error(`view ${im.id} unreadable`)
           return { bytes: f.bytes, mime: f.mime }

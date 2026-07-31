@@ -1234,6 +1234,7 @@ export default function ForgePage() {
         )}
         <PhotoEditPanel
             modelUrl={modelUrl}
+            getFrontAz={() => viewerApiRef.current?.controls?.getAzimuthalAngle?.()}
             onModelReady3D={(url, label) => {
               setBaseModelPrompt(label)
               setModelKind(null)
@@ -1246,6 +1247,7 @@ export default function ForgePage() {
             key={activePart.id}
             modelUrl={modelUrl}
             part={activePart}
+            getFrontAz={() => viewerApiRef.current?.controls?.getAzimuthalAngle?.()}
             onClose={() => setActivePart(null)}
             onStitched={(url, label) => {
               setBaseModelPrompt(label)
