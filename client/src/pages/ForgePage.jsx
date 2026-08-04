@@ -225,8 +225,17 @@ export default function ForgePage() {
         parts.reduce((best, p) => (best && d2(best.center) <= d2(p.center) ? best : p), null)
     }
     if (!part) return
+    // double-click the SAME selected part again → deselect (like un-ticking its
+    // chip): clears the selection box so you don't have to hunt for the chip.
+    if (selectedId != null && selectedId === part.id) {
+      selectForEdit(null)
+      if (activeTab !== 'recolor') setActivePart(null)
+      return
+    }
     selectForEdit(part)
-    openPartEdit(part)
+    // In Recolor, STAY here and recolour just this part — don't yank the user into
+    // the Edit tab / part-edit panel. Anywhere else, open the part-edit panel.
+    if (activeTab !== 'recolor') openPartEdit(part)
   }
 
   // manual (seed-based) segmentation: the user drops named marks on the model,

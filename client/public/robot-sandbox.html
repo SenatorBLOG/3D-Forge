@@ -1,0 +1,493 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>3D Forge — Character Sandbox</title>
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #0b0f1a;
+    font-family: ui-sans-serif, system-ui, Segoe UI, Roboto, sans-serif; color: #e8eef7; }
+  #app { position: fixed; inset: 0; }
+  canvas { display: block; }
+
+  #drop {
+    position: fixed; inset: 0; display: flex; flex-direction: column; gap: 14px;
+    align-items: center; justify-content: center; text-align: center; z-index: 30;
+    background: radial-gradient(120% 120% at 50% 30%, #16233d 0%, #0b0f1a 70%);
+    cursor: pointer; transition: background .15s;
+  }
+  #drop.hover { background: radial-gradient(120% 120% at 50% 30%, #1d3358 0%, #0b0f1a 70%); }
+  #drop h1 { margin: 0; font-size: 26px; font-weight: 800; letter-spacing: .3px; }
+  #drop p { margin: 0; color: #9db0cc; max-width: 460px; line-height: 1.5; }
+  #drop .btn { margin-top: 6px; padding: 12px 22px; border-radius: 12px; font-weight: 700;
+    background: linear-gradient(90deg, #22d3ee, #7c5cff); color: #06101f; }
+  #drop.hidden { display: none; }
+
+  #hud { position: fixed; top: 14px; left: 14px; z-index: 20; display: flex; flex-direction: column;
+    gap: 10px; max-width: 300px; }
+  .card { background: rgba(12,18,32,.82); backdrop-filter: blur(8px);
+    border: 1px solid #22314f; border-radius: 12px; padding: 12px 14px; }
+  .card h2 { margin: 0 0 8px; font-size: 12px; letter-spacing: 1.4px; text-transform: uppercase; color: #7fa0cf; }
+  .keys { display: grid; grid-template-columns: auto 1fr; gap: 4px 10px; font-size: 13px; }
+  .keys kbd { background: #1b2740; border: 1px solid #33507f; border-bottom-width: 2px; border-radius: 5px;
+    padding: 1px 7px; font-family: ui-monospace, monospace; font-size: 12px; color: #cfe0ff; }
+  .keys span { color: #b9c7de; }
+  .map-row { display: grid; grid-template-columns: 62px 1fr; align-items: center; gap: 8px; margin: 6px 0; font-size: 13px; }
+  .map-row label { color: #9db0cc; }
+  .map-row select { width: 100%; background: #111c30; color: #e8eef7; border: 1px solid #33507f;
+    border-radius: 7px; padding: 5px 6px; font-size: 12px; }
+  #hint { position: fixed; bottom: 14px; left: 50%; transform: translateX(-50%); z-index: 20;
+    font-size: 12px; color: #7f92b0; background: rgba(12,18,32,.7); padding: 6px 12px; border-radius: 8px; }
+  .reload { margin-top: 8px; font-size: 12px; color: #22d3ee; text-decoration: underline; cursor: pointer; }
+  #status { position: fixed; top: 14px; right: 14px; z-index: 20; font-size: 12px; color: #9db0cc;
+    background: rgba(12,18,32,.7); padding: 6px 12px; border-radius: 8px; }
+</style>
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://unpkg.com/three@0.184.0/build/three.module.js",
+    "three/addons/": "https://unpkg.com/three@0.184.0/examples/jsm/"
+  }
+}
+</script>
+</head>
+<body>
+<div id="app"></div>
+
+<div id="drop">
+  <h1>Character Sandbox</h1>
+  <p>Drag &amp; drop your animated <b>.glb</b> here (or click to pick a file).<br/>
+     Then walk it around: <b>WASD</b> move · <b>Shift</b> run · <b>C</b> crouch · <b>Space</b> jump · <b>Right-click</b> attack · mouse drag to orbit.</p>
+  <div class="btn">Choose .glb file</div>
+  <input id="file" type="file" accept=".glb,.gltf,model/gltf-binary" style="display:none" />
+</div>
+
+<div id="hud" style="display:none">
+  <div class="card">
+    <h2>Controls</h2>
+    <div class="keys">
+      <kbd>W A S D</kbd><span>move</span>
+      <kbd>Shift</kbd><span>run</span>
+      <kbd>C</kbd><span>crouch (hold)</span>
+      <kbd>Space</kbd><span>jump</span>
+      <kbd>Q E</kbd><span>turn model 90° (align facing)</span>
+      <kbd>RMB</kbd><span>attack</span>
+      <kbd>Mouse</kbd><span>orbit / wheel zoom</span>
+    </div>
+  </div>
+  <div class="card" id="mapCard">
+    <h2>Animation mapping</h2>
+    <div id="mapRows"></div>
+    <div class="reload" id="loadAnother">↻ Load another model</div>
+  </div>
+</div>
+
+<div id="status" style="display:none"></div>
+<div id="hint" style="display:none">Click the scene once, then use WASD. Right-click = attack.</div>
+
+<script type="module">
+import * as THREE from 'three'
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
+
+// ---------- renderer / scene / camera ----------
+const app = document.getElementById('app')
+const renderer = new THREE.WebGLRenderer({ antialias: true })
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
+renderer.setSize(window.innerWidth, window.innerHeight)
+renderer.shadowMap.enabled = true
+renderer.shadowMap.type = THREE.PCFSoftShadowMap
+renderer.toneMapping = THREE.ACESFilmicToneMapping
+renderer.toneMappingExposure = 1.05
+app.appendChild(renderer.domElement)
+
+const scene = new THREE.Scene()
+scene.background = new THREE.Color(0x0d1526)
+scene.fog = new THREE.Fog(0x0d1526, 40, 90)
+
+const camera = new THREE.PerspectiveCamera(55, window.innerWidth / window.innerHeight, 0.1, 500)
+camera.position.set(4, 3, 6)
+
+// ---------- third-person follow camera (GTA / Witcher style) ----------
+// The camera rigidly trails the character at a FIXED offset (yaw/pitch/distance),
+// translating PARALLEL with them — no re-centring, no feedback loop. Mouse drag
+// orbits (changes yaw/pitch), wheel zooms. Movement is relative to camYaw.
+let camYaw = 0          // 0 = camera behind, character walks toward +Z (into screen)
+let camPitch = 0.42     // radians above the horizon
+let camDist = 7.5
+const HEAD = 1.1        // look-at height on the character
+
+let dragging = false, lastX = 0, lastY = 0
+renderer.domElement.addEventListener('pointerdown', (e) => {
+  if (e.button === 0) { dragging = true; lastX = e.clientX; lastY = e.clientY }
+})
+addEventListener('pointerup', () => { dragging = false })
+addEventListener('pointermove', (e) => {
+  if (!dragging) return
+  const dx = e.clientX - lastX, dy = e.clientY - lastY
+  lastX = e.clientX; lastY = e.clientY
+  camYaw -= dx * 0.005
+  camPitch = Math.max(0.08, Math.min(1.35, camPitch + dy * 0.005))
+})
+renderer.domElement.addEventListener('wheel', (e) => {
+  e.preventDefault()
+  camDist = Math.max(3, Math.min(18, camDist + e.deltaY * 0.01))
+}, { passive: false })
+
+function updateCamera() {
+  const cx = character ? character.position.x : 0
+  const cy = character ? character.position.y : 0
+  const cz = character ? character.position.z : 0
+  const horiz = camDist * Math.cos(camPitch)
+  const vert = camDist * Math.sin(camPitch)
+  camera.position.set(cx - Math.sin(camYaw) * horiz, cy + HEAD + vert, cz - Math.cos(camYaw) * horiz)
+  camera.lookAt(cx, cy + HEAD, cz)
+}
+
+// ---------- lights ----------
+scene.add(new THREE.HemisphereLight(0x9fc0ff, 0x2a2620, 0.85))
+const sun = new THREE.DirectionalLight(0xfff2df, 2.4)
+sun.position.set(10, 16, 8)
+sun.castShadow = true
+sun.shadow.mapSize.set(2048, 2048)
+sun.shadow.camera.near = 1
+sun.shadow.camera.far = 60
+sun.shadow.camera.left = -30; sun.shadow.camera.right = 30
+sun.shadow.camera.top = 30; sun.shadow.camera.bottom = -30
+sun.shadow.bias = -0.0004
+scene.add(sun)
+scene.add(new THREE.DirectionalLight(0x2233ff, 0.25).translateX(-8))
+
+// ---------- ground + obstacles ----------
+const ARENA = 40
+const groundMat = new THREE.MeshStandardMaterial({ color: 0x2a3346, roughness: 0.95, metalness: 0 })
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(ARENA * 2, ARENA * 2), groundMat)
+ground.rotation.x = -Math.PI / 2
+ground.receiveShadow = true
+scene.add(ground)
+
+const grid = new THREE.GridHelper(ARENA * 2, 40, 0x3f5580, 0x263049)
+grid.material.opacity = 0.5; grid.material.transparent = true
+scene.add(grid)
+
+// obstacles the character bumps into (simple circular colliders in XZ)
+const obstacles = []
+function addBox(x, z, w, h, d, color) {
+  const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d),
+    new THREE.MeshStandardMaterial({ color, roughness: 0.7, metalness: 0.1 }))
+  m.position.set(x, h / 2, z); m.castShadow = true; m.receiveShadow = true
+  scene.add(m)
+  obstacles.push({ x, z, r: Math.max(w, d) * 0.5 })
+}
+addBox(-6, -4, 2, 1.2, 2, 0x3d5a8a)
+addBox(7, 2, 3, 2.2, 3, 0x4a3d8a)
+addBox(2, -9, 2.5, 1.6, 2.5, 0x8a3d5a)
+addBox(-9, 7, 2, 3, 2, 0x3d8a6a)
+// a low ramp / platform pair for a bit of terrain interest
+addBox(0, 12, 6, 0.6, 4, 0x394a66)
+addBox(12, -8, 1.5, 4, 1.5, 0x66507f)
+
+// ---------- character state ----------
+let mixer = null
+let character = null
+let clips = []
+const CHAR_RADIUS = 0.45
+const roles = ['idle', 'walk', 'run', 'crouch', 'attack']
+const roleClip = { idle: null, walk: null, run: null, crouch: null, attack: null }
+const actionCache = new Map() // clipName -> AnimationAction
+let activeAction = null
+let attacking = false
+
+const vel = new THREE.Vector3()
+let vy = 0
+let onGround = true
+let facing = 0
+let charSpin = null // the model-orientation offset group (Q/E), set on load
+
+// ---------- input ----------
+const keys = {}
+addEventListener('keydown', (e) => {
+  if (e.code === 'Space') e.preventDefault()
+  keys[e.code] = true
+  if (e.code === 'Space' && onGround) { vy = 6.2; onGround = false }
+  // Q / E — turn the MODEL's facing 90° so its front lines up with the travel
+  // direction (Tripo can export the mesh rotated). One-shot per key press.
+  if (!e.repeat && charSpin) {
+    if (e.code === 'KeyQ') charSpin.rotation.y += Math.PI / 2
+    if (e.code === 'KeyE') charSpin.rotation.y -= Math.PI / 2
+  }
+})
+addEventListener('keyup', (e) => { keys[e.code] = false })
+renderer.domElement.addEventListener('contextmenu', (e) => { e.preventDefault(); triggerAttack() })
+
+function triggerAttack() {
+  if (!roleClip.attack || attacking) return
+  attacking = true
+  const a = actionFor('attack')
+  if (!a) { attacking = false; return }
+  a.reset(); a.setLoop(THREE.LoopOnce, 1); a.clampWhenFinished = true
+  crossfadeTo(a, 0.08)
+}
+
+// ---------- animation helpers ----------
+function actionFor(role) {
+  const name = roleClip[role]
+  if (!name) return null
+  if (actionCache.has(name)) return actionCache.get(name)
+  const clip = clips.find((c) => c.name === name)
+  if (!clip) return null
+  const act = mixer.clipAction(clip)
+  actionCache.set(name, act)
+  return act
+}
+function crossfadeTo(target, dur = 0.25) {
+  if (!target || target === activeAction) { if (target) target.play(); return }
+  target.enabled = true; target.setEffectiveWeight(1); target.play()
+  if (activeAction) activeAction.crossFadeTo(target, dur, false)
+  else target.fadeIn(dur)
+  activeAction = target
+}
+function pickByHeuristic(role) {
+  const names = clips.map((c) => c.name)
+  const test = (re) => names.find((n) => re.test(n.toLowerCase()))
+  const table = {
+    idle: /idle|tpose|t-pose|stand|breath|rest/,
+    walk: /walk|move|locomo/,
+    run: /run|sprint|jog/,
+    crouch: /crouch|sneak|kneel|duck/,
+    attack: /attack|punch|kick|slash|hit|swing|wave|shoot|cast|action/,
+  }
+  return test(table[role]) || null
+}
+
+// Strip baked ROOT MOTION so the clip animates IN PLACE. Tripo walk/run clips
+// translate the root node forward, then snap it back to 0 each loop. Because the
+// mixer OVERWRITES that node's position every frame, it fought (and reset) our
+// own WASD translation — hence the "walks then teleports to 0" and the arc around
+// the origin. We remove every position track entirely: limbs move by rotation
+// (untouched), and no node's position is animated, so the body never drifts and
+// our pivot is free to move/turn it.
+function stripRootMotion(clip) {
+  clip.tracks = clip.tracks.filter((t) => !t.name.endsWith('.position'))
+  return clip
+}
+
+// ---------- model loading ----------
+const loader = new GLTFLoader()
+const dropEl = document.getElementById('drop')
+const fileEl = document.getElementById('file')
+const hud = document.getElementById('hud')
+const statusEl = document.getElementById('status')
+const hint = document.getElementById('hint')
+
+function setStatus(t) { statusEl.style.display = 'block'; statusEl.textContent = t }
+
+function clearCharacter() {
+  if (character) { scene.remove(character); character.traverse((o) => { o.geometry?.dispose?.() }) }
+  mixer = null; character = null; clips = []; activeAction = null; attacking = false
+  actionCache.clear(); roles.forEach((r) => (roleClip[r] = null))
+  charSpin = null; vy = 0; onGround = true
+}
+
+function loadFromArrayBuffer(buf, label) {
+  loader.parse(buf, '', (gltf) => {
+    clearCharacter()
+    const model = gltf.scene
+    // normalize: scale to ~1.8 units tall
+    const box = new THREE.Box3().setFromObject(model)
+    const size = box.getSize(new THREE.Vector3())
+    const targetH = 1.8
+    const s = size.y > 0.0001 ? targetH / size.y : 1
+    model.scale.setScalar(s)
+    model.updateMatrixWorld(true)
+    // center the model inside a PIVOT group so the pivot origin sits at the model's
+    // feet-centre. We move & TURN the PIVOT (so it rotates in place, never around
+    // the world origin), while the mixer animates the MODEL inside it — the two
+    // never fight, and the character no longer arcs around 0 or resets to 0.
+    const box2 = new THREE.Box3().setFromObject(model)
+    const c2 = box2.getCenter(new THREE.Vector3())
+    model.position.x -= c2.x
+    model.position.z -= c2.z
+    model.position.y -= box2.min.y
+    model.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.frustumCulled = false } })
+    // pivot  = moved & turned by WASD (rotates in place around the mesh centre)
+    // spin   = a CONSTANT model-orientation offset (Q/E), also around the centre,
+    //          to align the robot's authored front with the travel direction.
+    const spin = new THREE.Group()
+    spin.add(model)
+    const pivot = new THREE.Group()
+    pivot.add(spin)
+    scene.add(pivot)
+    character = pivot
+    charSpin = spin
+
+    clips = (gltf.animations || []).map(stripRootMotion)
+    mixer = new THREE.AnimationMixer(model) // animate the model, not the pivot
+    mixer.addEventListener('finished', () => { attacking = false })
+
+    roles.forEach((r) => (roleClip[r] = pickByHeuristic(r)))
+    // sensible fallbacks so locomotion always has SOMETHING
+    if (!roleClip.walk) roleClip.walk = roleClip.run || (clips[0] && clips[0].name) || null
+    if (!roleClip.run) roleClip.run = roleClip.walk
+    if (!roleClip.idle) roleClip.idle = roleClip.crouch || null
+    buildMapUI()
+
+    // start idle (or first available)
+    const first = actionFor('idle') || actionFor('walk')
+    if (first) { activeAction = first; first.play() }
+
+    dropEl.classList.add('hidden')
+    hud.style.display = 'flex'; hint.style.display = 'block'
+    const clipList = clips.length ? clips.map((c) => c.name).join(', ') : 'no animation clips'
+    setStatus(`${label} · ${clips.length} clip(s): ${clipList}`)
+  }, (err) => {
+    setStatus('Failed to load model: ' + (err?.message || err))
+    console.error(err)
+  })
+}
+
+function buildMapUI() {
+  const rows = document.getElementById('mapRows')
+  rows.innerHTML = ''
+  const opts = ['<option value="">(none)</option>']
+    .concat(clips.map((c) => `<option value="${c.name}">${c.name}</option>`)).join('')
+  const nice = { idle: 'Idle', walk: 'Walk', run: 'Run', crouch: 'Crouch', attack: 'Attack' }
+  roles.forEach((r) => {
+    const row = document.createElement('div'); row.className = 'map-row'
+    row.innerHTML = `<label>${nice[r]}</label><select data-role="${r}">${opts}</select>`
+    const sel = row.querySelector('select')
+    sel.value = roleClip[r] || ''
+    sel.addEventListener('change', () => {
+      roleClip[r] = sel.value || null
+      // if we retargeted the current locomotion role, refresh the active action
+      if (r === 'idle' || r === 'walk' || r === 'run' || r === 'crouch') {
+        const a = actionFor(r); if (a && !attacking) crossfadeTo(a, 0.15)
+      }
+    })
+    rows.appendChild(row)
+  })
+}
+
+function handleFile(file) {
+  if (!file) return
+  setStatus('Loading ' + file.name + ' …')
+  const reader = new FileReader()
+  reader.onload = () => loadFromArrayBuffer(reader.result, file.name)
+  reader.readAsArrayBuffer(file)
+}
+
+// drag & drop + picker
+dropEl.addEventListener('click', () => fileEl.click())
+fileEl.addEventListener('change', () => handleFile(fileEl.files[0]))
+;['dragenter', 'dragover'].forEach((ev) => document.addEventListener(ev, (e) => {
+  e.preventDefault(); dropEl.classList.add('hover')
+}))
+;['dragleave', 'drop'].forEach((ev) => document.addEventListener(ev, (e) => {
+  e.preventDefault(); if (ev !== 'drop') dropEl.classList.remove('hover')
+}))
+document.addEventListener('drop', (e) => {
+  dropEl.classList.remove('hover')
+  const f = [...(e.dataTransfer?.files || [])].find((x) => /\.(glb|gltf)$/i.test(x.name))
+  if (f) handleFile(f); else setStatus('Drop a .glb / .gltf file')
+})
+document.getElementById('loadAnother').addEventListener('click', (e) => {
+  e.stopPropagation(); fileEl.value = ''; fileEl.click()
+})
+
+// optional: ?model=<url> to auto-load a hosted GLB
+const url = new URLSearchParams(location.search).get('model')
+if (url) {
+  setStatus('Loading ' + url + ' …')
+  fetch(url).then((r) => r.arrayBuffer()).then((b) => loadFromArrayBuffer(b, url))
+    .catch((err) => setStatus('Could not fetch model: ' + err.message))
+}
+
+// ---------- movement / locomotion state machine ----------
+const clock = new THREE.Clock()
+const moveDir = new THREE.Vector3()
+const _camFwd = new THREE.Vector3(), _camRight = new THREE.Vector3()
+const up = new THREE.Vector3(0, 1, 0)
+
+function updateCharacter(dt) {
+  if (!character) return
+  // movement relative to where the camera ACTUALLY looks (screen-correct):
+  // forward = camera look direction on the ground; right = forward x up (screen-right).
+  const f = (keys.KeyW ? 1 : 0) - (keys.KeyS ? 1 : 0)
+  const r = (keys.KeyD ? 1 : 0) - (keys.KeyA ? 1 : 0)
+  camera.getWorldDirection(_camFwd); _camFwd.y = 0
+  if (_camFwd.lengthSq() < 1e-6) _camFwd.set(0, 0, 1)
+  _camFwd.normalize()
+  _camRight.crossVectors(_camFwd, up).normalize()
+  // W → away from camera, S → toward, A → left, D → right (verified on screen)
+  moveDir.copy(_camFwd).multiplyScalar(f).addScaledVector(_camRight, r)
+  const moving = moveDir.lengthSq() > 0.0001
+  if (moving) moveDir.normalize()
+
+  const crouch = !!keys.KeyC
+  const running = !!(keys.ShiftLeft || keys.ShiftRight) && !crouch
+  const speed = crouch ? 1.5 : running ? 5.2 : 2.7
+
+  // horizontal move + obstacle push-out
+  if (moving) {
+    character.position.addScaledVector(moveDir, speed * dt)
+    for (const o of obstacles) {
+      const dx = character.position.x - o.x, dz = character.position.z - o.z
+      const d = Math.hypot(dx, dz), min = o.r + CHAR_RADIUS
+      if (d < min && d > 1e-4) {
+        character.position.x = o.x + (dx / d) * min
+        character.position.z = o.z + (dz / d) * min
+      }
+    }
+    const lim = ARENA - 1
+    character.position.x = Math.max(-lim, Math.min(lim, character.position.x))
+    character.position.z = Math.max(-lim, Math.min(lim, character.position.z))
+    // face movement direction (smooth)
+    facing = Math.atan2(moveDir.x, moveDir.z)
+    let diff = facing - character.rotation.y
+    diff = Math.atan2(Math.sin(diff), Math.cos(diff))
+    character.rotation.y += diff * Math.min(1, dt * 12)
+  }
+
+  // gravity / jump
+  vy -= 18 * dt
+  character.position.y += vy * dt
+  if (character.position.y <= 0) { character.position.y = 0; vy = 0; onGround = true }
+
+  // locomotion animation (attack overrides until its clip finishes)
+  if (!attacking) {
+    if (moving) {
+      const role = crouch ? (roleClip.crouch ? 'crouch' : 'walk') : running ? 'run' : 'walk'
+      const a = actionFor(role) || actionFor('walk')
+      if (a) {
+        // speed up the walk clip a touch when running if there's no dedicated run clip
+        a.timeScale = (role === 'run' && roleClip.run === roleClip.walk) ? 1.7 : 1
+        crossfadeTo(a, 0.2)
+      }
+    } else {
+      // standing still: play the idle clip if mapped, else FREEZE — don't moonwalk
+      // the walk clip in place (until you download & map a real idle animation).
+      const idle = actionFor('idle')
+      if (idle) { idle.timeScale = 1; crossfadeTo(idle, 0.25) }
+      else if (activeAction) { activeAction.fadeOut(0.25); activeAction = null }
+    }
+  }
+}
+
+function animate() {
+  requestAnimationFrame(animate)
+  const dt = Math.min(clock.getDelta(), 0.05)
+  updateCharacter(dt)
+  updateCamera()
+  mixer?.update(dt)
+  renderer.render(scene, camera)
+}
+animate()
+
+addEventListener('resize', () => {
+  camera.aspect = window.innerWidth / window.innerHeight
+  camera.updateProjectionMatrix()
+  renderer.setSize(window.innerWidth, window.innerHeight)
+})
+</script>
+</body>
+</html>
